@@ -22,10 +22,11 @@ function buildStreamHeaders(embedUrl: string): Record<string, string> {
   } catch (_) {
     origin = "";
   }
+  const referer = origin ? `${origin}/` : embedUrl;
   return {
     Accept: "*/*",
     "User-Agent": DEFAULT_HEADERS["User-Agent"],
-    Referer: embedUrl,
+    Referer: referer,
     ...(origin ? { Origin: origin } : {}),
   };
 }
