@@ -240,6 +240,14 @@
     "disabled": false
   },
   {
+    "display_name": "AnimeUnity",
+    "value": "animeunity",
+    "version": "1.0",
+    "icon": "",
+    "type": "italy",
+    "disabled": false
+  },
+  {
     "display_name": "Primewire",
     "value": "primewire",
     "version": "1.0",
