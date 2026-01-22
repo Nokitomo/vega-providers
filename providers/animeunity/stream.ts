@@ -2,7 +2,6 @@ import { ProviderContext, Stream } from "../types";
 
 const BASE_HOST = "https://www.animeunity.so";
 const DEFAULT_HEADERS: Record<string, string> = {
-  Accept: "application/json",
   "User-Agent":
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
 };
@@ -16,7 +15,22 @@ function extractDownloadUrl(html: string): string | null {
   return alt?.[1] || null;
 }
 
-function extractVixCloudStreams(html: string): Stream[] {
+function buildStreamHeaders(embedUrl: string): Record<string, string> {
+  let origin = "";
+  try {
+    origin = new URL(embedUrl).origin;
+  } catch (_) {
+    origin = "";
+  }
+  return {
+    Accept: "*/*",
+    "User-Agent": DEFAULT_HEADERS["User-Agent"],
+    Referer: embedUrl,
+    ...(origin ? { Origin: origin } : {}),
+  };
+}
+
+function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
   const streamsMatch = html.match(/window\.streams\s*=\s*(\[[\s\S]*?\]);/);
   if (!streamsMatch?.[1]) {
     return [];
@@ -33,32 +47,34 @@ function extractVixCloudStreams(html: string): Stream[] {
   const expiresMatch = html.match(/['"]expires['"]\s*:\s*'([^']*)'/);
   const asnMatch = html.match(/['"]asn['"]\s*:\s*'([^']*)'/);
 
-  return streams
-    .map((stream) => {
-      if (!stream?.url) {
-        return null;
+  const streamHeaders = buildStreamHeaders(embedUrl);
+  const parsedStreams: Array<Stream | null> = streams.map((stream) => {
+    if (!stream?.url) {
+      return null;
+    }
+    try {
+      const playlistUrl = new URL(stream.url);
+      if (tokenMatch?.[1]) {
+        playlistUrl.searchParams.append("token", tokenMatch[1]);
       }
-      try {
-        const playlistUrl = new URL(stream.url);
-        if (tokenMatch?.[1]) {
-          playlistUrl.searchParams.append("token", tokenMatch[1]);
-        }
-        if (expiresMatch?.[1]) {
-          playlistUrl.searchParams.append("expires", expiresMatch[1]);
-        }
-        if (asnMatch?.[1]) {
-          playlistUrl.searchParams.append("asn", asnMatch[1]);
-        }
-        return {
-          server: stream.name ? `AnimeUnity ${stream.name}` : "AnimeUnity",
-          link: playlistUrl.toString(),
-          type: "m3u8",
-        };
-      } catch (_) {
-        return null;
+      if (expiresMatch?.[1]) {
+        playlistUrl.searchParams.append("expires", expiresMatch[1]);
       }
-    })
-    .filter((stream): stream is Stream => !!stream);
+      if (asnMatch?.[1]) {
+        playlistUrl.searchParams.append("asn", asnMatch[1]);
+      }
+      return {
+        server: stream.name ? `AnimeUnity ${stream.name}` : "AnimeUnity",
+        link: playlistUrl.toString(),
+        type: "m3u8",
+        headers: streamHeaders,
+      };
+    } catch (_) {
+      return null;
+    }
+  });
+
+  return parsedStreams.filter((stream): stream is Stream => !!stream);
 }
 
 export const getStream = async function ({
@@ -102,7 +118,7 @@ export const getStream = async function ({
 
     const pageHtml = typeof pageRes.data === "string" ? pageRes.data : "";
     if (embedUrl.includes("vixcloud.co")) {
-      const streams = extractVixCloudStreams(pageHtml);
+      const streams = extractVixCloudStreams(pageHtml, embedUrl);
       if (streams.length > 0) {
         return streams;
       }
@@ -114,11 +130,13 @@ export const getStream = async function ({
     }
 
     const type = url.toLowerCase().includes(".m3u8") ? "m3u8" : "mp4";
+    const streamHeaders = buildStreamHeaders(embedUrl);
     return [
       {
         server: "AnimeUnity",
         link: url,
         type,
+        headers: streamHeaders,
       },
     ];
   } catch (err) {
