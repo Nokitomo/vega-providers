@@ -8,10 +8,6 @@ export const catalog = [
     filter: "top",
   },
   {
-    title: "Popular",
-    filter: "popular",
-  },
-  {
     title: "Calendar",
     filter: "calendar",
   },
