@@ -4,6 +4,10 @@ export const catalog = [
     filter: "latest",
   },
   {
+    title: "Top Anime",
+    filter: "top",
+  },
+  {
     title: "Popular",
     filter: "popular",
   },

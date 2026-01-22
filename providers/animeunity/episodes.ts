@@ -38,24 +38,28 @@ export const getEpisodes = async function ({
     while (start <= totalCount) {
       const end = Math.min(start + RANGE_SIZE - 1, totalCount);
       const rangeUrl = `${BASE_HOST}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
-      const res = await axios.get(rangeUrl, {
-        headers: {
-          ...DEFAULT_HEADERS,
-          Referer: `${BASE_HOST}/`,
-        },
-        timeout: 15000,
-      });
-      const list = res.data?.episodes || [];
-      list.forEach((episode: any) => {
-        const number = episode?.number ?? "";
-        const id = episode?.id;
-        if (!id) return;
-        const title = number ? `Episode ${number}` : "Episode";
-        episodes.push({
-          title,
-          link: String(id),
+      try {
+        const res = await axios.get(rangeUrl, {
+          headers: {
+            ...DEFAULT_HEADERS,
+            Referer: `${BASE_HOST}/`,
+          },
+          timeout: 15000,
         });
-      });
+        const list = res.data?.episodes || [];
+        list.forEach((episode: any) => {
+          const number = episode?.number ?? "";
+          const id = episode?.id;
+          if (!id) return;
+          const title = number ? `Episode ${number}` : "Episode";
+          episodes.push({
+            title,
+            link: String(id),
+          });
+        });
+      } catch (_) {
+        // Skip failed range and continue with the next one.
+      }
       start = end + 1;
     }
 

@@ -29,42 +29,51 @@ function extractCookieValue(raw: string, name: string): string | undefined {
   return match?.[1];
 }
 
+function extractCsrfToken(html: string): string | undefined {
+  const match = html.match(/name="csrf-token" content="([^"]+)"/i);
+  return match?.[1];
+}
+
 async function getSession(
   axios: ProviderContext["axios"]
-): Promise<AnimeunitySession> {
+): Promise<AnimeunitySession & { csrfToken?: string }> {
   try {
     const response = await axios.get(`${BASE_HOST}/`, {
       headers: DEFAULT_HEADERS,
       timeout: 10000,
     });
+    const csrfToken =
+      typeof response.data === "string" ? extractCsrfToken(response.data) : "";
     const raw = response.headers?.["set-cookie"];
     const cookieHeader = Array.isArray(raw) ? raw.join("; ") : raw || "";
     if (!cookieHeader) {
-      return {};
+      return { csrfToken };
     }
     const xsrf = extractCookieValue(cookieHeader, "XSRF-TOKEN");
     const session = extractCookieValue(cookieHeader, "animeunity_session");
     return {
       xsrfToken: xsrf ? decodeURIComponent(xsrf) : undefined,
       session,
+      csrfToken,
     };
   } catch (_) {
     return {};
   }
 }
 
-function buildSessionHeaders(session: AnimeunitySession): Record<string, string> {
+function buildSessionHeaders(session: AnimeunitySession & { csrfToken?: string }): Record<string, string> {
   const headers: Record<string, string> = {
     ...DEFAULT_HEADERS,
     Origin: BASE_HOST,
     Referer: `${BASE_HOST}/`,
   };
-  if (session.xsrfToken) {
-    headers["X-XSRF-TOKEN"] = session.xsrfToken;
+  const token = session.xsrfToken || session.csrfToken;
+  if (token) {
+    headers["X-XSRF-TOKEN"] = token;
   }
   const parts: string[] = [];
-  if (session.xsrfToken) {
-    parts.push(`XSRF-TOKEN=${session.xsrfToken}`);
+  if (token) {
+    parts.push(`XSRF-TOKEN=${token}`);
   }
   if (session.session) {
     parts.push(`animeunity_session=${session.session}`);
@@ -132,7 +141,10 @@ async function fetchLatest({
   const { axios, cheerio } = providerContext;
   const suffix = page > 1 ? `?page=${page}` : "";
   const url = `${BASE_HOST_NO_WWW}/${suffix}`;
-  const res = await axios.get(url, { headers: DEFAULT_HEADERS, timeout: 10000 });
+  const res = await axios.get(url, {
+    headers: DEFAULT_HEADERS,
+    timeout: 10000,
+  });
   const $ = cheerio.load(res.data);
   const raw = $("layout-items").attr("items-json") || "";
   if (!raw) return [];
@@ -148,19 +160,26 @@ async function fetchLatest({
   return posts;
 }
 
-async function fetchPopular({
+async function fetchTop({
   page,
   providerContext,
+  popular,
 }: {
   page: number;
   providerContext: ProviderContext;
+  popular: boolean;
 }): Promise<Post[]> {
   const { axios, cheerio } = providerContext;
-  const params = new URLSearchParams({ popular: "true" });
+  const params = new URLSearchParams();
+  if (popular) {
+    params.set("popular", "true");
+  }
   if (page > 1) {
     params.set("page", String(page));
   }
-  const url = `${BASE_HOST}/top-anime?${params.toString()}`;
+  const url = `${BASE_HOST}/top-anime${
+    params.toString() ? `?${params.toString()}` : ""
+  }`;
   const res = await axios.get(url, { headers: DEFAULT_HEADERS, timeout: 10000 });
   const $ = cheerio.load(res.data);
   const raw = $("top-anime").attr("animes") || "";
@@ -175,6 +194,16 @@ async function fetchPopular({
     }
   });
   return posts;
+}
+
+async function fetchPopular({
+  page,
+  providerContext,
+}: {
+  page: number;
+  providerContext: ProviderContext;
+}): Promise<Post[]> {
+  return fetchTop({ page, providerContext, popular: true });
 }
 
 async function fetchCalendar({
@@ -234,6 +263,7 @@ async function fetchArchive({
       "Content-Type": "application/json",
     },
     timeout: 15000,
+    withCredentials: true,
   });
   const records = res.data?.records || [];
   const posts: Post[] = [];
@@ -263,6 +293,8 @@ export const getPosts = async function ({
     switch (filter) {
       case "latest":
         return await fetchLatest({ page, providerContext });
+      case "top":
+        return await fetchTop({ page, providerContext, popular: false });
       case "popular":
         return await fetchPopular({ page, providerContext });
       case "calendar":
@@ -304,13 +336,14 @@ export const getSearchPosts = async function ({
   try {
     const liveRes = await axios.post(
       `${BASE_HOST}/livesearch`,
-      new URLSearchParams({ title: normalized }).toString(),
+      `title=${encodeURIComponent(normalized)}`,
       {
         headers: {
           ...headers,
           "Content-Type": "application/x-www-form-urlencoded",
         },
         timeout: 10000,
+        withCredentials: true,
       }
     );
     const records = liveRes.data?.records || [];
@@ -344,6 +377,7 @@ export const getSearchPosts = async function ({
         "Content-Type": "application/json",
       },
       timeout: 15000,
+      withCredentials: true,
     });
     const records = res.data?.records || [];
     records.forEach((item: any) => {

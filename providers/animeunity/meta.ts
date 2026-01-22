@@ -41,6 +41,20 @@ function buildAnimeLink(id?: number | string, slug?: string): string {
   return `${BASE_HOST}/anime/${id}-${slug}`;
 }
 
+function extractAnimeId(link: string): number | null {
+  if (!link) return null;
+  const direct = parseInt(link, 10);
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+  const match = link.match(/\/anime\/(\d+)/);
+  if (match?.[1]) {
+    const parsed = parseInt(match[1], 10);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function parseAnimeFromHtml(html: string, cheerio: ProviderContext["cheerio"]) {
   const $ = cheerio.load(html);
   let raw =
@@ -68,48 +82,55 @@ export const getMeta = async function ({
 }): Promise<Info> {
   try {
     const { axios, cheerio } = providerContext;
-    const url = link.startsWith("http") ? link : `${BASE_HOST}/anime/${link}`;
-    const res = await axios.get(url, {
+    const animeId = extractAnimeId(link);
+    if (!animeId) {
+      throw new Error("Invalid anime id");
+    }
+
+    const infoRes = await axios.get(`${BASE_HOST}/info_api/${animeId}/`, {
       headers: DEFAULT_HEADERS,
       timeout: 15000,
     });
-    const anime = parseAnimeFromHtml(res.data, cheerio);
-    if (!anime) {
-      throw new Error("Anime payload not found");
+    const info = infoRes.data || {};
+    const title =
+      info?.title_eng || info?.title || info?.title_it || "Unknown";
+    const synopsis = (info?.plot || "").toString();
+    const image = normalizeImageUrl(info?.imageurl || info?.cover);
+    let background = normalizeImageUrl(info?.imageurl_cover || info?.cover);
+
+    if (!background) {
+      try {
+        const htmlRes = await axios.get(
+          `${BASE_HOST}/anime/${animeId}-${info?.slug || ""}`,
+          { headers: DEFAULT_HEADERS, timeout: 15000 }
+        );
+        const anime = parseAnimeFromHtml(htmlRes.data, cheerio);
+        if (anime?.imageurl_cover) {
+          background = normalizeImageUrl(anime.imageurl_cover);
+        }
+      } catch (_) {
+        // ignore fallback errors
+      }
     }
 
-    const title =
-      anime?.title_eng || anime?.title || anime?.title_it || "Unknown";
-    const synopsis = (anime?.plot || "").toString();
-    const image = normalizeImageUrl(anime?.imageurl);
-    const tags = [
-      anime?.type,
-      anime?.status,
-      anime?.season,
-      anime?.date ? String(anime.date) : "",
-    ].filter(Boolean);
+    const tags =
+      info?.genres?.map((genre: any) => genre?.name).filter(Boolean) || [];
 
     const isMovie =
-      typeof anime?.type === "string" &&
-      anime.type.toLowerCase().includes("movie");
+      typeof info?.type === "string" &&
+      info.type.toLowerCase().includes("movie");
 
-    const linkList: Link[] = [];
-    if (anime?.id) {
-      linkList.push({
-        title: title,
-        episodesLink: String(anime.id),
-      });
-    } else if (anime?.slug && anime?.id) {
-      linkList.push({
-        title: title,
-        episodesLink: buildAnimeLink(anime.id, anime.slug),
-      });
-    }
+    const linkList: Link[] = [
+      {
+        title,
+        episodesLink: String(animeId),
+      },
+    ];
 
     return {
       title,
       synopsis,
-      image,
+      image: background || image,
       imdbId: "",
       type: isMovie ? "movie" : "series",
       tags,
