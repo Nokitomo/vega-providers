@@ -119,7 +119,7 @@ function pickTitle(anime: any): string {
   );
 }
 
-function toPost(anime: any): Post | null {
+function toPost(anime: any, extra?: Partial<Post>): Post | null {
   const id = anime?.id;
   const slug = anime?.slug;
   const title = pickTitle(anime);
@@ -128,7 +128,132 @@ function toPost(anime: any): Post | null {
   if (!title || !image || !link) {
     return null;
   }
-  return { title, image, link };
+  return { title, image, link, ...extra };
+}
+
+function extractEpisodeNumber(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value >= 0 ? value : null;
+  }
+  const text = String(value).trim();
+  if (!text) return null;
+  const match = text.match(/\d+/);
+  if (!match) return null;
+  const parsed = Number.parseInt(match[0], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractEpisodeNumberFromEpisodes(episodes: any[]): number | null {
+  let maxValue: number | null = null;
+  episodes.forEach((episode) => {
+    if (episode && typeof episode === "object") {
+      const raw = (episode as any).number ?? (episode as any).episode ?? (episode as any).id;
+      const candidate = extractEpisodeNumber(raw);
+      if (candidate != null && (maxValue == null || candidate > maxValue)) {
+        maxValue = candidate;
+      }
+    }
+  });
+  return maxValue;
+}
+
+function extractEpisodeNumberFromEpisodesDynamic(episodes: any): number | null {
+  if (Array.isArray(episodes)) {
+    return extractEpisodeNumberFromEpisodes(episodes);
+  }
+  if (typeof episodes === "string") {
+    try {
+      const decoded = JSON.parse(episodes);
+      if (Array.isArray(decoded)) {
+        return extractEpisodeNumberFromEpisodes(decoded);
+      }
+      if (decoded && typeof decoded === "object" && Array.isArray(decoded.data)) {
+        return extractEpisodeNumberFromEpisodes(decoded.data);
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+  if (episodes && typeof episodes === "object" && Array.isArray(episodes.data)) {
+    return extractEpisodeNumberFromEpisodes(episodes.data);
+  }
+  return null;
+}
+
+function extractEpisodeNumberFromMap(data: any): number | null {
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+  const keys = [
+    "number",
+    "ep",
+    "episodio",
+    "episode",
+    "episode_number",
+    "ep_number",
+    "episode_num",
+    "last_episode",
+    "last_episode_number",
+    "last_episode_num",
+  ];
+  for (const key of keys) {
+    if (!(key in data)) {
+      continue;
+    }
+    const value = (data as any)[key];
+    if (value && typeof value === "object") {
+      const nested = extractEpisodeNumber((value as any).number ?? (value as any).episode ?? (value as any).id);
+      if (nested != null) {
+        return nested;
+      }
+    }
+    const candidate = extractEpisodeNumber(value);
+    if (candidate != null) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function buildEpisodeLabel(value: number | null | undefined): string | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  return `Ep. ${value}`;
+}
+
+function extractLatestEpisodeLabel(item: any): string | undefined {
+  let number = extractEpisodeNumberFromMap(item);
+  if (number == null && item?.episode != null) {
+    if (item.episode && typeof item.episode === "object") {
+      number = extractEpisodeNumber((item.episode as any).number ?? (item.episode as any).episode ?? (item.episode as any).id);
+    } else {
+      number = extractEpisodeNumber(item.episode);
+    }
+  }
+  if (number == null) {
+    number = extractEpisodeNumberFromEpisodesDynamic(item?.episodes);
+  }
+  if (number == null && item?.anime && typeof item.anime === "object") {
+    number = extractEpisodeNumberFromMap(item.anime);
+    if (number == null) {
+      number = extractEpisodeNumberFromEpisodesDynamic(item.anime.episodes);
+    }
+  }
+  return buildEpisodeLabel(number);
+}
+
+function extractCalendarEpisodeLabel(item: any): string | undefined {
+  let publishedCount = extractEpisodeNumberFromEpisodesDynamic(item?.episodes);
+  if (publishedCount == null && Number.isFinite(item?.real_episodes_count)) {
+    publishedCount = item.real_episodes_count;
+  }
+  if (publishedCount != null && publishedCount >= 0) {
+    return `Ep. ${publishedCount + 1}`;
+  }
+  const fallback = item?.episodes_count ?? item?.episode_count;
+  return buildEpisodeLabel(extractEpisodeNumber(fallback));
 }
 
 async function fetchLatest({
@@ -152,7 +277,8 @@ async function fetchLatest({
   const items = data?.data || [];
   const posts: Post[] = [];
   items.forEach((item: any) => {
-    const post = toPost(item?.anime ?? item);
+    const episodeLabel = extractLatestEpisodeLabel(item);
+    const post = toPost(item?.anime ?? item, { episodeLabel });
     if (post) {
       posts.push(post);
     }
@@ -224,7 +350,9 @@ async function fetchCalendar({
     const decoded = decodeHtmlAttribute(raw);
     try {
       const data = JSON.parse(decoded);
-      const post = toPost(data);
+      const day = typeof data?.day === "string" ? data.day : undefined;
+      const episodeLabel = extractCalendarEpisodeLabel(data);
+      const post = toPost(data, { day, episodeLabel });
       if (post) {
         posts.push(post);
       }
