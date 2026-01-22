@@ -18,7 +18,21 @@ export const getEpisodes = async function ({
 }): Promise<EpisodeLink[]> {
   try {
     const { axios } = providerContext;
-    const animeId = parseInt(url, 10);
+    let animeId: number | null = null;
+    let rangeStart = 1;
+    let rangeEnd = 0;
+    if (url.includes("|")) {
+      const parts = url.split("|");
+      const parsedId = parseInt(parts[0], 10);
+      const parsedStart = parseInt(parts[1], 10);
+      const parsedEnd = parseInt(parts[2], 10);
+      animeId = Number.isFinite(parsedId) ? parsedId : null;
+      rangeStart = Number.isFinite(parsedStart) ? parsedStart : 1;
+      rangeEnd = Number.isFinite(parsedEnd) ? parsedEnd : 0;
+    } else {
+      const parsedId = parseInt(url, 10);
+      animeId = Number.isFinite(parsedId) ? parsedId : null;
+    }
     if (!Number.isFinite(animeId)) {
       return [];
     }
@@ -34,9 +48,10 @@ export const getEpisodes = async function ({
     if (!totalCount) return [];
 
     const episodes: EpisodeLink[] = [];
-    let start = 1;
-    while (start <= totalCount) {
-      const end = Math.min(start + RANGE_SIZE - 1, totalCount);
+    let start = rangeEnd > 0 ? rangeStart : 1;
+    let last = rangeEnd > 0 ? rangeEnd : totalCount;
+    while (start <= last) {
+      const end = Math.min(start + RANGE_SIZE - 1, last);
       const rangeUrl = `${BASE_HOST}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
       try {
         const res = await axios.get(rangeUrl, {
