@@ -42,6 +42,15 @@ export interface Info {
   tags?: string[];
   cast?: string[];
   rating?: string;
+  studio?: string;
+  episodesCount?: number;
+  related?: {
+    title: string;
+    link: string;
+    image?: string;
+    type?: string;
+    year?: string;
+  }[];
   linkList: Link[];
 }
 // getEpisodeLinks
