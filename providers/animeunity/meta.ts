@@ -99,7 +99,16 @@ function pickYear(item: any): string | undefined {
   return match?.[1];
 }
 
-function mapRelated(items: any[]): Info["related"] {
+type RelatedItem = {
+  id?: number | string;
+  title: string;
+  link: string;
+  image?: string;
+  type?: string;
+  year?: string;
+};
+
+function mapRelatedBase(items: any[]): RelatedItem[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => {
@@ -108,6 +117,7 @@ function mapRelated(items: any[]): Info["related"] {
       const slug = item?.slug;
       if (!title || !id) return null;
       return {
+        id,
         title,
         link: buildAnimeLink(id, slug),
         image: normalizeImageUrl(item?.imageurl),
@@ -115,7 +125,43 @@ function mapRelated(items: any[]): Info["related"] {
         year: pickYear(item),
       };
     })
-    .filter(Boolean) as Info["related"];
+    .filter(Boolean) as RelatedItem[];
+}
+
+async function resolveRelatedImages(
+  items: RelatedItem[],
+  axios: ProviderContext["axios"]
+): Promise<Info["related"]> {
+  const resolved = await Promise.all(
+    items.map(async (item) => {
+      if (item.image) return item;
+      if (!item.id) return item;
+      try {
+        const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
+          headers: DEFAULT_HEADERS,
+          timeout: 15000,
+        });
+        const detail = detailRes.data || {};
+        const image = normalizeImageUrl(
+          detail?.imageurl || detail?.cover || detail?.imageurl_cover
+        );
+        return {
+          ...item,
+          image: image || item.image,
+        };
+      } catch (_) {
+        return item;
+      }
+    })
+  );
+
+  return resolved.map((item) => ({
+    title: item.title,
+    link: item.link,
+    image: item.image || "",
+    type: item.type,
+    year: item.year,
+  }));
 }
 
 function parseAnimeFromHtml(html: string, cheerio: ProviderContext["cheerio"]) {
@@ -203,6 +249,9 @@ export const getMeta = async function ({
           },
         ];
 
+    const relatedBase = mapRelatedBase(info?.related || []);
+    const related = await resolveRelatedImages(relatedBase, axios);
+
     return {
       title,
       synopsis,
@@ -215,7 +264,7 @@ export const getMeta = async function ({
         typeof info?.episodes_count === "number"
           ? info.episodes_count
           : parseInt(info?.episodes_count, 10) || undefined,
-      related: mapRelated(info?.related || []),
+      related,
       linkList,
     };
   } catch (err) {
