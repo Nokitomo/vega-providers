@@ -55,6 +55,39 @@ function extractAnimeId(link: string): number | null {
   return null;
 }
 
+function buildEpisodeRanges(
+  totalCount: number,
+  rangeSize = 120
+): { title: string; start: number; end: number }[] {
+  if (!totalCount || totalCount <= 0) {
+    return [];
+  }
+  const ranges: { title: string; start: number; end: number }[] = [];
+  let start = 1;
+  while (start <= totalCount) {
+    const end = Math.min(start + rangeSize - 1, totalCount);
+    ranges.push({
+      title: `Episodi ${start}-${end}`,
+      start,
+      end,
+    });
+    start = end + 1;
+  }
+  return ranges;
+}
+
+function uniqueTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  tags.forEach((tag) => {
+    const normalized = tag.trim();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+}
+
 function parseAnimeFromHtml(html: string, cheerio: ProviderContext["cheerio"]) {
   const $ = cheerio.load(html);
   let raw =
@@ -113,19 +146,32 @@ export const getMeta = async function ({
       }
     }
 
-    const tags =
-      info?.genres?.map((genre: any) => genre?.name).filter(Boolean) || [];
+    const tags = uniqueTags(
+      [
+        info?.type,
+        info?.status,
+        info?.season,
+        info?.date ? String(info.date) : "",
+        ...(info?.genres?.map((genre: any) => genre?.name) || []),
+      ].filter(Boolean)
+    );
 
     const isMovie =
       typeof info?.type === "string" &&
       info.type.toLowerCase().includes("movie");
 
-    const linkList: Link[] = [
-      {
-        title,
-        episodesLink: String(animeId),
-      },
-    ];
+    const ranges = buildEpisodeRanges(info?.episodes_count || 0);
+    const linkList: Link[] = ranges.length
+      ? ranges.map((range) => ({
+          title: range.title,
+          episodesLink: `${animeId}|${range.start}|${range.end}`,
+        }))
+      : [
+          {
+            title,
+            episodesLink: String(animeId),
+          },
+        ];
 
     return {
       title,
