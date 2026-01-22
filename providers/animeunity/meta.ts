@@ -88,6 +88,36 @@ function uniqueTags(tags: string[]): string[] {
   return result;
 }
 
+function pickTitle(item: any): string {
+  return item?.title_eng || item?.title || item?.title_it || "";
+}
+
+function pickYear(item: any): string | undefined {
+  const raw = item?.date ?? item?.year ?? "";
+  if (!raw) return undefined;
+  const match = String(raw).match(/(\d{4})/);
+  return match?.[1];
+}
+
+function mapRelated(items: any[]): Info["related"] {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      const title = pickTitle(item);
+      const id = item?.id;
+      const slug = item?.slug;
+      if (!title || !id) return null;
+      return {
+        title,
+        link: buildAnimeLink(id, slug),
+        image: normalizeImageUrl(item?.imageurl),
+        type: item?.type || item?.relation || item?.rel,
+        year: pickYear(item),
+      };
+    })
+    .filter(Boolean) as Info["related"];
+}
+
 function parseAnimeFromHtml(html: string, cheerio: ProviderContext["cheerio"]) {
   const $ = cheerio.load(html);
   let raw =
@@ -180,6 +210,12 @@ export const getMeta = async function ({
       imdbId: "",
       type: isMovie ? "movie" : "series",
       tags,
+      studio: info?.studio || "",
+      episodesCount:
+        typeof info?.episodes_count === "number"
+          ? info.episodes_count
+          : parseInt(info?.episodes_count, 10) || undefined,
+      related: mapRelated(info?.related || []),
       linkList,
     };
   } catch (err) {
