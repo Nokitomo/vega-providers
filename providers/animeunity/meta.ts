@@ -204,7 +204,7 @@ export const getMeta = async function ({
     const title =
       info?.title_eng || info?.title || info?.title_it || "Unknown";
     const synopsis = (info?.plot || "").toString();
-    const image = normalizeImageUrl(info?.imageurl || info?.cover);
+    const poster = normalizeImageUrl(info?.imageurl || info?.cover);
     let background = normalizeImageUrl(info?.imageurl_cover || info?.cover);
 
     if (!background) {
@@ -255,7 +255,8 @@ export const getMeta = async function ({
     return {
       title,
       synopsis,
-      image: background || image,
+      image: background || poster,
+      poster,
       imdbId: "",
       type: isMovie ? "movie" : "series",
       tags,
