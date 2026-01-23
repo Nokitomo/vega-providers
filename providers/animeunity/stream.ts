@@ -23,6 +23,59 @@ function decodeEscapedValue(value: string): string {
     .replace(/\\\//g, "/");
 }
 
+function extractEmbedParams(embedUrl: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  try {
+    const parsed = new URL(embedUrl);
+    const token = parsed.searchParams.get("token");
+    const expires = parsed.searchParams.get("expires");
+    const asn = parsed.searchParams.get("asn");
+    if (token) {
+      params.token = token;
+    }
+    if (expires) {
+      params.expires = expires;
+    }
+    if (asn) {
+      params.asn = asn;
+    }
+  } catch (_) {
+    // ignore invalid embed url
+  }
+  return params;
+}
+
+function extractEmbedId(embedUrl: string): string | null {
+  try {
+    const parsed = new URL(embedUrl);
+    const match = parsed.pathname.match(/\/embed\/(\d+)/);
+    return match?.[1] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractVideoId(html: string): string | null {
+  const match = html.match(/window\.video\s*=\s*{[\s\S]*?id\s*:\s*'(\d+)'/);
+  return match?.[1] || null;
+}
+
+function buildFallbackMasterUrl(
+  html: string,
+  embedUrl: string
+): string | null {
+  const id = extractEmbedId(embedUrl) || extractVideoId(html);
+  if (!id) {
+    return null;
+  }
+  try {
+    const parsed = new URL(embedUrl);
+    return `${parsed.origin}/playlist/${id}`;
+  } catch (_) {
+    return null;
+  }
+}
+
 function parseStreamsBlock(
   rawBlock: string
 ): Array<{ name?: string; url?: string }> {
@@ -80,7 +133,10 @@ function buildStreamHeaders(embedUrl: string): Record<string, string> {
   return streamHeaders;
 }
 
-function extractMasterPlaylistParams(html: string): Record<string, string> {
+function extractMasterPlaylistParams(
+  html: string,
+  embedUrl: string
+): Record<string, string> {
   const params: Record<string, string> = {};
   const paramsBlock = html.match(
     /window\.masterPlaylist\s*=\s*{[\s\S]*?params\s*:\s*{([\s\S]*?)}[\s\S]*?}/
@@ -113,14 +169,25 @@ function extractMasterPlaylistParams(html: string): Record<string, string> {
     }
   }
 
+  const embedParams = extractEmbedParams(embedUrl);
+  Object.entries(embedParams).forEach(([key, value]) => {
+    if (!params[key] && value) {
+      params[key] = value;
+    }
+  });
+
   return params;
 }
 
-function extractMasterPlaylistUrl(html: string): string | null {
+function extractMasterPlaylistUrl(html: string, embedUrl: string): string | null {
   const urlMatch = html.match(
     /window\.masterPlaylist\s*=\s*{[\s\S]*?url\s*:\s*['"]([^'"]+)['"]/
   );
-  return urlMatch?.[1] ? decodeEscapedValue(urlMatch[1]) : null;
+  const url = urlMatch?.[1] ? decodeEscapedValue(urlMatch[1]) : null;
+  if (url) {
+    return url;
+  }
+  return buildFallbackMasterUrl(html, embedUrl);
 }
 
 function canPlayFhd(html: string, embedUrl: string): boolean {
@@ -166,8 +233,8 @@ function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
     ? parseStreamsBlock(streamsMatch[1])
     : [];
 
-  const params = extractMasterPlaylistParams(html);
-  const masterUrl = extractMasterPlaylistUrl(html);
+  const params = extractMasterPlaylistParams(html, embedUrl);
+  const masterUrl = extractMasterPlaylistUrl(html, embedUrl);
   const allowFhd = canPlayFhd(html, embedUrl);
   const streamHeaders = buildStreamHeaders(embedUrl);
   const derivedStreams: Array<{ name?: string; url?: string }> = [];
