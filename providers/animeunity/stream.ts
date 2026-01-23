@@ -7,7 +7,7 @@ const DEFAULT_HEADERS: Record<string, string> = {
 };
 
 function extractDownloadUrl(html: string): string | null {
-  const direct = html.match(/window\.downloadUrl\s*=\s*'([^']+)'/);
+  const direct = html.match(/window\.downloadUrl\s*=\s*['"]([^'"]+)['"]/);
   if (direct?.[1]) {
     return direct[1];
   }
@@ -17,65 +17,167 @@ function extractDownloadUrl(html: string): string | null {
 
 function buildStreamHeaders(embedUrl: string): Record<string, string> {
   let origin = "";
+  let referer = "";
   try {
-    origin = new URL(embedUrl).origin;
+    const parsed = new URL(embedUrl);
+    origin = parsed.origin;
+    referer = embedUrl;
   } catch (_) {
     origin = "";
+    referer = embedUrl;
   }
-  const referer = origin ? `${origin}/` : embedUrl;
-  return {
+  const streamHeaders: Record<string, string> = {
     Accept: "*/*",
     "User-Agent": DEFAULT_HEADERS["User-Agent"],
-    Referer: referer,
     ...(origin ? { Origin: origin } : {}),
   };
+  if (referer) {
+    streamHeaders.Referer = referer;
+  }
+  return streamHeaders;
+}
+
+function extractMasterPlaylistParams(html: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  const paramsBlock = html.match(
+    /window\.masterPlaylist\s*=\s*{[\s\S]*?params\s*:\s*{([\s\S]*?)}[\s\S]*?}/
+  );
+  const paramsSource = paramsBlock?.[1] || "";
+  const paramRegex = /['"]([^'"]+)['"]\s*:\s*'([^']*)'/g;
+  let match: RegExpExecArray | null = null;
+  while ((match = paramRegex.exec(paramsSource)) !== null) {
+    if (match[1] && match[2]) {
+      params[match[1]] = match[2];
+    }
+  }
+
+  if (!params.token) {
+    const tokenMatch = html.match(/['"]token['"]\s*:\s*'([^']*)'/);
+    if (tokenMatch?.[1]) {
+      params.token = tokenMatch[1];
+    }
+  }
+  if (!params.expires) {
+    const expiresMatch = html.match(/['"]expires['"]\s*:\s*'([^']*)'/);
+    if (expiresMatch?.[1]) {
+      params.expires = expiresMatch[1];
+    }
+  }
+  if (!params.asn) {
+    const asnMatch = html.match(/['"]asn['"]\s*:\s*'([^']*)'/);
+    if (asnMatch?.[1]) {
+      params.asn = asnMatch[1];
+    }
+  }
+
+  return params;
+}
+
+function extractMasterPlaylistUrl(html: string): string | null {
+  const urlMatch = html.match(
+    /window\.masterPlaylist\s*=\s*{[\s\S]*?url\s*:\s*['"]([^'"]+)['"]/
+  );
+  return urlMatch?.[1] || null;
+}
+
+function canPlayFhd(html: string, embedUrl: string): boolean {
+  if (/window\.canPlayFHD\s*=\s*true/.test(html)) {
+    return true;
+  }
+  try {
+    const parsed = new URL(embedUrl);
+    return parsed.searchParams.has("canPlayFHD");
+  } catch (_) {
+    return false;
+  }
+}
+
+function buildPlaylistUrl(
+  rawUrl: string,
+  embedUrl: string,
+  params: Record<string, string>,
+  allowFhd: boolean
+): string | null {
+  try {
+    const playlistUrl = new URL(rawUrl, embedUrl);
+    Object.entries(params).forEach(([key, value]) => {
+      if (!value) {
+        return;
+      }
+      if (!playlistUrl.searchParams.has(key)) {
+        playlistUrl.searchParams.append(key, value);
+      }
+    });
+    if (allowFhd) {
+      playlistUrl.searchParams.set("h", "1");
+    }
+    return playlistUrl.toString();
+  } catch (_) {
+    return null;
+  }
 }
 
 function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
   const streamsMatch = html.match(/window\.streams\s*=\s*(\[[\s\S]*?\]);/);
-  if (!streamsMatch?.[1]) {
-    return [];
-  }
-
   let streams: Array<{ name?: string; url?: string }> = [];
-  try {
-    streams = JSON.parse(streamsMatch[1]);
-  } catch (_) {
-    return [];
+  if (streamsMatch?.[1]) {
+    try {
+      streams = JSON.parse(streamsMatch[1]);
+    } catch (_) {
+      streams = [];
+    }
   }
 
-  const tokenMatch = html.match(/['"]token['"]\s*:\s*'([^']*)'/);
-  const expiresMatch = html.match(/['"]expires['"]\s*:\s*'([^']*)'/);
-  const asnMatch = html.match(/['"]asn['"]\s*:\s*'([^']*)'/);
-
+  const params = extractMasterPlaylistParams(html);
+  const masterUrl = extractMasterPlaylistUrl(html);
+  const allowFhd = canPlayFhd(html, embedUrl);
   const streamHeaders = buildStreamHeaders(embedUrl);
   const parsedStreams: Array<Stream | null> = streams.map((stream) => {
     if (!stream?.url) {
       return null;
     }
-    try {
-      const playlistUrl = new URL(stream.url);
-      if (tokenMatch?.[1]) {
-        playlistUrl.searchParams.append("token", tokenMatch[1]);
-      }
-      if (expiresMatch?.[1]) {
-        playlistUrl.searchParams.append("expires", expiresMatch[1]);
-      }
-      if (asnMatch?.[1]) {
-        playlistUrl.searchParams.append("asn", asnMatch[1]);
-      }
-      return {
-        server: stream.name ? `AnimeUnity ${stream.name}` : "AnimeUnity",
-        link: playlistUrl.toString(),
-        type: "m3u8",
-        headers: streamHeaders,
-      };
-    } catch (_) {
+    const playlistUrl = buildPlaylistUrl(
+      stream.url,
+      embedUrl,
+      params,
+      allowFhd
+    );
+    if (!playlistUrl) {
       return null;
     }
+    return {
+      server: stream.name ? `AnimeUnity ${stream.name}` : "AnimeUnity",
+      link: playlistUrl,
+      type: "m3u8",
+      headers: streamHeaders,
+    };
   });
 
-  return parsedStreams.filter((stream): stream is Stream => !!stream);
+  const output = parsedStreams.filter((stream): stream is Stream => !!stream);
+  if (output.length > 0) {
+    return output;
+  }
+
+  if (masterUrl) {
+    const playlistUrl = buildPlaylistUrl(
+      masterUrl,
+      embedUrl,
+      params,
+      allowFhd
+    );
+    if (playlistUrl) {
+      return [
+        {
+          server: "AnimeUnity",
+          link: playlistUrl,
+          type: "m3u8",
+          headers: streamHeaders,
+        },
+      ];
+    }
+  }
+
+  return [];
 }
 
 export const getStream = async function ({
