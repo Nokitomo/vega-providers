@@ -5,6 +5,21 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
 };
+const DEBUG_STREAM = true;
+
+const debugLog = (...args: any[]) => {
+  if (!DEBUG_STREAM) {
+    return;
+  }
+  try {
+    const consoleRef = (globalThis as any)["console"];
+    if (consoleRef && typeof consoleRef.log === "function") {
+      consoleRef.log("[AnimeUnity]", ...args);
+    }
+  } catch (_) {
+    // ignore logging failures
+  }
+};
 
 function extractDownloadUrl(html: string): string | null {
   const direct = html.match(/window\.downloadUrl\s*=\s*['"]([^'"]+)['"]/);
@@ -16,17 +31,41 @@ function extractDownloadUrl(html: string): string | null {
 }
 
 function decodeEscapedValue(value: string): string {
-  return value
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, code) =>
-      String.fromCharCode(parseInt(code, 16))
-    )
-    .replace(/\\\//g, "/");
+  return decodeHtmlEntities(
+    value
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, code) =>
+        String.fromCharCode(parseInt(code, 16))
+      )
+      .replace(/\\\//g, "/")
+  );
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value.replace(/&amp;/g, "&");
+}
+
+function normalizeUrl(value: string): string {
+  return decodeEscapedValue(value).trim();
+}
+
+function extractFirstUrl(value: string): string | null {
+  const match = value.match(/https?:\/\/[^\s"'<>]+/);
+  return match?.[0] ? normalizeUrl(match[0]) : null;
+}
+
+function normalizeHtmlUrls(html: string): string {
+  return html.replace(/\\\//g, "/");
+}
+
+function extractVixCloudIdFromUrl(value: string): string | null {
+  const match = value.match(/vixcloud\.co\/(?:embed|playlist)\/(\d+)/);
+  return match?.[1] || null;
 }
 
 function extractEmbedParams(embedUrl: string): Record<string, string> {
   const params: Record<string, string> = {};
   try {
-    const parsed = new URL(embedUrl);
+    const parsed = new URL(normalizeUrl(embedUrl));
     const token = parsed.searchParams.get("token");
     const expires = parsed.searchParams.get("expires");
     const asn = parsed.searchParams.get("asn");
@@ -47,8 +86,8 @@ function extractEmbedParams(embedUrl: string): Record<string, string> {
 
 function extractEmbedId(embedUrl: string): string | null {
   try {
-    const parsed = new URL(embedUrl);
-    const match = parsed.pathname.match(/\/embed\/(\d+)/);
+    const parsed = new URL(normalizeUrl(embedUrl));
+    const match = parsed.pathname.match(/\/(?:embed|playlist)\/(\d+)/);
     return match?.[1] || null;
   } catch (_) {
     return null;
@@ -60,16 +99,24 @@ function extractVideoId(html: string): string | null {
   return match?.[1] || null;
 }
 
+function extractVixCloudIdFromHtml(html: string): string | null {
+  const normalizedHtml = normalizeHtmlUrls(html);
+  return extractVixCloudIdFromUrl(normalizedHtml);
+}
+
 function buildFallbackMasterUrl(
   html: string,
   embedUrl: string
 ): string | null {
-  const id = extractEmbedId(embedUrl) || extractVideoId(html);
+  const id =
+    extractEmbedId(embedUrl) ||
+    extractVideoId(html) ||
+    extractVixCloudIdFromHtml(html);
   if (!id) {
     return null;
   }
   try {
-    const parsed = new URL(embedUrl);
+    const parsed = new URL(normalizeUrl(embedUrl));
     return `${parsed.origin}/playlist/${id}`;
   } catch (_) {
     return null;
@@ -338,11 +385,19 @@ export const getStream = async function ({
     });
 
     const location = embedRes.headers?.location;
-    const embedUrl =
+    const rawEmbed = typeof embedRes.data === "string" ? embedRes.data.trim() : "";
+    const embedCandidate =
       (location && location.startsWith("http") && location) ||
-      (typeof embedRes.data === "string" ? embedRes.data.trim() : "");
+      extractFirstUrl(rawEmbed) ||
+      rawEmbed;
+    const embedUrl = normalizeUrl(embedCandidate);
+
+    debugLog("embed-url status", embedRes.status || "unknown");
+    debugLog("embed-url location", location || "none");
+    debugLog("embed-url resolved", embedUrl || "empty");
 
     if (!embedUrl || !embedUrl.startsWith("http")) {
+      debugLog("embed-url invalid", embedCandidate || "empty");
       return [];
     }
 
@@ -355,9 +410,18 @@ export const getStream = async function ({
     });
 
     const pageHtml = typeof pageRes.data === "string" ? pageRes.data : "";
+    debugLog("embed page status", pageRes.status || "unknown");
+    debugLog("embed page flags", {
+      streams: /window\.streams/.test(pageHtml),
+      master: /window\.masterPlaylist/.test(pageHtml),
+      video: /window\.video/.test(pageHtml),
+      download: /window\.downloadUrl/.test(pageHtml),
+    });
     if (embedUrl.includes("vixcloud.co")) {
       const streams = extractVixCloudStreams(pageHtml, embedUrl);
       const downloadUrl = extractDownloadUrl(pageHtml);
+      debugLog("vixcloud streams", streams.length);
+      debugLog("vixcloud download", downloadUrl ? "yes" : "no");
       if (downloadUrl) {
         const type = downloadUrl.toLowerCase().includes(".m3u8")
           ? "m3u8"
