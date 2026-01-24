@@ -34,6 +34,38 @@ function extractCsrfToken(html: string): string | undefined {
   return match?.[1];
 }
 
+const CALENDAR_DAY_MAP: Record<string, string> = {
+  lunedi: "Monday",
+  "lunedì": "Monday",
+  monday: "Monday",
+  martedi: "Tuesday",
+  "martedì": "Tuesday",
+  tuesday: "Tuesday",
+  mercoledi: "Wednesday",
+  "mercoledì": "Wednesday",
+  wednesday: "Wednesday",
+  giovedi: "Thursday",
+  "giovedì": "Thursday",
+  thursday: "Thursday",
+  venerdi: "Friday",
+  "venerdì": "Friday",
+  friday: "Friday",
+  sabato: "Saturday",
+  saturday: "Saturday",
+  domenica: "Sunday",
+  sunday: "Sunday",
+  indeterminato: "Undetermined",
+  indeterminata: "Undetermined",
+  undetermined: "Undetermined",
+};
+
+function normalizeCalendarDay(value?: string): string | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return undefined;
+  return CALENDAR_DAY_MAP[normalized] || value;
+}
+
 async function getSession(
   axios: ProviderContext["axios"]
 ): Promise<AnimeunitySession & { csrfToken?: string }> {
@@ -351,7 +383,9 @@ async function fetchCalendar({
     const decoded = decodeHtmlAttribute(raw);
     try {
       const data = JSON.parse(decoded);
-      const day = typeof data?.day === "string" ? data.day : undefined;
+      const day = normalizeCalendarDay(
+        typeof data?.day === "string" ? data.day : undefined
+      );
       const episodeLabel = extractCalendarEpisodeLabel(data);
       const post = toPost(data, { day, episodeLabel });
       if (post) {
