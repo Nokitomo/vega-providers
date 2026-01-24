@@ -278,7 +278,8 @@ async function fetchLatest({
   const posts: Post[] = [];
   items.forEach((item: any) => {
     const episodeLabel = extractLatestEpisodeLabel(item);
-    const post = toPost(item?.anime ?? item, { episodeLabel });
+    const episodeId = item?.id;
+    const post = toPost(item?.anime ?? item, { episodeLabel, episodeId });
     if (post) {
       posts.push(post);
     }
