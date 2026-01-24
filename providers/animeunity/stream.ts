@@ -5,22 +5,6 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
 };
-const DEBUG_STREAM = true;
-
-const debugLog = (...args: any[]) => {
-  if (!DEBUG_STREAM) {
-    return;
-  }
-  try {
-    const consoleRef = (globalThis as any)["console"];
-    if (consoleRef && typeof consoleRef.log === "function") {
-      consoleRef.log("[AnimeUnity]", ...args);
-    }
-  } catch (_) {
-    // ignore logging failures
-  }
-};
-
 const ORIGIN_PATTERN = /^(https?:\/\/[^\/?#]+)/i;
 
 function safeDecode(value: string): string {
@@ -465,12 +449,7 @@ export const getStream = async function ({
       rawEmbed;
     const embedUrl = normalizeUrl(embedCandidate);
 
-    debugLog("embed-url status", embedRes.status || "unknown");
-    debugLog("embed-url location", location || "none");
-    debugLog("embed-url resolved", embedUrl || "empty");
-
     if (!embedUrl || !embedUrl.startsWith("http")) {
-      debugLog("embed-url invalid", embedCandidate || "empty");
       return [];
     }
 
@@ -483,19 +462,9 @@ export const getStream = async function ({
     });
 
     const pageHtml = typeof pageRes.data === "string" ? pageRes.data : "";
-    debugLog("embed page status", pageRes.status || "unknown");
-    debugLog("embed page flags", {
-      streams: /window\.streams/.test(pageHtml),
-      master: /window\.masterPlaylist/.test(pageHtml),
-      video: /window\.video/.test(pageHtml),
-      download: /window\.downloadUrl/.test(pageHtml),
-    });
-
     if (embedUrl.includes("vixcloud.co")) {
       const streams = extractVixCloudStreams(pageHtml, embedUrl);
       const downloadUrl = extractDownloadUrl(pageHtml);
-      debugLog("vixcloud streams", streams.length);
-      debugLog("vixcloud download", downloadUrl ? "yes" : "no");
       if (downloadUrl) {
         const type = downloadUrl.toLowerCase().includes(".m3u8")
           ? "m3u8"
