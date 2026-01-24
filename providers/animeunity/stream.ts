@@ -21,6 +21,27 @@ const debugLog = (...args: any[]) => {
   }
 };
 
+const debugLogChunked = (
+  label: string,
+  text: string,
+  chunkSize = 1000
+) => {
+  if (!DEBUG_STREAM) {
+    return;
+  }
+  const safeText = typeof text === "string" ? text : String(text);
+  debugLog(`${label} length`, safeText.length);
+  if (!safeText) {
+    return;
+  }
+  for (let i = 0; i < safeText.length; i += chunkSize) {
+    debugLog(
+      `${label} chunk ${Math.floor(i / chunkSize) + 1}`,
+      safeText.slice(i, i + chunkSize)
+    );
+  }
+};
+
 function extractDownloadUrl(html: string): string | null {
   const direct = html.match(/window\.downloadUrl\s*=\s*['"]([^'"]+)['"]/);
   if (direct?.[1]) {
@@ -417,6 +438,10 @@ export const getStream = async function ({
       video: /window\.video/.test(pageHtml),
       download: /window\.downloadUrl/.test(pageHtml),
     });
+    debugLog("embed page html start");
+    debugLogChunked("embed page html", pageHtml);
+    debugLog("embed page html end");
+
     if (embedUrl.includes("vixcloud.co")) {
       const streams = extractVixCloudStreams(pageHtml, embedUrl);
       const downloadUrl = extractDownloadUrl(pageHtml);
