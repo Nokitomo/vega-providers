@@ -21,26 +21,100 @@ const debugLog = (...args: any[]) => {
   }
 };
 
-const debugLogChunked = (
-  label: string,
-  text: string,
-  chunkSize = 1000
-) => {
-  if (!DEBUG_STREAM) {
-    return;
+const ORIGIN_PATTERN = /^(https?:\/\/[^\/?#]+)/i;
+
+function safeDecode(value: string): string {
+  if (!value) {
+    return value;
   }
-  const safeText = typeof text === "string" ? text : String(text);
-  debugLog(`${label} length`, safeText.length);
-  if (!safeText) {
-    return;
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch (_) {
+    return value;
   }
-  for (let i = 0; i < safeText.length; i += chunkSize) {
-    debugLog(
-      `${label} chunk ${Math.floor(i / chunkSize) + 1}`,
-      safeText.slice(i, i + chunkSize)
-    );
+}
+
+function getOrigin(url: string): string {
+  const match = normalizeUrl(url).match(ORIGIN_PATTERN);
+  return match?.[1] || "";
+}
+
+function extractQueryParamsFromUrl(url: string): Record<string, string> {
+  const params: Record<string, string> = {};
+  if (!url) {
+    return params;
   }
-};
+  const queryStart = url.indexOf("?");
+  if (queryStart === -1) {
+    return params;
+  }
+  const hashStart = url.indexOf("#", queryStart);
+  const queryString =
+    hashStart === -1
+      ? url.slice(queryStart + 1)
+      : url.slice(queryStart + 1, hashStart);
+  if (!queryString) {
+    return params;
+  }
+  queryString.split("&").forEach((part) => {
+    if (!part) {
+      return;
+    }
+    const [rawKey, rawValue = ""] = part.split("=");
+    const key = safeDecode(rawKey);
+    if (!key) {
+      return;
+    }
+    params[key] = safeDecode(rawValue);
+  });
+  return params;
+}
+
+function appendQueryParams(
+  url: string,
+  params: Record<string, string>
+): string {
+  const normalized = normalizeUrl(url);
+  if (!normalized) {
+    return normalized;
+  }
+  const [baseWithQuery, hashPart] = normalized.split("#", 2);
+  const base = baseWithQuery.split("?")[0];
+  const existing = extractQueryParamsFromUrl(baseWithQuery);
+  const output: Record<string, string> = {...existing};
+  Object.entries(params).forEach(([key, value]) => {
+    if (!value || output[key]) {
+      return;
+    }
+    output[key] = value;
+  });
+  const query = Object.entries(output)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+  const rebuilt = query ? `${base}?${query}` : base;
+  return hashPart ? `${rebuilt}#${hashPart}` : rebuilt;
+}
+
+function resolveUrl(rawUrl: string, baseUrl: string): string {
+  const normalized = normalizeUrl(rawUrl);
+  if (!normalized) {
+    return normalized;
+  }
+  if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+    return normalized;
+  }
+  if (normalized.startsWith("//")) {
+    return `https:${normalized}`;
+  }
+  const origin = getOrigin(baseUrl);
+  if (!origin) {
+    return normalized;
+  }
+  if (normalized.startsWith("/")) {
+    return `${origin}${normalized}`;
+  }
+  return `${origin}/${normalized}`;
+}
 
 function extractDownloadUrl(html: string): string | null {
   const direct = html.match(/window\.downloadUrl\s*=\s*['"]([^'"]+)['"]/);
@@ -84,35 +158,23 @@ function extractVixCloudIdFromUrl(value: string): string | null {
 }
 
 function extractEmbedParams(embedUrl: string): Record<string, string> {
-  const params: Record<string, string> = {};
-  try {
-    const parsed = new URL(normalizeUrl(embedUrl));
-    const token = parsed.searchParams.get("token");
-    const expires = parsed.searchParams.get("expires");
-    const asn = parsed.searchParams.get("asn");
-    if (token) {
-      params.token = token;
-    }
-    if (expires) {
-      params.expires = expires;
-    }
-    if (asn) {
-      params.asn = asn;
-    }
-  } catch (_) {
-    // ignore invalid embed url
+  const params = extractQueryParamsFromUrl(embedUrl);
+  const output: Record<string, string> = {};
+  if (params.token) {
+    output.token = params.token;
   }
-  return params;
+  if (params.expires) {
+    output.expires = params.expires;
+  }
+  if (params.asn) {
+    output.asn = params.asn;
+  }
+  return output;
 }
 
 function extractEmbedId(embedUrl: string): string | null {
-  try {
-    const parsed = new URL(normalizeUrl(embedUrl));
-    const match = parsed.pathname.match(/\/(?:embed|playlist)\/(\d+)/);
-    return match?.[1] || null;
-  } catch (_) {
-    return null;
-  }
+  const match = normalizeUrl(embedUrl).match(/\/(?:embed|playlist)\/(\d+)/);
+  return match?.[1] || null;
 }
 
 function extractVideoId(html: string): string | null {
@@ -136,12 +198,8 @@ function buildFallbackMasterUrl(
   if (!id) {
     return null;
   }
-  try {
-    const parsed = new URL(normalizeUrl(embedUrl));
-    return `${parsed.origin}/playlist/${id}`;
-  } catch (_) {
-    return null;
-  }
+  const origin = getOrigin(embedUrl);
+  return origin ? `${origin}/playlist/${id}` : null;
 }
 
 function parseStreamsBlock(
@@ -180,16 +238,8 @@ function parseStreamsBlock(
 }
 
 function buildStreamHeaders(embedUrl: string): Record<string, string> {
-  let origin = "";
-  let referer = "";
-  try {
-    const parsed = new URL(embedUrl);
-    origin = parsed.origin;
-    referer = embedUrl;
-  } catch (_) {
-    origin = "";
-    referer = embedUrl;
-  }
+  const origin = getOrigin(embedUrl);
+  const referer = embedUrl || "";
   const streamHeaders: Record<string, string> = {
     Accept: "*/*",
     "User-Agent": DEFAULT_HEADERS["User-Agent"],
@@ -262,12 +312,11 @@ function canPlayFhd(html: string, embedUrl: string): boolean {
   if (/window\.canPlayFHD\s*=\s*true/.test(html)) {
     return true;
   }
-  try {
-    const parsed = new URL(embedUrl);
-    return parsed.searchParams.has("canPlayFHD");
-  } catch (_) {
-    return false;
-  }
+  const params = extractQueryParamsFromUrl(embedUrl);
+  return (
+    Object.prototype.hasOwnProperty.call(params, "canPlayFHD") ||
+    params.h === "1"
+  );
 }
 
 function buildPlaylistUrl(
@@ -276,23 +325,15 @@ function buildPlaylistUrl(
   params: Record<string, string>,
   allowFhd: boolean
 ): string | null {
-  try {
-    const playlistUrl = new URL(rawUrl, embedUrl);
-    Object.entries(params).forEach(([key, value]) => {
-      if (!value) {
-        return;
-      }
-      if (!playlistUrl.searchParams.has(key)) {
-        playlistUrl.searchParams.append(key, value);
-      }
-    });
-    if (allowFhd) {
-      playlistUrl.searchParams.set("h", "1");
-    }
-    return playlistUrl.toString();
-  } catch (_) {
+  const resolved = resolveUrl(rawUrl, embedUrl);
+  if (!resolved) {
     return null;
   }
+  const mergedParams: Record<string, string> = {...params};
+  if (allowFhd && !mergedParams.h) {
+    mergedParams.h = "1";
+  }
+  return appendQueryParams(resolved, mergedParams);
 }
 
 function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
@@ -308,38 +349,41 @@ function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
   const derivedStreams: Array<{ name?: string; url?: string }> = [];
 
   if (masterUrl && streams.length < 2) {
-    try {
-      const baseUrl = new URL(masterUrl, embedUrl);
-      const server1 = new URL(baseUrl.toString());
-      if (!server1.searchParams.has("ub")) {
-        server1.searchParams.set("ub", "1");
-      }
-      const server2 = new URL(baseUrl.toString());
-      if (!server2.searchParams.has("ab")) {
-        server2.searchParams.set("ab", "1");
-      }
+    const baseUrl = resolveUrl(masterUrl, embedUrl);
+    if (baseUrl) {
+      const server1 = appendQueryParams(baseUrl, { ub: "1" });
+      const server2 = appendQueryParams(baseUrl, { ab: "1" });
       derivedStreams.push(
-        { name: "Server1", url: server1.toString() },
-        { name: "Server2", url: server2.toString() }
+        { name: "Server1", url: server1 },
+        { name: "Server2", url: server2 }
       );
-    } catch (_) {
-      // ignore invalid base url
     }
   }
 
+  const fallbackStreams: Stream[] = [];
   const parsedStreams: Array<Stream | null> = [...streams, ...derivedStreams]
     .filter((stream) => stream?.url)
     .map((stream) => {
       if (!stream?.url) {
         return null;
       }
+      const rawUrl = resolveUrl(stream.url, embedUrl);
+      if (!rawUrl) {
+        return null;
+      }
       const playlistUrl = buildPlaylistUrl(
-        stream.url,
+        rawUrl,
         embedUrl,
         params,
         allowFhd
       );
       if (!playlistUrl) {
+        fallbackStreams.push({
+          server: stream.name ? `AnimeUnity ${stream.name}` : "AnimeUnity",
+          link: rawUrl,
+          type: "m3u8",
+          headers: streamHeaders,
+        });
         return null;
       }
       return {
@@ -359,6 +403,14 @@ function extractVixCloudStreams(html: string, embedUrl: string): Stream[] {
     });
   if (output.length > 0) {
     return output;
+  }
+
+  if (fallbackStreams.length > 0) {
+    return fallbackStreams.filter((stream, index, list) => {
+      return (
+        list.findIndex((item) => item.link === stream.link) === index
+      );
+    });
   }
 
   if (masterUrl) {
@@ -438,9 +490,6 @@ export const getStream = async function ({
       video: /window\.video/.test(pageHtml),
       download: /window\.downloadUrl/.test(pageHtml),
     });
-    debugLog("embed page html start");
-    debugLogChunked("embed page html", pageHtml);
-    debugLog("embed page html end");
 
     if (embedUrl.includes("vixcloud.co")) {
       const streams = extractVixCloudStreams(pageHtml, embedUrl);
