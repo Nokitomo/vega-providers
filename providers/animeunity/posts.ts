@@ -12,6 +12,13 @@ import {
   DEFAULT_BASE_HOST_NO_WWW,
   TIMEOUTS,
 } from "./config";
+import {
+  normalizeArchiveOrder,
+  normalizeArchiveSeason,
+  normalizeArchiveStatus,
+  normalizeArchiveType,
+  resolveArchiveGenreId,
+} from "./filters";
 
 const PAGE_SIZE = 30;
 
@@ -68,7 +75,14 @@ function normalizeParamValue(value: string | null): string | undefined {
 function parseBooleanParam(value: string | null): boolean | undefined {
   if (!value) return undefined;
   const normalized = value.trim().toLowerCase();
-  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+  if (
+    normalized === "true" ||
+    normalized === "1" ||
+    normalized === "yes" ||
+    normalized === "dubbed" ||
+    normalized === "ita" ||
+    normalized === "italian"
+  ) {
     return true;
   }
   if (normalized === "false" || normalized === "0" || normalized === "no") {
@@ -91,18 +105,30 @@ function normalizeGenreEntry(item: any): Record<string, any> | undefined {
     return { id: item };
   }
   if (typeof item === "string") {
-    const parsed = Number.parseInt(item.trim(), 10);
+    const trimmed = item.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number.parseInt(trimmed, 10);
     if (Number.isFinite(parsed)) {
       return { id: parsed };
     }
-    return undefined;
+    const resolved = resolveArchiveGenreId(trimmed);
+    if (resolved != null) {
+      return { id: resolved, name: trimmed };
+    }
+    return { name: trimmed };
   }
   if (typeof item === "object") {
     if ("id" in item) {
       return item as Record<string, any>;
     }
     if ("name" in item && typeof item.name === "string") {
-      return { name: item.name };
+      const trimmed = item.name.trim();
+      if (!trimmed) return undefined;
+      const resolved = resolveArchiveGenreId(trimmed);
+      if (resolved != null) {
+        return { id: resolved, name: trimmed };
+      }
+      return { name: trimmed };
     }
   }
   return undefined;
@@ -147,13 +173,13 @@ function parseGenresParam(
 function buildArchiveFilters(params: URLSearchParams): ArchiveFilters {
   return {
     title: normalizeParamValue(params.get("title")),
-    type: normalizeParamValue(params.get("type")),
+    type: normalizeArchiveType(params.get("type")),
     year: parseNumberParam(params.get("year")),
-    order: normalizeParamValue(params.get("order")),
-    status: normalizeParamValue(params.get("status")),
+    order: normalizeArchiveOrder(params.get("order")),
+    status: normalizeArchiveStatus(params.get("status")),
     genres: parseGenresParam(params.get("genres")),
     dubbed: parseBooleanParam(params.get("dubbed")),
-    season: normalizeParamValue(params.get("season")),
+    season: normalizeArchiveSeason(params.get("season")),
   };
 }
 
@@ -461,9 +487,9 @@ export const getPosts = async function ({
           page,
           providerContext,
           popular: parseBooleanParam(parsed.params.get("popular")) || false,
-          status: normalizeParamValue(parsed.params.get("status")),
-          type: normalizeParamValue(parsed.params.get("type")),
-          order: normalizeParamValue(parsed.params.get("order")),
+          status: normalizeArchiveStatus(parsed.params.get("status")),
+          type: normalizeArchiveType(parsed.params.get("type")),
+          order: normalizeArchiveOrder(parsed.params.get("order")),
         });
       case "popular":
         return await fetchPopular({ page, providerContext });
