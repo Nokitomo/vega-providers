@@ -1,11 +1,5 @@
 import { EpisodeLink, ProviderContext } from "../types";
-
-const BASE_HOST = "https://www.animeunity.so";
-const DEFAULT_HEADERS: Record<string, string> = {
-  Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-};
+import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 
 const RANGE_SIZE = 120;
 
@@ -42,7 +36,7 @@ export const getEpisodes = async function ({
         ...DEFAULT_HEADERS,
         Referer: `${BASE_HOST}/`,
       },
-      timeout: 15000,
+      timeout: TIMEOUTS.LONG,
     });
     const totalCount = infoRes.data?.episodes_count || 0;
     if (!totalCount) return [];
@@ -59,7 +53,7 @@ export const getEpisodes = async function ({
             ...DEFAULT_HEADERS,
             Referer: `${BASE_HOST}/`,
           },
-          timeout: 15000,
+          timeout: TIMEOUTS.LONG,
         });
         const list = res.data?.episodes || [];
         list.forEach((episode: any) => {
