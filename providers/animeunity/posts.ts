@@ -31,7 +31,17 @@ type ArchiveFilters = {
   season?: string;
 };
 
+const HTML_HEADERS: Record<string, string> = {
+  ...DEFAULT_HEADERS,
+  Accept: "text/html,application/xhtml+xml",
+};
+
+const SESSION_TTL_MS = 5 * 60 * 1000;
+
+type CachedSession = AnimeunitySession & { csrfToken?: string; fetchedAt: number };
+
 let hasLoggedBaseUrl = false;
+let cachedSession: CachedSession | null = null;
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -182,13 +192,19 @@ function extractCsrfToken(html: string): string | undefined {
   return match?.[1];
 }
 
+function isSessionValid(
+  session: (AnimeunitySession & { csrfToken?: string }) | null | undefined
+): boolean {
+  return Boolean(session?.xsrfToken || session?.csrfToken || session?.session);
+}
+
 async function getSession(
   axios: ProviderContext["axios"],
   baseHost: string
 ): Promise<AnimeunitySession & { csrfToken?: string }> {
   try {
     const response = await axios.get(`${baseHost}/`, {
-      headers: DEFAULT_HEADERS,
+      headers: HTML_HEADERS,
       timeout: TIMEOUTS.SHORT,
     });
     const csrfToken =
@@ -208,6 +224,27 @@ async function getSession(
   } catch (_) {
     return {};
   }
+}
+
+async function getCachedSession(
+  axios: ProviderContext["axios"],
+  baseHost: string,
+  forceRefresh = false
+): Promise<AnimeunitySession & { csrfToken?: string }> {
+  if (
+    !forceRefresh &&
+    cachedSession &&
+    Date.now() - cachedSession.fetchedAt < SESSION_TTL_MS &&
+    isSessionValid(cachedSession)
+  ) {
+    return cachedSession;
+  }
+
+  const session = await getSession(axios, baseHost);
+  if (isSessionValid(session)) {
+    cachedSession = { ...session, fetchedAt: Date.now() };
+  }
+  return cachedSession || session;
 }
 
 function buildSessionHeaders(
@@ -311,12 +348,37 @@ async function fetchCalendar({
   providerContext: ProviderContext;
 }): Promise<Post[]> {
   const { axios, cheerio } = providerContext;
-  const { baseHost } = await resolveBaseUrls(providerContext);
-  const res = await axios.get(`${baseHost}/calendario`, {
-    headers: DEFAULT_HEADERS,
-    timeout: TIMEOUTS.SHORT,
-  });
-  return parseCalendarPostsFromHtml(res.data, cheerio, baseHost);
+  const { baseHost, baseHostNoWww } = await resolveBaseUrls(providerContext);
+
+  const parseResponse = (data: unknown): Post[] => {
+    if (typeof data !== "string" || !data.trim()) {
+      return [];
+    }
+    return parseCalendarPostsFromHtml(data, cheerio, baseHost);
+  };
+
+  const fetchOnce = async (host: string): Promise<Post[]> => {
+    const res = await axios.get(`${host}/calendario`, {
+      headers: HTML_HEADERS,
+      timeout: TIMEOUTS.SHORT,
+    });
+    return parseResponse(res.data);
+  };
+
+  let posts = await fetchOnce(baseHost);
+  if (posts.length > 0) {
+    return posts;
+  }
+
+  await getCachedSession(axios, baseHost, true);
+
+  const fallbackHost = baseHostNoWww !== baseHost ? baseHostNoWww : baseHost;
+  posts = await fetchOnce(fallbackHost);
+  if (posts.length > 0 || fallbackHost === baseHost) {
+    return posts;
+  }
+
+  return await fetchOnce(baseHost);
 }
 
 async function fetchArchive({
@@ -330,8 +392,6 @@ async function fetchArchive({
 }): Promise<Post[]> {
   const { axios } = providerContext;
   const { baseHost } = await resolveBaseUrls(providerContext);
-  const session = await getSession(axios, baseHost);
-  const headers = buildSessionHeaders(session, baseHost);
   const offset = Math.max(0, (page - 1) * PAGE_SIZE);
   const normalizedTitle = filters?.title?.trim();
   const payload = {
@@ -345,16 +405,36 @@ async function fetchArchive({
     dubbed: filters?.dubbed ?? false,
     season: filters?.season || false,
   };
-  const res = await axios.post(`${baseHost}/archivio/get-animes`, payload, {
-    headers: {
-      ...headers,
-      "Content-Type": "application/json",
-    },
-    timeout: TIMEOUTS.LONG,
-    withCredentials: true,
-  });
-  const records = res.data?.records || [];
-  return parseArchiveRecords(records, baseHost);
+
+  const requestRecords = async (
+    session: AnimeunitySession & { csrfToken?: string }
+  ): Promise<any[] | null> => {
+    try {
+      const headers = buildSessionHeaders(session, baseHost);
+      const res = await axios.post(`${baseHost}/archivio/get-animes`, payload, {
+        headers: {
+          ...headers,
+          "Content-Type": "application/json",
+        },
+        timeout: TIMEOUTS.LONG,
+        withCredentials: true,
+      });
+      const records = res?.data?.records;
+      return Array.isArray(records) ? records : null;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  let session = await getCachedSession(axios, baseHost);
+  let records = await requestRecords(session);
+
+  if (!records) {
+    session = await getCachedSession(axios, baseHost, true);
+    records = await requestRecords(session);
+  }
+
+  return parseArchiveRecords(records || [], baseHost);
 }
 
 export const getPosts = async function ({
@@ -418,7 +498,7 @@ export const getSearchPosts = async function ({
   if (signal?.aborted) return [];
   const { axios } = providerContext;
   const { baseHost } = await resolveBaseUrls(providerContext);
-  const session = await getSession(axios, baseHost);
+  const session = await getCachedSession(axios, baseHost);
   const headers = buildSessionHeaders(session, baseHost);
   const normalized = (searchQuery || "").trim();
   if (!normalized) {
