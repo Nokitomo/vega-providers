@@ -18,13 +18,26 @@ function isHostedOnAnimeUnity(url?: string): boolean {
   }
 }
 
+function pickRelatedImage(item: RelatedItem): string | undefined {
+  if (item.image && isHostedOnAnimeUnity(item.image)) {
+    return item.image;
+  }
+  if (item.cover && isHostedOnAnimeUnity(item.cover)) {
+    return item.cover;
+  }
+  return item.image || item.cover;
+}
+
 async function resolveRelatedImages(
   items: RelatedItem[],
   axios: ProviderContext["axios"]
 ): Promise<Info["related"]> {
   const resolved = await Promise.all(
     items.map(async (item) => {
-      if (item.image && isHostedOnAnimeUnity(item.image)) return item;
+      const preferredImage = pickRelatedImage(item);
+      if (preferredImage && isHostedOnAnimeUnity(preferredImage)) {
+        return { ...item, image: preferredImage };
+      }
       if (!item.id) return item;
       try {
         const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
@@ -37,10 +50,10 @@ async function resolveRelatedImages(
         );
         return {
           ...item,
-          image: image || item.image,
+          image: image || preferredImage || item.image,
         };
       } catch (_) {
-        return item;
+        return { ...item, image: preferredImage || item.image };
       }
     })
   );
