@@ -18,6 +18,9 @@ providers/
     episodes.ts (optional)
 ```
 
+Provider modules are bundled during the build so internal imports (e.g. `./parsers/*`)
+are supported without relying on runtime `require()` in the app.
+
 ## File Explanations
 
 ### 1. `catalog.ts`
