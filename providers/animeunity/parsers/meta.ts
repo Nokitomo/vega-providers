@@ -113,6 +113,7 @@ export type RelatedItem = {
   title: string;
   link: string;
   image?: string;
+  cover?: string;
   type?: string;
   year?: string;
 };
@@ -133,6 +134,7 @@ export function mapRelatedBase(
         title,
         link: buildAnimeLink(baseHost, id, slug),
         image: normalizeImageUrl(item?.imageurl),
+        cover: normalizeImageUrl(item?.cover || item?.imageurl_cover),
         type: item?.type || item?.relation || item?.rel,
         year: pickYear(item),
       };
