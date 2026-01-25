@@ -225,15 +225,37 @@ export function parseTopPostsFromHtml(
 ): Post[] {
   const $ = cheerio.load(html);
   const raw = $("top-anime").attr("animes") || "";
-  if (!raw) return [];
+  if (!raw) {
+    try {
+      const hasTopTag = $("top-anime").length > 0;
+      console.log("[animeunity][top] missing animes attr", {
+        hasTopTag,
+        htmlLength: html ? html.length : 0,
+      });
+    } catch (_) {
+      // ignore logging errors
+    }
+    return [];
+  }
   let data: any;
   try {
     const decoded = decodeHtmlAttribute(raw);
     data = JSON.parse(decoded);
   } catch (_) {
-    return [];
+    try {
+      data = JSON.parse(raw);
+    } catch (err) {
+      try {
+        console.log("[animeunity][top] parse error", {
+          rawSample: raw.slice(0, 200),
+        });
+      } catch (_) {
+        // ignore logging errors
+      }
+      return [];
+    }
   }
-  const items = data?.data || [];
+  const items = Array.isArray(data?.data) ? data.data : [];
   const posts: Post[] = [];
   items.forEach((item: any) => {
     const post = toPost(item, baseHost);
@@ -241,6 +263,16 @@ export function parseTopPostsFromHtml(
       posts.push(post);
     }
   });
+  if (posts.length === 0) {
+    try {
+      console.log("[animeunity][top] empty posts", {
+        items: items.length,
+        htmlLength: html ? html.length : 0,
+      });
+    } catch (_) {
+      // ignore logging errors
+    }
+  }
   return posts;
 }
 

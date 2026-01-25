@@ -335,7 +335,8 @@ async function fetchTop({
   order?: string;
 }): Promise<Post[]> {
   const { axios, cheerio } = providerContext;
-  const { baseHost } = await resolveBaseUrls(providerContext);
+  const { baseHost, baseHostNoWww } = await resolveBaseUrls(providerContext);
+
   const query: string[] = [];
   if (popular) {
     query.push("popular=true");
@@ -352,13 +353,38 @@ async function fetchTop({
   if (page > 1) {
     query.push(`page=${page}`);
   }
-  const url = `${baseHost}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
-  const res = await axios.get(url, {
-    headers: HTML_HEADERS,
-    timeout: TIMEOUTS.SHORT,
-    responseType: "text",
-  });
-  return parseTopPostsFromHtml(res.data, cheerio, baseHost);
+
+  const fetchFromHost = async (host: string): Promise<Post[]> => {
+    const url = `${host}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
+    const res = await axios.get(url, {
+      headers: HTML_HEADERS,
+      timeout: TIMEOUTS.SHORT,
+      responseType: "text",
+    });
+    if (page === 1) {
+      const html =
+        typeof res.data === "string" ? res.data : JSON.stringify(res.data || "");
+      const hasTopTag = html.includes("<top-anime");
+      const hasAnimesAttr = html.includes("animes=");
+      console.log("[animeunity][top] response", {
+        url,
+        status: res.status,
+        length: html.length,
+        hasTopTag,
+        hasAnimesAttr,
+      });
+      if (!hasTopTag) {
+        console.log("[animeunity][top] html sample", html.slice(0, 200));
+      }
+    }
+    return parseTopPostsFromHtml(res.data, cheerio, host);
+  };
+
+  let posts = await fetchFromHost(baseHost);
+  if (posts.length === 0 && baseHostNoWww !== baseHost) {
+    posts = await fetchFromHost(baseHostNoWww);
+  }
+  return posts;
 }
 
 async function fetchPopular({
