@@ -69,23 +69,23 @@ export const getMeta = async function ({
       timeout: 15000,
     });
     const info = infoRes.data || {};
-    const metaPayload = buildMetaFromInfo(info, BASE_HOST, animeId);
-    let background = metaPayload.background;
-
-    if (!background) {
-      try {
-        const htmlRes = await axios.get(
-          `${BASE_HOST}/anime/${animeId}-${info?.slug || ""}`,
-          { headers: DEFAULT_HEADERS, timeout: 15000 }
-        );
-        const anime = parseAnimeFromHtml(htmlRes.data, cheerio);
-        if (anime?.imageurl_cover) {
-          background = normalizeImageUrl(anime.imageurl_cover);
-        }
-      } catch (_) {
-        // ignore fallback errors
-      }
+    let animeFromHtml: any = null;
+    try {
+      const htmlRes = await axios.get(
+        `${BASE_HOST}/anime/${animeId}-${info?.slug || ""}`,
+        { headers: DEFAULT_HEADERS, timeout: 15000 }
+      );
+      animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
+    } catch (_) {
+      // ignore html fallback errors
     }
+    const metaPayload = buildMetaFromInfo(
+      info,
+      BASE_HOST,
+      animeId,
+      animeFromHtml
+    );
+    const background = metaPayload.background;
     const related = await resolveRelatedImages(metaPayload.relatedBase, axios);
 
     return {
@@ -96,8 +96,11 @@ export const getMeta = async function ({
       imdbId: "",
       type: metaPayload.isMovie ? "movie" : "series",
       tags: metaPayload.tags,
+      genres: metaPayload.genres,
+      rating: metaPayload.rating,
       studio: metaPayload.studio || "",
       episodesCount: metaPayload.episodesCount,
+      extra: metaPayload.extra,
       related,
       linkList: metaPayload.linkList,
     };
