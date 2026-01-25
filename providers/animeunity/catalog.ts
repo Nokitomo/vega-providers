@@ -15,7 +15,7 @@ export const catalog = [
   },
   {
     title: "Top Anime",
-    filter: "archive?order=rating",
+    filter: "top?order=rating",
   },
   {
     title: "Calendar",

@@ -17,6 +17,8 @@ import {
   normalizeArchiveSeason,
   normalizeArchiveStatus,
   normalizeArchiveType,
+  normalizeTopOrder,
+  normalizeTopStatus,
   resolveArchiveGenreId,
 } from "./filters";
 
@@ -484,16 +486,37 @@ export const getPosts = async function ({
         return await fetchLatest({ page, providerContext });
       case "top":
         {
-          const baseFilters = buildArchiveFilters(parsed.params);
-          const order = baseFilters.order || normalizeArchiveOrder("rating");
-          return await fetchArchive({
+          const popular = parseBooleanParam(parsed.params.get("popular")) || false;
+          const status = normalizeTopStatus(parsed.params.get("status"));
+          const type = normalizeArchiveType(parsed.params.get("type"));
+          const order = normalizeTopOrder(parsed.params.get("order"));
+
+          let posts = await fetchTop({
             page,
             providerContext,
-            filters: {
-              ...baseFilters,
-              order,
-            },
+            popular,
+            status,
+            type,
+            order,
           });
+
+          if (
+            !popular &&
+            posts.length === 0 &&
+            (order === "rating" || order === "score")
+          ) {
+            const fallbackOrder = order === "rating" ? "score" : "rating";
+            posts = await fetchTop({
+              page,
+              providerContext,
+              popular,
+              status,
+              type,
+              order: fallbackOrder,
+            });
+          }
+
+          return posts;
         }
       case "popular":
         return await fetchPopular({ page, providerContext });

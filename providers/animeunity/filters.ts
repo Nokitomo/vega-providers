@@ -160,6 +160,30 @@ const ARCHIVE_SEASON_MAP: Record<string, string> = {
   fall: "Autunno",
 };
 
+const TOP_ORDER_MAP: Record<string, string> = {
+  rating: "rating",
+  score: "score",
+  valutazione: "rating",
+  mostviewed: "most_viewed",
+  mostviews: "most_viewed",
+  most_viewed: "most_viewed",
+  views: "most_viewed",
+  favorites: "favorites",
+  favourite: "favorites",
+  favourites: "favorites",
+  preferiti: "favorites",
+};
+
+const TOP_STATUS_MAP: Record<string, string> = {
+  incorso: "In Corso",
+  ongoing: "In Corso",
+  airing: "In Corso",
+  inuscitaprossimamente: "In uscita prossimamente",
+  inuscita: "In uscita prossimamente",
+  upcoming: "In uscita prossimamente",
+  comingsoon: "In uscita prossimamente",
+};
+
 const GENRE_ID_BY_KEY: Record<string, number> = ARCHIVE_GENRES.reduce(
   (acc, genre) => {
     acc[normalizeKey(genre.name)] = genre.id;
@@ -196,6 +220,14 @@ export function normalizeArchiveSeason(
   value?: string | null
 ): string | undefined {
   return normalizeMappedValue(value, ARCHIVE_SEASON_MAP);
+}
+
+export function normalizeTopOrder(value?: string | null): string | undefined {
+  return normalizeMappedValue(value, TOP_ORDER_MAP);
+}
+
+export function normalizeTopStatus(value?: string | null): string | undefined {
+  return normalizeMappedValue(value, TOP_STATUS_MAP);
 }
 
 export function resolveArchiveGenreId(
