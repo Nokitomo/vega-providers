@@ -15,4 +15,5 @@ export const STREAM_HEADERS: Record<string, string> = {
 export const TIMEOUTS = {
   SHORT: 10000,
   LONG: 15000,
+  RELATED: 60000,
 };
