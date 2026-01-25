@@ -6,7 +6,11 @@ import {
   extractVixCloudStreams,
   normalizeUrl,
 } from "./parsers/stream";
-import { BASE_HOST, STREAM_HEADERS, TIMEOUTS } from "./config";
+import { DEFAULT_BASE_HOST, STREAM_HEADERS, TIMEOUTS } from "./config";
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
 
 export const getStream = async function ({
   link,
@@ -19,11 +23,14 @@ export const getStream = async function ({
 }): Promise<Stream[]> {
   try {
     const { axios } = providerContext;
+    const resolved =
+      (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
+    const baseHost = normalizeBaseUrl(resolved);
     const headers = {
       ...STREAM_HEADERS,
-      Referer: `${BASE_HOST}/`,
+      Referer: `${baseHost}/`,
     };
-    const embedRes = await axios.get(`${BASE_HOST}/embed-url/${link}`, {
+    const embedRes = await axios.get(`${baseHost}/embed-url/${link}`, {
       headers,
       timeout: TIMEOUTS.LONG,
       validateStatus: () => true,
@@ -45,7 +52,7 @@ export const getStream = async function ({
     const pageRes = await axios.get(embedUrl, {
       headers: {
         ...headers,
-        Referer: `${BASE_HOST}/embed-url/${link}`,
+        Referer: `${baseHost}/embed-url/${link}`,
       },
       timeout: TIMEOUTS.LONG,
     });
