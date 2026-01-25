@@ -1,4 +1,11 @@
-import { Info, Link, ProviderContext } from "../types";
+import { Info, ProviderContext } from "../types";
+import {
+  buildMetaFromInfo,
+  extractAnimeId,
+  parseAnimeFromHtml,
+  RelatedItem,
+} from "./parsers/meta";
+import { normalizeImageUrl } from "./utils";
 
 const BASE_HOST = "https://www.animeunity.so";
 const DEFAULT_HEADERS: Record<string, string> = {
@@ -6,127 +13,6 @@ const DEFAULT_HEADERS: Record<string, string> = {
   "User-Agent":
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
 };
-
-function decodeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-function normalizeImageUrl(url?: string): string {
-  if (!url) return "";
-  try {
-    const parsed = new URL(url);
-    const host = parsed.hostname.toLowerCase();
-    if (host.includes("animeworld.so") || host.includes("forbiddenlol.cloud")) {
-      const filename = parsed.pathname.split("/").pop() || "";
-      if (filename) {
-        return `https://img.animeunity.so/anime/${filename}`;
-      }
-    }
-  } catch (_) {
-    return url;
-  }
-  return url;
-}
-
-function buildAnimeLink(id?: number | string, slug?: string): string {
-  if (!id) return "";
-  if (!slug) {
-    return `${BASE_HOST}/anime/${id}`;
-  }
-  return `${BASE_HOST}/anime/${id}-${slug}`;
-}
-
-function extractAnimeId(link: string): number | null {
-  if (!link) return null;
-  const direct = parseInt(link, 10);
-  if (Number.isFinite(direct)) {
-    return direct;
-  }
-  const match = link.match(/\/anime\/(\d+)/);
-  if (match?.[1]) {
-    const parsed = parseInt(match[1], 10);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function buildEpisodeRanges(
-  totalCount: number,
-  rangeSize = 120
-): { title: string; start: number; end: number }[] {
-  if (!totalCount || totalCount <= 0) {
-    return [];
-  }
-  const ranges: { title: string; start: number; end: number }[] = [];
-  let start = 1;
-  while (start <= totalCount) {
-    const end = Math.min(start + rangeSize - 1, totalCount);
-    ranges.push({
-      title: `Episodi ${start}-${end}`,
-      start,
-      end,
-    });
-    start = end + 1;
-  }
-  return ranges;
-}
-
-function uniqueTags(tags: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  tags.forEach((tag) => {
-    const normalized = tag.trim();
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    result.push(normalized);
-  });
-  return result;
-}
-
-function pickTitle(item: any): string {
-  return item?.title_eng || item?.title || item?.title_it || "";
-}
-
-function pickYear(item: any): string | undefined {
-  const raw = item?.date ?? item?.year ?? "";
-  if (!raw) return undefined;
-  const match = String(raw).match(/(\d{4})/);
-  return match?.[1];
-}
-
-type RelatedItem = {
-  id?: number | string;
-  title: string;
-  link: string;
-  image?: string;
-  type?: string;
-  year?: string;
-};
-
-function mapRelatedBase(items: any[]): RelatedItem[] {
-  if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => {
-      const title = pickTitle(item);
-      const id = item?.id;
-      const slug = item?.slug;
-      if (!title || !id) return null;
-      return {
-        id,
-        title,
-        link: buildAnimeLink(id, slug),
-        image: normalizeImageUrl(item?.imageurl),
-        type: item?.type || item?.relation || item?.rel,
-        year: pickYear(item),
-      };
-    })
-    .filter(Boolean) as RelatedItem[];
-}
 
 async function resolveRelatedImages(
   items: RelatedItem[],
@@ -164,24 +50,6 @@ async function resolveRelatedImages(
   }));
 }
 
-function parseAnimeFromHtml(html: string, cheerio: ProviderContext["cheerio"]) {
-  const $ = cheerio.load(html);
-  let raw =
-    $("video-player").attr("anime") ||
-    $("[anime]").first().attr("anime") ||
-    "";
-  if (!raw) {
-    const match = html.match(/anime="([^"]+)"/);
-    raw = match?.[1] || "";
-  }
-  if (!raw) return null;
-  try {
-    return JSON.parse(decodeHtmlAttribute(raw));
-  } catch (_) {
-    return null;
-  }
-}
-
 export const getMeta = async function ({
   link,
   providerContext,
@@ -201,11 +69,8 @@ export const getMeta = async function ({
       timeout: 15000,
     });
     const info = infoRes.data || {};
-    const title =
-      info?.title_eng || info?.title || info?.title_it || "Unknown";
-    const synopsis = (info?.plot || "").toString();
-    const poster = normalizeImageUrl(info?.imageurl || info?.cover);
-    let background = normalizeImageUrl(info?.imageurl_cover || info?.cover);
+    const metaPayload = buildMetaFromInfo(info, BASE_HOST, animeId);
+    let background = metaPayload.background;
 
     if (!background) {
       try {
@@ -221,52 +86,20 @@ export const getMeta = async function ({
         // ignore fallback errors
       }
     }
-
-    const tags = uniqueTags(
-      [
-        info?.type,
-        info?.status,
-        info?.season,
-        info?.date ? String(info.date) : "",
-        ...(info?.genres?.map((genre: any) => genre?.name) || []),
-      ].filter(Boolean)
-    );
-
-    const isMovie =
-      typeof info?.type === "string" &&
-      info.type.toLowerCase().includes("movie");
-
-    const ranges = buildEpisodeRanges(info?.episodes_count || 0);
-    const linkList: Link[] = ranges.length
-      ? ranges.map((range) => ({
-          title: range.title,
-          episodesLink: `${animeId}|${range.start}|${range.end}`,
-        }))
-      : [
-          {
-            title,
-            episodesLink: String(animeId),
-          },
-        ];
-
-    const relatedBase = mapRelatedBase(info?.related || []);
-    const related = await resolveRelatedImages(relatedBase, axios);
+    const related = await resolveRelatedImages(metaPayload.relatedBase, axios);
 
     return {
-      title,
-      synopsis,
-      image: background || poster,
-      poster,
+      title: metaPayload.title,
+      synopsis: metaPayload.synopsis,
+      image: background || metaPayload.poster,
+      poster: metaPayload.poster,
       imdbId: "",
-      type: isMovie ? "movie" : "series",
-      tags,
-      studio: info?.studio || "",
-      episodesCount:
-        typeof info?.episodes_count === "number"
-          ? info.episodes_count
-          : parseInt(info?.episodes_count, 10) || undefined,
+      type: metaPayload.isMovie ? "movie" : "series",
+      tags: metaPayload.tags,
+      studio: metaPayload.studio || "",
+      episodesCount: metaPayload.episodesCount,
       related,
-      linkList,
+      linkList: metaPayload.linkList,
     };
   } catch (err) {
     console.error("animeunity meta error", err);
