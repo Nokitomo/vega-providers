@@ -20,6 +20,8 @@ type AnimeunitySession = {
   session?: string;
 };
 
+let hasLoggedBaseUrl = false;
+
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -27,6 +29,16 @@ function normalizeBaseUrl(value: string): string {
 async function resolveBaseUrls(
   providerContext: ProviderContext
 ): Promise<{ baseHost: string; baseHostNoWww: string }> {
+  if (!hasLoggedBaseUrl) {
+    const resolvedLog = await providerContext.getBaseUrl("animeunity");
+    const logValue = normalizeBaseUrl(resolvedLog || DEFAULT_BASE_HOST);
+    if (resolvedLog) {
+      console.log("[animeunity] baseUrl pastebin", logValue);
+    } else {
+      console.log("[animeunity] baseUrl fallback", DEFAULT_BASE_HOST);
+    }
+    hasLoggedBaseUrl = true;
+  }
   const resolved =
     (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
   const baseHost = normalizeBaseUrl(resolved);
