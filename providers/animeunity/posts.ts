@@ -6,14 +6,12 @@ import {
   parseTopPostsFromHtml,
   toPost,
 } from "./parsers/posts";
-
-const BASE_HOST = "https://www.animeunity.so";
-const BASE_HOST_NO_WWW = "https://animeunity.so";
-const DEFAULT_HEADERS: Record<string, string> = {
-  Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-};
+import {
+  BASE_HOST,
+  BASE_HOST_NO_WWW,
+  DEFAULT_HEADERS,
+  TIMEOUTS,
+} from "./config";
 
 const PAGE_SIZE = 30;
 
@@ -38,7 +36,7 @@ async function getSession(
   try {
     const response = await axios.get(`${BASE_HOST}/`, {
       headers: DEFAULT_HEADERS,
-      timeout: 10000,
+      timeout: TIMEOUTS.SHORT,
     });
     const csrfToken =
       typeof response.data === "string" ? extractCsrfToken(response.data) : "";
@@ -94,7 +92,7 @@ async function fetchLatest({
   const url = `${BASE_HOST_NO_WWW}/${suffix}`;
   const res = await axios.get(url, {
     headers: DEFAULT_HEADERS,
-    timeout: 10000,
+    timeout: TIMEOUTS.SHORT,
   });
   return parseLatestPostsFromHtml(res.data, cheerio, BASE_HOST);
 }
@@ -117,7 +115,10 @@ async function fetchTop({
     query.push(`page=${page}`);
   }
   const url = `${BASE_HOST}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
-  const res = await axios.get(url, { headers: DEFAULT_HEADERS, timeout: 10000 });
+  const res = await axios.get(url, {
+    headers: DEFAULT_HEADERS,
+    timeout: TIMEOUTS.SHORT,
+  });
   return parseTopPostsFromHtml(res.data, cheerio, BASE_HOST);
 }
 
@@ -139,7 +140,7 @@ async function fetchCalendar({
   const { axios, cheerio } = providerContext;
   const res = await axios.get(`${BASE_HOST}/calendario`, {
     headers: DEFAULT_HEADERS,
-    timeout: 10000,
+    timeout: TIMEOUTS.SHORT,
   });
   return parseCalendarPostsFromHtml(res.data, cheerio, BASE_HOST);
 }
@@ -171,7 +172,7 @@ async function fetchArchive({
       ...headers,
       "Content-Type": "application/json",
     },
-    timeout: 15000,
+    timeout: TIMEOUTS.LONG,
     withCredentials: true,
   });
   const records = res.data?.records || [];
@@ -244,7 +245,7 @@ export const getSearchPosts = async function ({
           ...headers,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        timeout: 10000,
+        timeout: TIMEOUTS.SHORT,
         withCredentials: true,
       }
     );
@@ -278,7 +279,7 @@ export const getSearchPosts = async function ({
         ...headers,
         "Content-Type": "application/json",
       },
-      timeout: 15000,
+      timeout: TIMEOUTS.LONG,
       withCredentials: true,
     });
     const records = res.data?.records || [];
