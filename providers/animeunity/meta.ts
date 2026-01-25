@@ -6,13 +6,7 @@ import {
   RelatedItem,
 } from "./parsers/meta";
 import { normalizeImageUrl } from "./utils";
-
-const BASE_HOST = "https://www.animeunity.so";
-const DEFAULT_HEADERS: Record<string, string> = {
-  Accept: "application/json",
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-};
+import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 
 async function resolveRelatedImages(
   items: RelatedItem[],
@@ -25,7 +19,7 @@ async function resolveRelatedImages(
       try {
         const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
           headers: DEFAULT_HEADERS,
-          timeout: 15000,
+          timeout: TIMEOUTS.LONG,
         });
         const detail = detailRes.data || {};
         const image = normalizeImageUrl(
@@ -66,14 +60,14 @@ export const getMeta = async function ({
 
     const infoRes = await axios.get(`${BASE_HOST}/info_api/${animeId}/`, {
       headers: DEFAULT_HEADERS,
-      timeout: 15000,
+      timeout: TIMEOUTS.LONG,
     });
     const info = infoRes.data || {};
     let animeFromHtml: any = null;
     try {
       const htmlRes = await axios.get(
         `${BASE_HOST}/anime/${animeId}-${info?.slug || ""}`,
-        { headers: DEFAULT_HEADERS, timeout: 15000 }
+        { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
       );
       animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
     } catch (_) {
