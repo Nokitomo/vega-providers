@@ -236,29 +236,31 @@ export const getSearchPosts = async function ({
   const posts: Post[] = [];
   const seen = new Set<string>();
 
-  try {
-    const liveRes = await axios.post(
-      `${BASE_HOST}/livesearch`,
-      `title=${encodeURIComponent(normalized)}`,
-      {
-        headers: {
-          ...headers,
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        timeout: TIMEOUTS.SHORT,
-        withCredentials: true,
-      }
-    );
-    const records = liveRes.data?.records || [];
-    records.forEach((item: any) => {
-      const post = toPost(item, BASE_HOST);
-      if (post && !seen.has(post.link)) {
-        posts.push(post);
-        seen.add(post.link);
-      }
-    });
-  } catch (_) {
-    // ignore and try archive search
+  if (page <= 1) {
+    try {
+      const liveRes = await axios.post(
+        `${BASE_HOST}/livesearch`,
+        `title=${encodeURIComponent(normalized)}`,
+        {
+          headers: {
+            ...headers,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          timeout: TIMEOUTS.SHORT,
+          withCredentials: true,
+        }
+      );
+      const records = liveRes.data?.records || [];
+      records.forEach((item: any) => {
+        const post = toPost(item, BASE_HOST);
+        if (post && !seen.has(post.link)) {
+          posts.push(post);
+          seen.add(post.link);
+        }
+      });
+    } catch (_) {
+      // ignore and try archive search
+    }
   }
 
   try {
