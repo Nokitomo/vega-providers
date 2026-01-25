@@ -223,25 +223,10 @@ export function parseTopPostsFromHtml(
   cheerio: ProviderContext["cheerio"],
   baseHost: string
 ): Post[] {
-  const rawFromHtml =
-    html.match(/<top-anime[^>]*animes="([\s\S]*?)"\s*><\/top-anime>/i)?.[1] ||
-    "";
   const $ = cheerio.load(html);
-  const raw = rawFromHtml || $("top-anime").attr("animes") || "";
+  const raw = $("top-anime").attr("animes") || "";
   if (!raw) return [];
-  let data: any | null = null;
-  let candidate = raw;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      data = JSON.parse(candidate);
-      break;
-    } catch (_) {
-      candidate = decodeHtmlAttribute(candidate);
-    }
-  }
-  if (!data) {
-    return [];
-  }
+  const data = JSON.parse(raw);
   const items = data?.data || [];
   const posts: Post[] = [];
   items.forEach((item: any) => {

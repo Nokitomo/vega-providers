@@ -292,10 +292,6 @@ async function fetchTop({
     headers: DEFAULT_HEADERS,
     timeout: TIMEOUTS.SHORT,
   });
-  if (res.data && typeof res.data === "object") {
-    const items = (res.data as any).data || (res.data as any).records || [];
-    return parseArchiveRecords(items, baseHost);
-  }
   return parseTopPostsFromHtml(res.data, cheerio, baseHost);
 }
 
@@ -338,12 +334,11 @@ async function fetchArchive({
   const headers = buildSessionHeaders(session, baseHost);
   const offset = Math.max(0, (page - 1) * PAGE_SIZE);
   const normalizedTitle = filters?.title?.trim();
-  const order = filters?.order || "Lista A-Z";
   const payload = {
     title: normalizedTitle ? normalizedTitle : false,
     type: filters?.type || false,
     year: filters?.year ?? false,
-    order,
+    order: filters?.order || false,
     status: filters?.status || false,
     genres: filters?.genres && filters.genres.length > 0 ? filters.genres : false,
     offset,
@@ -397,10 +392,7 @@ export const getPosts = async function ({
         return await fetchArchive({
           page,
           providerContext,
-          filters:
-            parsed.params.toString().length > 0
-              ? buildArchiveFilters(parsed.params)
-              : undefined,
+          filters: parsed.params.size > 0 ? buildArchiveFilters(parsed.params) : undefined,
         });
       default:
         return await fetchLatest({ page, providerContext });
