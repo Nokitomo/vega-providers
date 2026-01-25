@@ -408,8 +408,23 @@ async function fetchTop({
     query.push(`page=${page}`);
   }
 
-  const fetchFromHost = async (host: string): Promise<Post[]> => {
-    const url = `${host}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
+  const candidates: Array<{ url: string; host: string }> = [];
+  const addCandidate = (host: string, trailingSlash: boolean) => {
+    const suffix = trailingSlash ? "/top-anime/" : "/top-anime";
+    const url = `${host}${suffix}${query.length ? `?${query.join("&")}` : ""}`;
+    if (!candidates.find((item) => item.url === url)) {
+      candidates.push({ url, host });
+    }
+  };
+
+  addCandidate(baseHost, false);
+  addCandidate(baseHost, true);
+  if (baseHostNoWww !== baseHost) {
+    addCandidate(baseHostNoWww, false);
+    addCandidate(baseHostNoWww, true);
+  }
+
+  const fetchFromUrl = async (url: string, host: string): Promise<Post[]> => {
     const res = await axios.get(url, {
       headers: HTML_HEADERS,
       timeout: TIMEOUTS.SHORT,
@@ -434,11 +449,34 @@ async function fetchTop({
     return parseTopPostsFromHtml(res.data, cheerio, host);
   };
 
-  let posts = await fetchFromHost(baseHost);
-  if (posts.length === 0 && baseHostNoWww !== baseHost) {
-    posts = await fetchFromHost(baseHostNoWww);
+  let lastError: any = null;
+  for (const candidate of candidates) {
+    try {
+      const posts = await fetchFromUrl(candidate.url, candidate.host);
+      if (posts.length > 0) {
+        return posts;
+      }
+    } catch (err: any) {
+      lastError = err;
+      if (page === 1) {
+        console.log("[animeunity][top] request error", {
+          url: candidate.url,
+          status: err?.response?.status,
+          statusText: err?.response?.statusText,
+          dataSample:
+            typeof err?.response?.data === "string"
+              ? err.response.data.slice(0, 200)
+              : undefined,
+        });
+      }
+    }
   }
-  return posts;
+
+  if (page === 1 && lastError) {
+    console.log("[animeunity][top] exhausted candidates");
+  }
+
+  return [];
 }
 
 async function fetchPopular({
