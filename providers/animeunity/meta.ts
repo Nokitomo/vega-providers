@@ -6,18 +6,23 @@ import {
   RelatedItem,
 } from "./parsers/meta";
 import { normalizeImageUrl } from "./utils";
-import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
+import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
 
 async function resolveRelatedImages(
   items: RelatedItem[],
-  axios: ProviderContext["axios"]
+  axios: ProviderContext["axios"],
+  baseHost: string
 ): Promise<Info["related"]> {
   const resolved = await Promise.all(
     items.map(async (item) => {
       if (item.image) return item;
       if (!item.id) return item;
       try {
-        const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
+        const detailRes = await axios.get(`${baseHost}/info_api/${item.id}/`, {
           headers: DEFAULT_HEADERS,
           timeout: TIMEOUTS.RELATED,
         });
@@ -53,12 +58,15 @@ export const getMeta = async function ({
 }): Promise<Info> {
   try {
     const { axios, cheerio } = providerContext;
+    const resolved =
+      (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
+    const baseHost = normalizeBaseUrl(resolved);
     const animeId = extractAnimeId(link);
     if (!animeId) {
       throw new Error("Invalid anime id");
     }
 
-    const infoRes = await axios.get(`${BASE_HOST}/info_api/${animeId}/`, {
+    const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
       headers: DEFAULT_HEADERS,
       timeout: TIMEOUTS.LONG,
     });
@@ -66,7 +74,7 @@ export const getMeta = async function ({
     let animeFromHtml: any = null;
     try {
       const htmlRes = await axios.get(
-        `${BASE_HOST}/anime/${animeId}-${info?.slug || ""}`,
+        `${baseHost}/anime/${animeId}-${info?.slug || ""}`,
         { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
       );
       animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
@@ -75,12 +83,16 @@ export const getMeta = async function ({
     }
     const metaPayload = buildMetaFromInfo(
       info,
-      BASE_HOST,
+      baseHost,
       animeId,
       animeFromHtml
     );
     const background = metaPayload.background;
-    const related = await resolveRelatedImages(metaPayload.relatedBase, axios);
+    const related = await resolveRelatedImages(
+      metaPayload.relatedBase,
+      axios,
+      baseHost
+    );
 
     return {
       title: metaPayload.title,
