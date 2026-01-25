@@ -108,27 +108,16 @@ async function fetchTop({
   providerContext: ProviderContext;
   popular: boolean;
 }): Promise<Post[]> {
-  const { axios, cheerio, debugLog } = providerContext;
-  debugLog?.("[animeunity][top] provider fetchTop start", {
-    page,
-    popular,
-  });
-  const params = new URLSearchParams();
+  const { axios, cheerio } = providerContext;
+  const query: string[] = [];
   if (popular) {
-    params.set("popular", "true");
+    query.push("popular=true");
   }
   if (page > 1) {
-    params.set("page", String(page));
+    query.push(`page=${page}`);
   }
-  const url = `${BASE_HOST}/top-anime${
-    params.toString() ? `?${params.toString()}` : ""
-  }`;
-  debugLog?.("[animeunity][top] provider fetchTop url", { url });
+  const url = `${BASE_HOST}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
   const res = await axios.get(url, { headers: DEFAULT_HEADERS, timeout: 10000 });
-  debugLog?.("[animeunity][top] provider fetchTop response", {
-    status: res.status,
-    size: typeof res.data === "string" ? res.data.length : undefined,
-  });
   return parseTopPostsFromHtml(res.data, cheerio, BASE_HOST);
 }
 
@@ -203,12 +192,6 @@ export const getPosts = async function ({
 }): Promise<Post[]> {
   try {
     if (signal?.aborted) return [];
-    if (filter === "top") {
-      providerContext.debugLog?.("[animeunity][top] provider getPosts", {
-        page,
-        signalAborted: signal?.aborted ?? false,
-      });
-    }
     switch (filter) {
       case "latest":
         return await fetchLatest({ page, providerContext });
@@ -224,12 +207,6 @@ export const getPosts = async function ({
         return await fetchLatest({ page, providerContext });
     }
   } catch (err) {
-    if (filter === "top") {
-      providerContext.debugLog?.("[animeunity][top] provider error", {
-        page,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
     console.error("animeunity posts error", err);
     return [];
   }
