@@ -46,8 +46,40 @@ export interface Info {
   tags?: string[];
   cast?: string[];
   rating?: string;
+  genres?: string[];
   studio?: string;
   episodesCount?: number;
+  extra?: {
+    ids?: {
+      malId?: number;
+      anilistId?: number;
+      crunchyId?: number | string;
+      disneyId?: number | string;
+      netflixId?: number | string;
+      primeId?: number | string;
+    };
+    stats?: {
+      scoreRaw?: string;
+      favorites?: number;
+      members?: number;
+      views?: number;
+      episodesCountRaw?: number | string;
+      episodesLength?: number | string;
+    };
+    flags?: {
+      dub?: number | boolean;
+      alwaysHome?: boolean;
+    };
+    meta?: {
+      day?: string;
+      season?: string;
+      status?: string;
+      type?: string;
+      createdAt?: string;
+      author?: string;
+      userId?: number | string;
+    };
+  };
   related?: {
     title: string;
     link: string;
