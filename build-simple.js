@@ -259,6 +259,7 @@ class ProviderBuilder {
           esbuild.buildSync({
             entryPoints: [srcFile],
             outfile: srcFile,
+            allowOverwrite: true,
             bundle: true,
             platform: "browser",
             format: "cjs",
