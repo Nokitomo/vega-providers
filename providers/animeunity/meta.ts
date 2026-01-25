@@ -19,7 +19,7 @@ async function resolveRelatedImages(
       try {
         const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
           headers: DEFAULT_HEADERS,
-          timeout: TIMEOUTS.LONG,
+          timeout: TIMEOUTS.RELATED,
         });
         const detail = detailRes.data || {};
         const image = normalizeImageUrl(
