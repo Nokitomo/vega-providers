@@ -7,15 +7,15 @@ export type PastebinProviderConfig = {
 
 export const PASTEBIN_PROVIDERS: Record<string, PastebinProviderConfig> = {
   animeunity: {
-    match: /(?:^|\\.)animeunity\\./i,
+    match: /(?:^|\.)animeunity\./i,
     fallback: "https://www.animeunity.so",
   },
   streamingunity: {
-    match: /(?:^|\\.)streamingunity\\./i,
+    match: /(?:^|\.)streamingunity\./i,
     fallback: "https://streamingunity.tv",
   },
   guardaserietv: {
-    match: /(?:^|\\.)guardaserietv\\./i,
+    match: /(?:^|\.)guardaserietv\./i,
     fallback: "https://guardaserietv.biz",
   },
 };
