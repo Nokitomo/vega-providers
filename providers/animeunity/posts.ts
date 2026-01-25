@@ -40,6 +40,12 @@ type ArchiveFilters = {
   season?: string;
 };
 
+type QueryParams = {
+  get: (key: string) => string | null;
+  has: (key: string) => boolean;
+  size: number;
+};
+
 const HTML_HEADERS: Record<string, string> = {
   ...DEFAULT_HEADERS,
   Accept: "text/html,application/xhtml+xml",
@@ -56,12 +62,60 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function decodeQueryValue(value: string): string {
+  const sanitized = value.replace(/\+/g, " ");
+  try {
+    return decodeURIComponent(sanitized);
+  } catch (_) {
+    return sanitized;
+  }
+}
+
+function parseQueryParams(rawQuery?: string): QueryParams {
+  if (!rawQuery) {
+    return {
+      get: () => null,
+      has: () => false,
+      size: 0,
+    };
+  }
+
+  const map = new Map<string, string[]>();
+  rawQuery
+    .split("&")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const eqIndex = part.indexOf("=");
+      const rawKey = eqIndex >= 0 ? part.slice(0, eqIndex) : part;
+      const rawValue = eqIndex >= 0 ? part.slice(eqIndex + 1) : "";
+      const key = decodeQueryValue(rawKey);
+      if (!key) return;
+      const value = decodeQueryValue(rawValue);
+      const existing = map.get(key) || [];
+      existing.push(value);
+      map.set(key, existing);
+    });
+
+  return {
+    get: (key: string) => {
+      const values = map.get(key);
+      return values && values.length > 0 ? values[0] : null;
+    },
+    has: (key: string) => map.has(key),
+    size: map.size,
+  };
+}
+
 function parseFilterParams(filter: string): {
   key: string;
-  params: URLSearchParams;
+  params: QueryParams;
 } {
-  const [key, rawQuery] = filter.split("?");
-  const params = new URLSearchParams(rawQuery || "");
+  const queryIndex = filter.indexOf("?");
+  const key = queryIndex >= 0 ? filter.slice(0, queryIndex) : filter;
+  const rawQuery =
+    queryIndex >= 0 ? filter.slice(queryIndex + 1) : "";
+  const params = parseQueryParams(rawQuery);
   return {
     key: key || filter,
     params,
@@ -172,7 +226,7 @@ function parseGenresParam(
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function buildArchiveFilters(params: URLSearchParams): ArchiveFilters {
+function buildArchiveFilters(params: QueryParams): ArchiveFilters {
   return {
     title: normalizeParamValue(params.get("title")),
     type: normalizeArchiveType(params.get("type")),
