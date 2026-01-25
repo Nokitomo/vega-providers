@@ -20,10 +20,131 @@ type AnimeunitySession = {
   session?: string;
 };
 
+type ArchiveFilters = {
+  title?: string;
+  type?: string;
+  year?: number;
+  order?: string;
+  status?: string;
+  genres?: Array<Record<string, any>>;
+  dubbed?: boolean;
+  season?: string;
+};
+
 let hasLoggedBaseUrl = false;
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function parseFilterParams(filter: string): {
+  key: string;
+  params: URLSearchParams;
+} {
+  const [key, rawQuery] = filter.split("?");
+  const params = new URLSearchParams(rawQuery || "");
+  return {
+    key: key || filter,
+    params,
+  };
+}
+
+function normalizeParamValue(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseBooleanParam(value: string | null): boolean | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0" || normalized === "no") {
+    return false;
+  }
+  return undefined;
+}
+
+function parseNumberParam(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeGenreEntry(item: any): Record<string, any> | undefined {
+  if (item == null) return undefined;
+  if (typeof item === "number" && Number.isFinite(item)) {
+    return { id: item };
+  }
+  if (typeof item === "string") {
+    const parsed = Number.parseInt(item.trim(), 10);
+    if (Number.isFinite(parsed)) {
+      return { id: parsed };
+    }
+    return undefined;
+  }
+  if (typeof item === "object") {
+    if ("id" in item) {
+      return item as Record<string, any>;
+    }
+    if ("name" in item && typeof item.name === "string") {
+      return { name: item.name };
+    }
+  }
+  return undefined;
+}
+
+function parseGenresParam(
+  value: string | null
+): Array<Record<string, any>> | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch (_) {
+    decoded = trimmed;
+  }
+  if (decoded.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(decoded);
+      if (Array.isArray(parsed)) {
+        const normalized = parsed
+          .map(normalizeGenreEntry)
+          .filter(Boolean) as Array<Record<string, any>>;
+        return normalized.length > 0 ? normalized : undefined;
+      }
+    } catch (_) {
+      // fall back to comma parsing
+    }
+  }
+  const parts = decoded
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return undefined;
+  const normalized = parts
+    .map(normalizeGenreEntry)
+    .filter(Boolean) as Array<Record<string, any>>;
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function buildArchiveFilters(params: URLSearchParams): ArchiveFilters {
+  return {
+    title: normalizeParamValue(params.get("title")),
+    type: normalizeParamValue(params.get("type")),
+    year: parseNumberParam(params.get("year")),
+    order: normalizeParamValue(params.get("order")),
+    status: normalizeParamValue(params.get("status")),
+    genres: parseGenresParam(params.get("genres")),
+    dubbed: parseBooleanParam(params.get("dubbed")),
+    season: normalizeParamValue(params.get("season")),
+  };
 }
 
 async function resolveBaseUrls(
@@ -137,16 +258,31 @@ async function fetchTop({
   page,
   providerContext,
   popular,
+  status,
+  type,
+  order,
 }: {
   page: number;
   providerContext: ProviderContext;
-  popular: boolean;
+  popular?: boolean;
+  status?: string;
+  type?: string;
+  order?: string;
 }): Promise<Post[]> {
   const { axios, cheerio } = providerContext;
   const { baseHost } = await resolveBaseUrls(providerContext);
   const query: string[] = [];
   if (popular) {
     query.push("popular=true");
+  }
+  if (status) {
+    query.push(`status=${encodeURIComponent(status)}`);
+  }
+  if (type) {
+    query.push(`type=${encodeURIComponent(type)}`);
+  }
+  if (order) {
+    query.push(`order=${encodeURIComponent(order)}`);
   }
   if (page > 1) {
     query.push(`page=${page}`);
@@ -186,25 +322,28 @@ async function fetchCalendar({
 async function fetchArchive({
   page,
   providerContext,
+  filters,
 }: {
   page: number;
   providerContext: ProviderContext;
+  filters?: ArchiveFilters;
 }): Promise<Post[]> {
   const { axios } = providerContext;
   const { baseHost } = await resolveBaseUrls(providerContext);
   const session = await getSession(axios, baseHost);
   const headers = buildSessionHeaders(session, baseHost);
   const offset = Math.max(0, (page - 1) * PAGE_SIZE);
+  const normalizedTitle = filters?.title?.trim();
   const payload = {
-    title: false,
-    type: false,
-    year: false,
-    order: false,
-    status: false,
-    genres: false,
+    title: normalizedTitle ? normalizedTitle : false,
+    type: filters?.type || false,
+    year: filters?.year ?? false,
+    order: filters?.order || false,
+    status: filters?.status || false,
+    genres: filters?.genres && filters.genres.length > 0 ? filters.genres : false,
     offset,
-    dubbed: false,
-    season: false,
+    dubbed: filters?.dubbed ?? false,
+    season: filters?.season || false,
   };
   const res = await axios.post(`${baseHost}/archivio/get-animes`, payload, {
     headers: {
@@ -232,17 +371,29 @@ export const getPosts = async function ({
 }): Promise<Post[]> {
   try {
     if (signal?.aborted) return [];
-    switch (filter) {
+    const parsed = parseFilterParams(filter);
+    switch (parsed.key) {
       case "latest":
         return await fetchLatest({ page, providerContext });
       case "top":
-        return await fetchTop({ page, providerContext, popular: false });
+        return await fetchTop({
+          page,
+          providerContext,
+          popular: parseBooleanParam(parsed.params.get("popular")) || false,
+          status: normalizeParamValue(parsed.params.get("status")),
+          type: normalizeParamValue(parsed.params.get("type")),
+          order: normalizeParamValue(parsed.params.get("order")),
+        });
       case "popular":
         return await fetchPopular({ page, providerContext });
       case "calendar":
         return await fetchCalendar({ providerContext });
       case "archive":
-        return await fetchArchive({ page, providerContext });
+        return await fetchArchive({
+          page,
+          providerContext,
+          filters: parsed.params.size > 0 ? buildArchiveFilters(parsed.params) : undefined,
+        });
       default:
         return await fetchLatest({ page, providerContext });
     }
@@ -279,11 +430,11 @@ export const getSearchPosts = async function ({
   if (page <= 1) {
     try {
       const liveRes = await axios.post(
-      `${baseHost}/livesearch`,
-      `title=${encodeURIComponent(normalized)}`,
-      {
-        headers: {
-          ...headers,
+        `${baseHost}/livesearch`,
+        `title=${encodeURIComponent(normalized)}`,
+        {
+          headers: {
+            ...headers,
             "Content-Type": "application/x-www-form-urlencoded",
           },
           timeout: TIMEOUTS.SHORT,
@@ -292,11 +443,11 @@ export const getSearchPosts = async function ({
       );
       const records = liveRes.data?.records || [];
       records.forEach((item: any) => {
-      const post = toPost(item, baseHost);
-      if (post && !seen.has(post.link)) {
-        posts.push(post);
-        seen.add(post.link);
-      }
+        const post = toPost(item, baseHost);
+        if (post && !seen.has(post.link)) {
+          posts.push(post);
+          seen.add(post.link);
+        }
       });
     } catch (_) {
       // ignore and try archive search

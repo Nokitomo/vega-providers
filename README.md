@@ -33,10 +33,15 @@ are supported without relying on runtime `require()` in the app.
   - The `title` property will be shown as the heading on the home page (e.g., "Popular Movies").
   - The `filter` property is passed to the `getPosts` function in `posts.ts`.
   - For example, if you define `{ title: "Popular Movies", filter: "/category/popular-movies" }`, then home-page heading will show "Popular Movies" and `/category/popular-movies` will be sent to `getPosts` as the `filter` argument. Your `getPosts` implementation should use this to fetch and return the relevant items (e.g., popular movies).
-  - The same logic applies to `genres`: each genre object has a `title` (displayed as a heading) and a `filter` (used to fetch genre-specific items).
+- The same logic applies to `genres`: each genre object has a `title` (displayed as a heading) and a `filter` (used to fetch genre-specific items).
 - **Exports:**
   - `catalog`: An array of objects with `title` and `filter` fields.
   - `genres`: (optional) An array for genre filters.
+- **AnimeUnity advanced filters:**
+  - The `filter` string can include query params for AnimeUnity to drive `top-anime` and `archivio` filters.
+  - Examples:
+    - `top?status=In%20Corso&order=most_viewed`
+    - `archive?type=TV&order=Valutazione`
 
 ### 2. `meta.ts`
 
