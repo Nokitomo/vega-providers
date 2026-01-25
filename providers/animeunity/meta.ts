@@ -8,13 +8,23 @@ import {
 import { normalizeImageUrl } from "./utils";
 import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 
+function isHostedOnAnimeUnity(url?: string): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.endsWith("animeunity.so") || host.endsWith("img.animeunity.so");
+  } catch (_) {
+    return false;
+  }
+}
+
 async function resolveRelatedImages(
   items: RelatedItem[],
   axios: ProviderContext["axios"]
 ): Promise<Info["related"]> {
   const resolved = await Promise.all(
     items.map(async (item) => {
-      if (item.image) return item;
+      if (item.image && isHostedOnAnimeUnity(item.image)) return item;
       if (!item.id) return item;
       try {
         const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
