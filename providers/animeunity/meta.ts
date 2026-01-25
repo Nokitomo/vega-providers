@@ -8,36 +8,13 @@ import {
 import { normalizeImageUrl } from "./utils";
 import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 
-function isHostedOnAnimeUnity(url?: string): boolean {
-  if (!url) return false;
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host.endsWith("animeunity.so") || host.endsWith("img.animeunity.so");
-  } catch (_) {
-    return false;
-  }
-}
-
-function pickRelatedImage(item: RelatedItem): string | undefined {
-  if (item.image && isHostedOnAnimeUnity(item.image)) {
-    return item.image;
-  }
-  if (item.cover && isHostedOnAnimeUnity(item.cover)) {
-    return item.cover;
-  }
-  return item.image || item.cover;
-}
-
 async function resolveRelatedImages(
   items: RelatedItem[],
   axios: ProviderContext["axios"]
 ): Promise<Info["related"]> {
   const resolved = await Promise.all(
     items.map(async (item) => {
-      const preferredImage = pickRelatedImage(item);
-      if (preferredImage && isHostedOnAnimeUnity(preferredImage)) {
-        return { ...item, image: preferredImage };
-      }
+      if (item.image) return item;
       if (!item.id) return item;
       try {
         const detailRes = await axios.get(`${BASE_HOST}/info_api/${item.id}/`, {
@@ -50,10 +27,10 @@ async function resolveRelatedImages(
         );
         return {
           ...item,
-          image: image || preferredImage || item.image,
+          image: image || item.image,
         };
       } catch (_) {
-        return { ...item, image: preferredImage || item.image };
+        return item;
       }
     })
   );
