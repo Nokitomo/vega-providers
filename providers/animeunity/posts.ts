@@ -292,6 +292,10 @@ async function fetchTop({
     headers: DEFAULT_HEADERS,
     timeout: TIMEOUTS.SHORT,
   });
+  if (res.data && typeof res.data === "object") {
+    const items = (res.data as any).data || (res.data as any).records || [];
+    return parseArchiveRecords(items, baseHost);
+  }
   return parseTopPostsFromHtml(res.data, cheerio, baseHost);
 }
 
@@ -393,7 +397,10 @@ export const getPosts = async function ({
         return await fetchArchive({
           page,
           providerContext,
-          filters: parsed.params.size > 0 ? buildArchiveFilters(parsed.params) : undefined,
+          filters:
+            parsed.params.toString().length > 0
+              ? buildArchiveFilters(parsed.params)
+              : undefined,
         });
       default:
         return await fetchLatest({ page, providerContext });
