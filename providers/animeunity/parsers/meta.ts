@@ -239,7 +239,11 @@ export function buildMetaFromInfo(
         },
       ];
 
-  const relatedBase = mapRelatedBase(info?.related || [], baseHost);
+  const relatedSource =
+    Array.isArray(htmlAnime?.related) && htmlAnime.related.length > 0
+      ? htmlAnime.related
+      : info?.related || [];
+  const relatedBase = mapRelatedBase(relatedSource, baseHost);
   return {
     title,
     synopsis,
