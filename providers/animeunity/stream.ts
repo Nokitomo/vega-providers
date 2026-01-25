@@ -6,12 +6,7 @@ import {
   extractVixCloudStreams,
   normalizeUrl,
 } from "./parsers/stream";
-
-const BASE_HOST = "https://www.animeunity.so";
-const DEFAULT_HEADERS: Record<string, string> = {
-  "User-Agent":
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-};
+import { BASE_HOST, STREAM_HEADERS, TIMEOUTS } from "./config";
 
 export const getStream = async function ({
   link,
@@ -25,12 +20,12 @@ export const getStream = async function ({
   try {
     const { axios } = providerContext;
     const headers = {
-      ...DEFAULT_HEADERS,
+      ...STREAM_HEADERS,
       Referer: `${BASE_HOST}/`,
     };
     const embedRes = await axios.get(`${BASE_HOST}/embed-url/${link}`, {
       headers,
-      timeout: 15000,
+      timeout: TIMEOUTS.LONG,
       validateStatus: () => true,
       maxRedirects: 0,
     });
@@ -52,7 +47,7 @@ export const getStream = async function ({
         ...headers,
         Referer: `${BASE_HOST}/embed-url/${link}`,
       },
-      timeout: 15000,
+      timeout: TIMEOUTS.LONG,
     });
 
     const pageHtml = typeof pageRes.data === "string" ? pageRes.data : "";
@@ -60,7 +55,7 @@ export const getStream = async function ({
       const streams = extractVixCloudStreams(
         pageHtml,
         embedUrl,
-        DEFAULT_HEADERS["User-Agent"]
+        STREAM_HEADERS["User-Agent"]
       );
       const downloadUrl = extractDownloadUrl(pageHtml);
       if (downloadUrl) {
@@ -69,7 +64,7 @@ export const getStream = async function ({
           : "mp4";
         const streamHeaders = buildStreamHeaders(
           embedUrl,
-          DEFAULT_HEADERS["User-Agent"]
+          STREAM_HEADERS["User-Agent"]
         );
         const downloadStream: Stream = {
           server: "AnimeUnity Download",
@@ -98,7 +93,7 @@ export const getStream = async function ({
     const type = url.toLowerCase().includes(".m3u8") ? "m3u8" : "mp4";
     const streamHeaders = buildStreamHeaders(
       embedUrl,
-      DEFAULT_HEADERS["User-Agent"]
+      STREAM_HEADERS["User-Agent"]
     );
     return [
       {
