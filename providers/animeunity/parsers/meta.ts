@@ -48,6 +48,55 @@ function uniqueTags(tags: string[]): string[] {
   return result;
 }
 
+function normalizeGenreName(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (typeof value === "object") {
+    const name = (value as { name?: string }).name;
+    if (typeof name === "string" && name.trim()) {
+      return name.trim();
+    }
+  }
+  return undefined;
+}
+
+function normalizeGenres(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const names = raw
+    .map((item) => normalizeGenreName(item))
+    .filter(Boolean) as string[];
+  return uniqueTags(names);
+}
+
+function formatRating(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const text = String(value).trim().replace(",", ".");
+  if (!text) return undefined;
+  const parsed = Number.parseFloat(text);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed.toFixed(1);
+}
+
+function toNumber(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  const text = String(value).trim().replace(",", ".");
+  if (!text) return undefined;
+  const parsed = Number.parseFloat(text);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toStringValue(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const text = String(value).trim();
+  return text ? text : undefined;
+}
+
 function pickTitle(item: any): string {
   return item?.title_eng || item?.title || item?.title_it || "";
 }
@@ -118,38 +167,66 @@ export type MetaPayload = {
   poster: string;
   background: string;
   tags: string[];
+  genres: string[];
   isMovie: boolean;
   linkList: Link[];
   episodesCount?: number;
   studio?: string;
+  rating?: string;
+  extra?: Info["extra"];
   relatedBase: RelatedItem[];
 };
 
 export function buildMetaFromInfo(
   info: any,
   baseHost: string,
-  animeId: number
+  animeId: number,
+  animeFromHtml?: any
 ): MetaPayload {
-  const title = info?.title_eng || info?.title || info?.title_it || "Unknown";
-  const synopsis = (info?.plot || "").toString();
-  const poster = normalizeImageUrl(info?.imageurl || info?.cover);
-  const background = normalizeImageUrl(info?.imageurl_cover || info?.cover);
+  const htmlAnime =
+    animeFromHtml && typeof animeFromHtml === "object" ? animeFromHtml : {};
+  const title =
+    info?.title_eng ||
+    info?.title ||
+    info?.title_it ||
+    htmlAnime?.title_eng ||
+    htmlAnime?.title ||
+    htmlAnime?.title_it ||
+    "Unknown";
+  const synopsis = (info?.plot ?? htmlAnime?.plot ?? "").toString();
+  const poster = normalizeImageUrl(
+    info?.imageurl || info?.cover || htmlAnime?.imageurl || htmlAnime?.cover
+  );
+  const background = normalizeImageUrl(
+    info?.imageurl_cover ||
+      info?.cover ||
+      htmlAnime?.imageurl_cover ||
+      htmlAnime?.cover
+  );
 
+  const type = info?.type ?? htmlAnime?.type;
+  const status = info?.status ?? htmlAnime?.status;
+  const season = info?.season ?? htmlAnime?.season;
+  const dateValue = info?.date ?? htmlAnime?.date;
   const tags = uniqueTags(
-    [
-      info?.type,
-      info?.status,
-      info?.season,
-      info?.date ? String(info.date) : "",
-      ...(info?.genres?.map((genre: any) => genre?.name) || []),
-    ].filter(Boolean)
+    [type, status, season, dateValue ? String(dateValue) : ""].filter(Boolean)
+  );
+  const genres = normalizeGenres(
+    Array.isArray(info?.genres) && info.genres.length > 0
+      ? info.genres
+      : htmlAnime?.genres
   );
 
   const isMovie =
-    typeof info?.type === "string" &&
-    info.type.toLowerCase().includes("movie");
+    typeof type === "string" && type.toLowerCase().includes("movie");
 
-  const ranges = buildEpisodeRanges(info?.episodes_count || 0);
+  const episodesCountRaw =
+    info?.episodes_count ?? htmlAnime?.episodes_count ?? 0;
+  const ranges = buildEpisodeRanges(
+    typeof episodesCountRaw === "number"
+      ? episodesCountRaw
+      : parseInt(String(episodesCountRaw), 10) || 0
+  );
   const linkList: Link[] = ranges.length
     ? ranges.map((range) => ({
         title: range.title,
@@ -169,13 +246,47 @@ export function buildMetaFromInfo(
     poster,
     background,
     tags,
+    genres,
     isMovie,
     linkList,
     episodesCount:
-      typeof info?.episodes_count === "number"
-        ? info.episodes_count
-        : parseInt(info?.episodes_count, 10) || undefined,
-    studio: info?.studio || "",
+      typeof episodesCountRaw === "number"
+        ? episodesCountRaw
+        : parseInt(String(episodesCountRaw), 10) || undefined,
+    studio: info?.studio || htmlAnime?.studio || "",
+    rating: formatRating(info?.score ?? htmlAnime?.score),
+    extra: {
+      ids: {
+        malId: toNumber(info?.mal_id ?? htmlAnime?.mal_id),
+        anilistId: toNumber(info?.anilist_id ?? htmlAnime?.anilist_id),
+        crunchyId: info?.crunchy_id ?? htmlAnime?.crunchy_id,
+        disneyId: info?.disney_id ?? htmlAnime?.disney_id,
+        netflixId: info?.netflix_id ?? htmlAnime?.netflix_id,
+        primeId: info?.prime_id ?? htmlAnime?.prime_id,
+      },
+      stats: {
+        scoreRaw: toStringValue(info?.score ?? htmlAnime?.score),
+        favorites: toNumber(htmlAnime?.favorites),
+        members: toNumber(htmlAnime?.members),
+        views: toNumber(htmlAnime?.visite),
+        episodesCountRaw:
+          info?.episodes_count ?? htmlAnime?.episodes_count ?? undefined,
+        episodesLength: htmlAnime?.episodes_length ?? undefined,
+      },
+      flags: {
+        dub: info?.dub ?? htmlAnime?.dub,
+        alwaysHome: htmlAnime?.always_home,
+      },
+      meta: {
+        day: toStringValue(htmlAnime?.day),
+        season: toStringValue(season),
+        status: toStringValue(status),
+        type: toStringValue(type),
+        createdAt: toStringValue(htmlAnime?.created_at),
+        author: toStringValue(htmlAnime?.author),
+        userId: htmlAnime?.user_id ?? undefined,
+      },
+    },
     relatedBase,
   };
 }
