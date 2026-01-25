@@ -226,7 +226,8 @@ export function parseTopPostsFromHtml(
   const $ = cheerio.load(html);
   const raw = $("top-anime").attr("animes") || "";
   if (!raw) return [];
-  const data = JSON.parse(raw);
+  const decoded = decodeHtmlAttribute(raw);
+  const data = JSON.parse(decoded);
   const items = data?.data || [];
   const posts: Post[] = [];
   items.forEach((item: any) => {
