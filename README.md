@@ -82,7 +82,7 @@ are supported without relying on runtime `require()` in the app.
 
 - `axios`: For HTTP requests
 - `cheerio`: For HTML parsing
-- `getBaseUrl`: Helper to get the provider's base URL (base url are generall stored here https://github.com/himanshu8443/providers/blob/main/modflix.json)
+- `getBaseUrl`: Helper to get the provider's base URL. For providers listed in `providers/baseUrlRegistry.ts` (es. animeunity), it uses Pastebin first and falls back to a hardcoded URL. Other providers still use modflix.json.
 - `commonHeaders`: Standard HTTP headers
 - `extractors`: Shared extractor functions
 - `Aes`: (if needed) for encryption/decryption
