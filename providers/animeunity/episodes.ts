@@ -1,5 +1,9 @@
 import { EpisodeLink, ProviderContext } from "../types";
-import { BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
+import { DEFAULT_HEADERS, DEFAULT_BASE_HOST, TIMEOUTS } from "./config";
+
+function normalizeBaseUrl(value: string): string {
+  return value.replace(/\/+$/, "");
+}
 
 const RANGE_SIZE = 120;
 
@@ -12,6 +16,9 @@ export const getEpisodes = async function ({
 }): Promise<EpisodeLink[]> {
   try {
     const { axios } = providerContext;
+    const resolved =
+      (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
+    const baseHost = normalizeBaseUrl(resolved);
     let animeId: number | null = null;
     let rangeStart = 1;
     let rangeEnd = 0;
@@ -31,10 +38,10 @@ export const getEpisodes = async function ({
       return [];
     }
 
-    const infoRes = await axios.get(`${BASE_HOST}/info_api/${animeId}/`, {
+    const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
       headers: {
         ...DEFAULT_HEADERS,
-        Referer: `${BASE_HOST}/`,
+        Referer: `${baseHost}/`,
       },
       timeout: TIMEOUTS.LONG,
     });
@@ -46,12 +53,12 @@ export const getEpisodes = async function ({
     let last = rangeEnd > 0 ? rangeEnd : totalCount;
     while (start <= last) {
       const end = Math.min(start + RANGE_SIZE - 1, last);
-      const rangeUrl = `${BASE_HOST}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
+      const rangeUrl = `${baseHost}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
       try {
         const res = await axios.get(rangeUrl, {
           headers: {
             ...DEFAULT_HEADERS,
-            Referer: `${BASE_HOST}/`,
+            Referer: `${baseHost}/`,
           },
           timeout: TIMEOUTS.LONG,
         });
