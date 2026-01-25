@@ -326,8 +326,9 @@ async function fetchTop({
   }
   const url = `${baseHost}/top-anime${query.length ? `?${query.join("&")}` : ""}`;
   const res = await axios.get(url, {
-    headers: DEFAULT_HEADERS,
+    headers: HTML_HEADERS,
     timeout: TIMEOUTS.SHORT,
+    responseType: "text",
   });
   return parseTopPostsFromHtml(res.data, cheerio, baseHost);
 }
