@@ -147,6 +147,7 @@ export type ProviderContext = {
   Aes: any; // AES encryption utility, if used
   getBaseUrl: (providerValue: string) => Promise<string>;
   commonHeaders: Record<string, string>;
+  debugLog?: (message: string, data?: unknown) => void;
   cheerio: typeof cheerio;
   extractors: {
     hubcloudExtracter: (link: string, signal: AbortSignal) => Promise<Stream[]>;
