@@ -334,11 +334,12 @@ async function fetchArchive({
   const headers = buildSessionHeaders(session, baseHost);
   const offset = Math.max(0, (page - 1) * PAGE_SIZE);
   const normalizedTitle = filters?.title?.trim();
+  const order = filters?.order || "Lista A-Z";
   const payload = {
     title: normalizedTitle ? normalizedTitle : false,
     type: filters?.type || false,
     year: filters?.year ?? false,
-    order: filters?.order || false,
+    order,
     status: filters?.status || false,
     genres: filters?.genres && filters.genres.length > 0 ? filters.genres : false,
     offset,

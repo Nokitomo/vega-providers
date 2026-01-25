@@ -230,8 +230,12 @@ export function parseTopPostsFromHtml(
   try {
     data = JSON.parse(raw);
   } catch (_) {
-    const decoded = cheerio.load("<div></div>")("<div></div>").html(raw).text();
-    data = JSON.parse(decoded);
+    try {
+      const decoded = decodeHtmlAttribute(raw);
+      data = JSON.parse(decoded);
+    } catch (_) {
+      return [];
+    }
   }
   const items = data?.data || [];
   const posts: Post[] = [];
