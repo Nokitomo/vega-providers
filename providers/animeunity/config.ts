@@ -1,5 +1,5 @@
-export const BASE_HOST = "https://www.animeunity.so";
-export const BASE_HOST_NO_WWW = "https://animeunity.so";
+export const DEFAULT_BASE_HOST = "https://www.animeunity.so";
+export const DEFAULT_BASE_HOST_NO_WWW = "https://animeunity.so";
 
 export const DEFAULT_HEADERS: Record<string, string> = {
   Accept: "application/json",
