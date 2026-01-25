@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 const { minify } = require("terser");
+const esbuild = require("esbuild");
 
 // Build configuration
 const PROVIDERS_DIR = "./providers";
@@ -229,6 +230,56 @@ class ProviderBuilder {
   }
 
   /**
+   * Bundle provider modules to avoid runtime require() dependencies
+   */
+  bundleProviders() {
+    log.build("Bundling provider modules...");
+
+    const moduleFiles = [
+      "catalog.js",
+      "posts.js",
+      "meta.js",
+      "stream.js",
+      "episodes.js",
+    ];
+    let bundledCount = 0;
+
+    for (const provider of this.providers) {
+      const providerDistDir = path.join(DIST_DIR, provider);
+      if (!fs.existsSync(providerDistDir)) {
+        continue;
+      }
+
+      for (const file of moduleFiles) {
+        const srcFile = path.join(providerDistDir, file);
+        if (!fs.existsSync(srcFile)) {
+          continue;
+        }
+        try {
+          esbuild.buildSync({
+            entryPoints: [srcFile],
+            outfile: srcFile,
+            bundle: true,
+            platform: "browser",
+            format: "cjs",
+            target: "es2015",
+            logLevel: "silent",
+            banner: {
+              js: "var module = { exports: exports };",
+            },
+          });
+          bundledCount++;
+        } catch (error) {
+          log.error(`Bundling failed for ${provider}/${file}: ${error.message}`);
+          throw error;
+        }
+      }
+    }
+
+    log.success(`Bundled ${bundledCount} provider modules`);
+  }
+
+  /**
    * Build everything
    */
   async build() {
@@ -256,6 +307,7 @@ class ProviderBuilder {
     }
 
     this.organizeFiles();
+    this.bundleProviders();
 
     // Add minification step (skip if SKIP_MINIFY is set)
     if (!process.env.SKIP_MINIFY) {
