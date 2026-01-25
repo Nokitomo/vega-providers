@@ -113,7 +113,6 @@ export type RelatedItem = {
   title: string;
   link: string;
   image?: string;
-  cover?: string;
   type?: string;
   year?: string;
 };
@@ -134,7 +133,6 @@ export function mapRelatedBase(
         title,
         link: buildAnimeLink(baseHost, id, slug),
         image: normalizeImageUrl(item?.imageurl),
-        cover: normalizeImageUrl(item?.cover || item?.imageurl_cover),
         type: item?.type || item?.relation || item?.rel,
         year: pickYear(item),
       };
@@ -241,11 +239,7 @@ export function buildMetaFromInfo(
         },
       ];
 
-  const relatedSource =
-    Array.isArray(htmlAnime?.related) && htmlAnime.related.length > 0
-      ? htmlAnime.related
-      : info?.related || [];
-  const relatedBase = mapRelatedBase(relatedSource, baseHost);
+  const relatedBase = mapRelatedBase(info?.related || [], baseHost);
   return {
     title,
     synopsis,
