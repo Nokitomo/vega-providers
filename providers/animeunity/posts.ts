@@ -483,14 +483,18 @@ export const getPosts = async function ({
       case "latest":
         return await fetchLatest({ page, providerContext });
       case "top":
-        return await fetchTop({
-          page,
-          providerContext,
-          popular: parseBooleanParam(parsed.params.get("popular")) || false,
-          status: normalizeArchiveStatus(parsed.params.get("status")),
-          type: normalizeArchiveType(parsed.params.get("type")),
-          order: normalizeArchiveOrder(parsed.params.get("order")),
-        });
+        {
+          const baseFilters = buildArchiveFilters(parsed.params);
+          const order = baseFilters.order || normalizeArchiveOrder("rating");
+          return await fetchArchive({
+            page,
+            providerContext,
+            filters: {
+              ...baseFilters,
+              order,
+            },
+          });
+        }
       case "popular":
         return await fetchPopular({ page, providerContext });
       case "calendar":
