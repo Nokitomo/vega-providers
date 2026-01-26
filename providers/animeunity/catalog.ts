@@ -18,6 +18,34 @@ export const catalog = [
     filter: "top?popular=true",
   },
   {
+    title: "Upcoming",
+    filter: "top?status=upcoming",
+  },
+  {
+    title: "Ongoing",
+    filter: "top?status=ongoing",
+  },
+  {
+    title: "Most Viewed",
+    filter: "top?order=most_viewed",
+  },
+  {
+    title: "Favorites",
+    filter: "top?order=favorites",
+  },
+  {
+    title: "TV",
+    filter: "archive?type=tv&order=rating",
+  },
+  {
+    title: "Movie",
+    filter: "archive?type=movie&order=rating",
+  },
+  {
+    title: "Special",
+    filter: "archive?type=special&order=rating",
+  },
+  {
     title: "Calendar",
     filter: "calendar",
   },

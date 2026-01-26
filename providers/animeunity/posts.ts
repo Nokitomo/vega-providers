@@ -617,23 +617,6 @@ export const getPosts = async function ({
             type,
             order,
           });
-
-          if (
-            !popular &&
-            posts.length === 0 &&
-            (order === "rating" || order === "score")
-          ) {
-            const fallbackOrder = order === "rating" ? "score" : "rating";
-            posts = await fetchTop({
-              page,
-              providerContext,
-              popular,
-              status,
-              type,
-              order: fallbackOrder,
-            });
-          }
-
           return posts;
         }
       case "popular":
