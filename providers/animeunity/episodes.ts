@@ -67,9 +67,13 @@ export const getEpisodes = async function ({
           const number = episode?.number ?? "";
           const id = episode?.id;
           if (!id) return;
-          const title = number ? `Episode ${number}` : "Episode";
+          const parsedNumber = Number.parseInt(String(number), 10);
+          const hasNumber = Number.isFinite(parsedNumber);
+          const title = hasNumber ? `Episode ${parsedNumber}` : "Episode";
           episodes.push({
             title,
+            titleKey: hasNumber ? "Episode {{number}}" : "Episode",
+            titleParams: hasNumber ? { number: parsedNumber } : undefined,
             link: String(id),
           });
         });

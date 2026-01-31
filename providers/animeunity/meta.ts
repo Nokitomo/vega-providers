@@ -102,6 +102,7 @@ export const getMeta = async function ({
       imdbId: "",
       type: metaPayload.isMovie ? "movie" : "series",
       tags: metaPayload.tags,
+      tagKeys: metaPayload.tagKeys,
       genres: metaPayload.genres,
       rating: metaPayload.rating,
       studio: metaPayload.studio || "",

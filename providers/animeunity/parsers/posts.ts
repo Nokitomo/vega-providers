@@ -156,7 +156,31 @@ function buildEpisodeLabel(value: number | null | undefined): string | undefined
   return `Ep. ${value}`;
 }
 
-export function extractLatestEpisodeLabel(item: any): string | undefined {
+type EpisodeLabelInfo = {
+  label: string;
+  labelKey: string;
+  labelParams: { number: number };
+};
+
+const EPISODE_LABEL_KEY = "Ep. {{number}}";
+
+function buildEpisodeLabelInfo(
+  value: number | null | undefined
+): EpisodeLabelInfo | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  return {
+    label: `Ep. ${value}`,
+    labelKey: EPISODE_LABEL_KEY,
+    labelParams: { number: value },
+  };
+}
+
+export function extractLatestEpisodeNumber(item: any): number | null {
   let number = extractEpisodeNumberFromMap(item);
   if (number == null && item?.episode != null) {
     if (item.episode && typeof item.episode === "object") {
@@ -178,19 +202,19 @@ export function extractLatestEpisodeLabel(item: any): string | undefined {
       number = extractEpisodeNumberFromEpisodesDynamic(item.anime.episodes);
     }
   }
-  return buildEpisodeLabel(number);
+  return number;
 }
 
-export function extractCalendarEpisodeLabel(item: any): string | undefined {
+export function extractCalendarEpisodeNumber(item: any): number | null {
   let publishedCount = extractEpisodeNumberFromEpisodesDynamic(item?.episodes);
   if (publishedCount == null && Number.isFinite(item?.real_episodes_count)) {
     publishedCount = item.real_episodes_count;
   }
   if (publishedCount != null && publishedCount >= 0) {
-    return `Ep. ${publishedCount + 1}`;
+    return publishedCount + 1;
   }
   const fallback = item?.episodes_count ?? item?.episode_count;
-  return buildEpisodeLabel(extractEpisodeNumber(fallback));
+  return extractEpisodeNumber(fallback);
 }
 
 export function parseLatestPostsFromHtml(
@@ -205,10 +229,13 @@ export function parseLatestPostsFromHtml(
   const items = data?.data || [];
   const posts: Post[] = [];
   items.forEach((item: any) => {
-    const episodeLabel = extractLatestEpisodeLabel(item);
+    const episodeNumber = extractLatestEpisodeNumber(item);
+    const episodeLabelInfo = buildEpisodeLabelInfo(episodeNumber);
     const episodeId = item?.id;
     const post = toPost(item?.anime ?? item, baseHost, {
-      episodeLabel,
+      episodeLabel: episodeLabelInfo?.label || buildEpisodeLabel(episodeNumber),
+      episodeLabelKey: episodeLabelInfo?.labelKey,
+      episodeLabelParams: episodeLabelInfo?.labelParams,
       episodeId,
     });
     if (post) {
@@ -292,8 +319,16 @@ export function parseCalendarPostsFromHtml(
       const day = normalizeCalendarDay(
         typeof data?.day === "string" ? data.day : undefined
       );
-      const episodeLabel = extractCalendarEpisodeLabel(data);
-      const post = toPost(data, baseHost, { day, episodeLabel });
+      const episodeNumber = extractCalendarEpisodeNumber(data);
+      const episodeLabelInfo = buildEpisodeLabelInfo(episodeNumber);
+      const episodeLabel =
+        episodeLabelInfo?.label || buildEpisodeLabel(episodeNumber);
+      const post = toPost(data, baseHost, {
+        day,
+        episodeLabel,
+        episodeLabelKey: episodeLabelInfo?.labelKey,
+        episodeLabelParams: episodeLabelInfo?.labelParams,
+      });
       if (post) {
         posts.push(post);
       }

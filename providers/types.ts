@@ -1,6 +1,8 @@
 import { AxiosStatic } from "axios";
 import * as cheerio from "cheerio";
 
+export type I18nParams = Record<string, string | number>;
+
 // Content type for providers (replaces zustand import)
 export interface Content {
   provider: string;
@@ -15,6 +17,8 @@ export interface Post {
   provider?: string;
   day?: string;
   episodeLabel?: string;
+  episodeLabelKey?: string;
+  episodeLabelParams?: I18nParams;
   episodeId?: string | number;
 }
 
@@ -44,6 +48,7 @@ export interface Info {
   imdbId: string;
   type: string;
   tags?: string[];
+  tagKeys?: Record<string, string>;
   cast?: string[];
   rating?: string;
   genres?: string[];
@@ -92,15 +97,21 @@ export interface Info {
 // getEpisodeLinks
 export interface EpisodeLink {
   title: string;
+  titleKey?: string;
+  titleParams?: I18nParams;
   link: string;
 }
 
 export interface Link {
   title: string;
+  titleKey?: string;
+  titleParams?: I18nParams;
   quality?: string;
   episodesLink?: string;
   directLinks?: {
     title: string;
+    titleKey?: string;
+    titleParams?: I18nParams;
     link: string;
     type?: "movie" | "series";
   }[];
@@ -109,6 +120,8 @@ export interface Link {
 // catalog
 export interface Catalog {
   title: string;
+  titleKey?: string;
+  titleParams?: I18nParams;
   filter: string;
 }
 

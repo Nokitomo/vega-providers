@@ -1,5 +1,6 @@
 type ArchiveFilterOption = {
   title: string;
+  titleKey?: string;
   value: string;
   providerValue: string;
 };
@@ -12,33 +13,93 @@ type ArchiveGenre = {
 const POPULARITA = "Popolarit\u00e0";
 
 export const ARCHIVE_ORDER_OPTIONS: ArchiveFilterOption[] = [
-  { title: "A-Z", value: "a-z", providerValue: "Lista A-Z" },
-  { title: "Z-A", value: "z-a", providerValue: "Lista Z-A" },
-  { title: "Popularity", value: "popularity", providerValue: POPULARITA },
-  { title: "Rating", value: "rating", providerValue: "Valutazione" },
+  { title: "A-Z", titleKey: "A-Z", value: "a-z", providerValue: "Lista A-Z" },
+  { title: "Z-A", titleKey: "Z-A", value: "z-a", providerValue: "Lista Z-A" },
+  {
+    title: "Popularity",
+    titleKey: "Popularity",
+    value: "popularity",
+    providerValue: POPULARITA,
+  },
+  {
+    title: "Rating",
+    titleKey: "Rating",
+    value: "rating",
+    providerValue: "Valutazione",
+  },
 ];
 
 export const ARCHIVE_STATUS_OPTIONS: ArchiveFilterOption[] = [
-  { title: "Ongoing", value: "ongoing", providerValue: "In Corso" },
-  { title: "Completed", value: "completed", providerValue: "Terminato" },
-  { title: "Upcoming", value: "upcoming", providerValue: "In Uscita" },
-  { title: "Dropped", value: "dropped", providerValue: "Droppato" },
+  {
+    title: "Ongoing",
+    titleKey: "Ongoing",
+    value: "ongoing",
+    providerValue: "In Corso",
+  },
+  {
+    title: "Completed",
+    titleKey: "Completed",
+    value: "completed",
+    providerValue: "Terminato",
+  },
+  {
+    title: "Upcoming",
+    titleKey: "Upcoming",
+    value: "upcoming",
+    providerValue: "In Uscita",
+  },
+  {
+    title: "Dropped",
+    titleKey: "Dropped",
+    value: "dropped",
+    providerValue: "Droppato",
+  },
 ];
 
 export const ARCHIVE_TYPE_OPTIONS: ArchiveFilterOption[] = [
-  { title: "TV", value: "tv", providerValue: "TV" },
-  { title: "TV Short", value: "tv-short", providerValue: "TV Short" },
-  { title: "OVA", value: "ova", providerValue: "OVA" },
-  { title: "ONA", value: "ona", providerValue: "ONA" },
-  { title: "Special", value: "special", providerValue: "Special" },
-  { title: "Movie", value: "movie", providerValue: "Movie" },
+  { title: "TV", titleKey: "TV", value: "tv", providerValue: "TV" },
+  {
+    title: "TV Short",
+    titleKey: "TV Short",
+    value: "tv-short",
+    providerValue: "TV Short",
+  },
+  { title: "OVA", titleKey: "OVA", value: "ova", providerValue: "OVA" },
+  { title: "ONA", titleKey: "ONA", value: "ona", providerValue: "ONA" },
+  {
+    title: "Special",
+    titleKey: "Special",
+    value: "special",
+    providerValue: "Special",
+  },
+  { title: "Movie", titleKey: "Movie", value: "movie", providerValue: "Movie" },
 ];
 
 export const ARCHIVE_SEASON_OPTIONS: ArchiveFilterOption[] = [
-  { title: "Winter", value: "winter", providerValue: "Inverno" },
-  { title: "Spring", value: "spring", providerValue: "Primavera" },
-  { title: "Summer", value: "summer", providerValue: "Estate" },
-  { title: "Autumn", value: "autumn", providerValue: "Autunno" },
+  {
+    title: "Winter",
+    titleKey: "Winter",
+    value: "winter",
+    providerValue: "Inverno",
+  },
+  {
+    title: "Spring",
+    titleKey: "Spring",
+    value: "spring",
+    providerValue: "Primavera",
+  },
+  {
+    title: "Summer",
+    titleKey: "Summer",
+    value: "summer",
+    providerValue: "Estate",
+  },
+  {
+    title: "Autumn",
+    titleKey: "Autumn",
+    value: "autumn",
+    providerValue: "Autunno",
+  },
 ];
 
 export const ARCHIVE_YEAR_MIN = 1966;

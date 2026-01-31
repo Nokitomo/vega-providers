@@ -1,6 +1,59 @@
 import { Info, Link, ProviderContext } from "../../types";
 import { buildAnimeLink, decodeHtmlAttribute, normalizeImageUrl } from "../utils";
 
+const EPISODE_RANGE_KEY = "Episodes {{start}}-{{end}}";
+const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+
+const TAG_KEY_MAP: Record<string, string> = {
+  tv: "TV",
+  tvshort: "TV Short",
+  ova: "OVA",
+  ona: "ONA",
+  special: "Special",
+  movie: "Movie",
+  ongoing: "Ongoing",
+  incorso: "Ongoing",
+  airing: "Ongoing",
+  completed: "Completed",
+  terminato: "Completed",
+  finished: "Completed",
+  upcoming: "Upcoming",
+  inuscita: "Upcoming",
+  inuscitaprossimamente: "Upcoming",
+  comingsoon: "Upcoming",
+  dropped: "Dropped",
+  droppato: "Dropped",
+  winter: "Winter",
+  inverno: "Winter",
+  spring: "Spring",
+  primavera: "Spring",
+  summer: "Summer",
+  estate: "Summer",
+  autumn: "Autumn",
+  autunno: "Autumn",
+  fall: "Autumn",
+};
+
+function normalizeTagKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(DIACRITICS_REGEX, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function buildTagKeys(tags: string[]): Record<string, string> {
+  return tags.reduce((acc, tag) => {
+    const normalized = normalizeTagKey(tag);
+    const key = TAG_KEY_MAP[normalized];
+    if (key) {
+      acc[tag] = key;
+    }
+    return acc;
+  }, {} as Record<string, string>);
+}
+
 export function extractAnimeId(link: string): number | null {
   if (!link) return null;
   const direct = parseInt(link, 10);
@@ -18,16 +71,18 @@ export function extractAnimeId(link: string): number | null {
 function buildEpisodeRanges(
   totalCount: number,
   rangeSize = 120
-): { title: string; start: number; end: number }[] {
+): { title: string; titleKey: string; titleParams: { start: number; end: number }; start: number; end: number }[] {
   if (!totalCount || totalCount <= 0) {
     return [];
   }
-  const ranges: { title: string; start: number; end: number }[] = [];
+  const ranges: { title: string; titleKey: string; titleParams: { start: number; end: number }; start: number; end: number }[] = [];
   let start = 1;
   while (start <= totalCount) {
     const end = Math.min(start + rangeSize - 1, totalCount);
     ranges.push({
-      title: `Episodi ${start}-${end}`,
+      title: `Episodes ${start}-${end}`,
+      titleKey: EPISODE_RANGE_KEY,
+      titleParams: { start, end },
       start,
       end,
     });
@@ -167,6 +222,7 @@ export type MetaPayload = {
   poster: string;
   background: string;
   tags: string[];
+  tagKeys: Record<string, string>;
   genres: string[];
   isMovie: boolean;
   linkList: Link[];
@@ -211,6 +267,7 @@ export function buildMetaFromInfo(
   const tags = uniqueTags(
     [type, status, season, dateValue ? String(dateValue) : ""].filter(Boolean)
   );
+  const tagKeys = buildTagKeys(tags);
   const genres = normalizeGenres(
     Array.isArray(info?.genres) && info.genres.length > 0
       ? info.genres
@@ -230,6 +287,8 @@ export function buildMetaFromInfo(
   const linkList: Link[] = ranges.length
     ? ranges.map((range) => ({
         title: range.title,
+        titleKey: range.titleKey,
+        titleParams: range.titleParams,
         episodesLink: `${animeId}|${range.start}|${range.end}`,
       }))
     : [
@@ -246,6 +305,7 @@ export function buildMetaFromInfo(
     poster,
     background,
     tags,
+    tagKeys,
     genres,
     isMovie,
     linkList,

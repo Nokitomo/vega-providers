@@ -11,46 +11,57 @@ import {
 export const catalog = [
   {
     title: "Latest Episodes",
+    titleKey: "Latest Episodes",
     filter: "latest",
   },
   {
     title: "Popular",
+    titleKey: "Popular",
     filter: "top?popular=true",
   },
   {
     title: "Upcoming",
+    titleKey: "Upcoming",
     filter: "top?status=upcoming",
   },
   {
     title: "Ongoing",
+    titleKey: "Ongoing",
     filter: "top?status=ongoing",
   },
   {
     title: "Most Viewed",
+    titleKey: "Most Viewed",
     filter: "top?order=most_viewed",
   },
   {
     title: "Favorites",
+    titleKey: "Favorites",
     filter: "top?order=favorites",
   },
   {
     title: "TV",
+    titleKey: "TV",
     filter: "archive?type=tv&order=rating",
   },
   {
     title: "Movie",
+    titleKey: "Movie",
     filter: "archive?type=movie&order=rating",
   },
   {
     title: "Special",
+    titleKey: "Special",
     filter: "archive?type=special&order=rating",
   },
   {
     title: "Calendar",
+    titleKey: "Calendar",
     filter: "calendar",
   },
   {
     title: "Archive",
+    titleKey: "Archive",
     filter: "archive",
   },
 ];
@@ -70,7 +81,7 @@ export const genres = ARCHIVE_GENRES.map((genre) => ({
 }));
 
 export const archiveFilters = {
-  title: { key: "title", type: "text", title: "Title" },
+  title: { key: "title", type: "text", title: "Title", titleKey: "Title" },
   year: {
     key: "year",
     type: "number",
@@ -83,5 +94,11 @@ export const archiveFilters = {
   type: ARCHIVE_TYPE_OPTIONS,
   season: ARCHIVE_SEASON_OPTIONS,
   genres: ARCHIVE_GENRES,
-  dubbed: { key: "dubbed", type: "boolean", title: "Dubbed", value: "true" },
+  dubbed: {
+    key: "dubbed",
+    type: "boolean",
+    title: "Dubbed",
+    titleKey: "Dubbed",
+    value: "true",
+  },
 };
