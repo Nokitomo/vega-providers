@@ -37,6 +37,8 @@ are supported without relying on runtime `require()` in the app.
 - **Exports:**
   - `catalog`: An array of objects with `title` and `filter` fields.
   - `genres`: (optional) An array for genre filters.
+- **Optional i18n fields (app-side translation):**
+  - `titleKey` + `titleParams` can be provided alongside `title` so the app can localize labels.
 - **AnimeUnity advanced filters:**
   - The `filter` string can include query params for AnimeUnity to drive `top-anime` and `archivio` filters.
   - Examples:
@@ -80,6 +82,15 @@ are supported without relying on runtime `require()` in the app.
   - Your `getEpisodes` function should then fetch and return the list of episodes for that season.
 - **Exports:**
   - `getEpisodes({ url, providerContext })`: Returns an array of `EpisodeLink` objects for the given season or episode group.
+
+## Internationalization (i18n) fields
+
+The app can localize provider-provided labels when you include optional i18n fields.
+
+- `Catalog`: `titleKey`, `titleParams`
+- `Post`: `episodeLabelKey`, `episodeLabelParams` (keep `episodeLabel` as fallback)
+- `Link` / `EpisodeLink` / `directLinks`: `titleKey`, `titleParams`
+- `Info`: `tagKeys` map `{ [rawTag]: i18nKey }` to translate tags in the app
 
 ## `providerContext`?
 
