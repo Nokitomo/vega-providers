@@ -424,6 +424,11 @@ export const getMeta = async function ({
       $(".movie_entry-poster").attr("src") ||
       $("meta[property='og:image']").attr("content") ||
       "";
+    const backgroundRaw =
+      $(".player .layer-image").first().attr("data-src") ||
+      $(".player .layer-image").first().attr("data-bg") ||
+      $(".player .layer-image").first().attr("src") ||
+      "";
 
     const jsonLdEntries = extractJsonLdBlocks(html);
     const jsonLd = pickJsonLd(jsonLdEntries);
@@ -456,6 +461,9 @@ export const getMeta = async function ({
     const image =
       (posterRaw ? resolveUrl(posterRaw, baseUrl) : "") ||
       (jsonLdImages[0] ? resolveUrl(jsonLdImages[0], baseUrl) : "");
+    const background = backgroundRaw
+      ? resolveUrl(backgroundRaw, baseUrl)
+      : "";
 
     const synopsis =
       cleanText($(".movie_entry-plot").text() || "") || jsonLdDescription;
@@ -517,6 +525,7 @@ export const getMeta = async function ({
       title,
       synopsis,
       image,
+      background: background || undefined,
       poster: image,
       imdbId,
       year: yearRaw || undefined,
