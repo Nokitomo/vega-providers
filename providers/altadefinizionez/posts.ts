@@ -33,7 +33,7 @@ const isDetailLink = (href: string, baseUrl: string): boolean => {
     const resolved = new URL(href, baseUrl);
     const baseHost = new URL(baseUrl).hostname;
     if (!resolved.hostname.endsWith(baseHost)) return false;
-    return /\/\d+[^/]*\.html$/i.test(resolved.pathname);
+    return /\/\d+[^/]*\.html\/?$/i.test(resolved.pathname);
   } catch (_) {
     return false;
   }
