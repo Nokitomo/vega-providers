@@ -254,6 +254,17 @@ const detectBlockHint = (html: string): string | null => {
   return null;
 };
 
+const safeWarn = (...args: any[]): void => {
+  try {
+    const logger = (globalThis as any)?.["console"];
+    if (logger && typeof logger.warn === "function") {
+      logger.warn(...args);
+    }
+  } catch (_) {
+    // ignore logging failures
+  }
+};
+
 export const getPosts = async function ({
   filter,
   page,
@@ -292,7 +303,7 @@ export const getPosts = async function ({
         typeof res.headers?.["content-type"] === "string"
           ? res.headers["content-type"]
           : "";
-      console.warn(`[altadefinizionez] empty posts`, {
+      safeWarn(`[altadefinizionez] empty posts`, {
         url,
         status: res.status,
         contentType,
@@ -355,7 +366,7 @@ export const getSearchPosts = async function ({
         typeof res.headers?.["content-type"] === "string"
           ? res.headers["content-type"]
           : "";
-      console.warn(`[altadefinizionez] empty search posts`, {
+      safeWarn(`[altadefinizionez] empty search posts`, {
         searchQuery: normalized,
         status: res.status,
         contentType,
