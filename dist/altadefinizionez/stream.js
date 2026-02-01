@@ -74,10 +74,11 @@ const getMovieStreams = async (pageUrl, providerContext, signal) => {
   const axios = providerContext.axios;
   const cheerio = providerContext.cheerio;
   const commonHeaders = providerContext.commonHeaders;
+  const pageOrigin = new URL(pageUrl).origin;
   const res = await axios.get(pageUrl, {
     headers: {
       ...commonHeaders,
-      Referer: `${DEFAULT_BASE_URL}/`,
+      Referer: `${pageOrigin}/`,
     },
     timeout: REQUEST_TIMEOUT,
     signal: signal,
@@ -114,10 +115,11 @@ const getSeriesStreams = async (pageUrl, episodeKey, providerContext, signal) =>
   const axios = providerContext.axios;
   const cheerio = providerContext.cheerio;
   const commonHeaders = providerContext.commonHeaders;
+  const pageOrigin = new URL(pageUrl).origin;
   const res = await axios.get(pageUrl, {
     headers: {
       ...commonHeaders,
-      Referer: `${DEFAULT_BASE_URL}/`,
+      Referer: `${pageOrigin}/`,
     },
     timeout: REQUEST_TIMEOUT,
     signal: signal,
