@@ -84,7 +84,7 @@ const buildListUrl = (baseUrl: string, filter: string, page: number): string => 
 };
 
 const extractImage = (
-  element: ReturnType<ProviderContext["cheerio"]["load"]>,
+  element: any,
   baseUrl: string
 ): string => {
   const img = element.find("img").first();
@@ -109,7 +109,7 @@ const addPost = (
 };
 
 const parseGridPosts = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   baseUrl: string,
   posts: Post[],
   seen: Set<string>
@@ -149,7 +149,7 @@ const parseGridPosts = (
 };
 
 const parseTablePosts = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   baseUrl: string,
   posts: Post[],
   seen: Set<string>
@@ -176,7 +176,7 @@ const parseTablePosts = (
 };
 
 const parseFallbackPosts = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   baseUrl: string,
   posts: Post[],
   seen: Set<string>

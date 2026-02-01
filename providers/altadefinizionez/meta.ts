@@ -61,13 +61,15 @@ const buildTagKeys = (values: string[]): Record<string, string> => {
     }
   });
   return tags;
-};const extractDetailRow = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+};
+
+const extractDetailRow = (
+  $: any,
   label: string
-): ReturnType<ProviderContext["cheerio"]["load"]> | null => {
+): any => {
   const target = label.toLowerCase();
-  let row: ReturnType<ProviderContext["cheerio"]["load"]> | null = null;
-  $(".movie_entry-details .row").each((_, element) => {
+  let row: any = null;
+  $(".movie_entry-details .row").each((_index: number, element: any) => {
     const labelText = $(element)
       .find(".label-text")
       .first()
@@ -84,7 +86,7 @@ const buildTagKeys = (values: string[]): Record<string, string> => {
 };
 
 const extractDetailValue = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   label: string
 ): string => {
   const row = extractDetailRow($, label);
@@ -99,14 +101,14 @@ const extractDetailValue = (
 };
 
 const extractDetailList = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   label: string
 ): string[] => {
   const row = extractDetailRow($, label);
   if (!row) return [];
   const linked = row
     .find("a")
-    .map((_, el) => $(el).text().trim())
+    .map((_index: number, el: any) => $(el).text().trim())
     .get()
     .filter(Boolean);
   if (linked.length > 0) return linked;
@@ -124,7 +126,7 @@ const extractDetailList = (
 };
 
 const buildSeriesLinks = (
-  $: ReturnType<ProviderContext["cheerio"]["load"]>,
+  $: any,
   pageUrl: string
 ): { linkList: Link[]; episodesCount: number } => {
   const seasons = new Map<
@@ -132,7 +134,7 @@ const buildSeriesLinks = (
     Array<{ key: string; label: string; episodeNumber: string }>
   >();
 
-  $(".dropdown.episodes[data-season]").each((_, element) => {
+  $(".dropdown.episodes[data-season]").each((_index: number, element: any) => {
     const season = ($(element).attr("data-season") || "").trim();
     if (!season) return;
 
