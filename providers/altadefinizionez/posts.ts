@@ -198,14 +198,26 @@ const parseFallbackPosts = (
   });
 };
 
+type ParseDebug = {
+  movieCount: number;
+  tableRowCount: number;
+  posterLinkCount: number;
+};
+
 const parsePostsFromHtml = (
   html: string,
   baseUrl: string,
   cheerio: ProviderContext["cheerio"]
-): Post[] => {
+): { posts: Post[]; debug: ParseDebug } => {
   const $ = cheerio.load(html || "");
   const posts: Post[] = [];
   const seen = new Set<string>();
+
+  const debug: ParseDebug = {
+    movieCount: $(".movie").length,
+    tableRowCount: $("table.catalog-table tr").length,
+    posterLinkCount: $(".movie-poster a[href]").length,
+  };
 
   parseGridPosts($, baseUrl, posts, seen);
   parseTablePosts($, baseUrl, posts, seen);
@@ -214,7 +226,32 @@ const parsePostsFromHtml = (
     parseFallbackPosts($, baseUrl, posts, seen);
   }
 
-  return posts;
+  return { posts, debug };
+};
+
+const extractTitle = (html: string): string => {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  return match ? match[1].trim() : "";
+};
+
+const detectBlockHint = (html: string): string | null => {
+  const normalized = (html || "").toLowerCase();
+  const hints = [
+    "cloudflare",
+    "cf-browser-verification",
+    "just a moment",
+    "checking your browser",
+    "attention required",
+    "access denied",
+    "ddos-guard",
+    "enable javascript",
+  ];
+  for (const hint of hints) {
+    if (normalized.includes(hint)) {
+      return hint;
+    }
+  }
+  return null;
 };
 
 export const getPosts = async function ({
@@ -244,7 +281,29 @@ export const getPosts = async function ({
       signal,
     });
 
-    return parsePostsFromHtml(res.data, baseUrl, cheerio);
+    const html =
+      typeof res.data === "string" ? res.data : String(res.data ?? "");
+    const parsed = parsePostsFromHtml(html, baseUrl, cheerio);
+
+    if (parsed.posts.length === 0) {
+      const title = extractTitle(html);
+      const blockHint = detectBlockHint(html);
+      const contentType =
+        typeof res.headers?.["content-type"] === "string"
+          ? res.headers["content-type"]
+          : "";
+      console.warn(`[altadefinizionez] empty posts`, {
+        url,
+        status: res.status,
+        contentType,
+        htmlLength: html.length,
+        title,
+        blockHint,
+        ...parsed.debug,
+      });
+    }
+
+    return parsed.posts;
   } catch (err) {
     console.error("altadefinizionez posts error", err);
     return [];
@@ -285,7 +344,29 @@ export const getSearchPosts = async function ({
       signal,
     });
 
-    return parsePostsFromHtml(res.data, baseUrl, cheerio);
+    const html =
+      typeof res.data === "string" ? res.data : String(res.data ?? "");
+    const parsed = parsePostsFromHtml(html, baseUrl, cheerio);
+
+    if (parsed.posts.length === 0) {
+      const title = extractTitle(html);
+      const blockHint = detectBlockHint(html);
+      const contentType =
+        typeof res.headers?.["content-type"] === "string"
+          ? res.headers["content-type"]
+          : "";
+      console.warn(`[altadefinizionez] empty search posts`, {
+        searchQuery: normalized,
+        status: res.status,
+        contentType,
+        htmlLength: html.length,
+        title,
+        blockHint,
+        ...parsed.debug,
+      });
+    }
+
+    return parsed.posts;
   } catch (err) {
     console.error("altadefinizionez search error", err);
     return [];
