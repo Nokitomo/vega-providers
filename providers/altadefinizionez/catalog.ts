@@ -1,53 +1,65 @@
 export const catalog = [
   {
-    title: "Film",
+    title: "Movie",
+    titleKey: "Movie",
     filter: "film?tipo=1",
   },
   {
-    title: "Serie TV",
+    title: "TV Show",
+    titleKey: "TV Show",
     filter: "film?tipo=2",
   },
   {
-    title: "Archivio",
+    title: "Archive",
+    titleKey: "Archive",
     filter: "catalog/all",
   },
   {
-    title: "Commedia",
+    title: "Comedy",
+    titleKey: "Comedy",
     filter: "commedia",
   },
   {
     title: "Thriller",
+    titleKey: "Thriller",
     filter: "thriller",
   },
   {
-    title: "Fantascienza",
+    title: "Science Fiction",
+    titleKey: "Science Fiction",
     filter: "fantascienza",
   },
 ];
 
 export const genres = [
   {
-    title: "Azione",
+    title: "Action",
+    titleKey: "Action",
     filter: "azione",
   },
   {
-    title: "Animazione",
+    title: "Animation",
+    titleKey: "Animation",
     filter: "animazione",
   },
   {
-    title: "Commedia",
+    title: "Comedy",
+    titleKey: "Comedy",
     filter: "commedia",
   },
   {
-    title: "Drammatico",
+    title: "Drama",
+    titleKey: "Drama",
     filter: "drammatico",
   },
   {
-    title: "Fantascienza",
+    title: "Science Fiction",
+    titleKey: "Science Fiction",
     filter: "fantascienza",
   },
   {
     title: "Thriller",
+    titleKey: "Thriller",
     filter: "thriller",
   },
 ];
