@@ -131,12 +131,19 @@ const parseGridPosts = (
       .first()
       .text()
       .trim();
+    const episodeLabelText = episodeLabel || "";
+    const episodeLabelKey = episodeLabelText ? "EP {{number}}" : undefined;
+    const episodeLabelParams = episodeLabelText
+      ? { number: episodeLabelText }
+      : undefined;
 
     addPost(posts, seen, {
       title: title,
       link: resolved,
       image: image,
-      episodeLabel: episodeLabel || undefined,
+      episodeLabel: episodeLabelText || undefined,
+      episodeLabelKey,
+      episodeLabelParams,
     });
   });
 };
