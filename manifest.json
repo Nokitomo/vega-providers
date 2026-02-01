@@ -334,5 +334,13 @@
     "icon": "",
     "type": "india",
     "disabled": true
+  },
+  {
+    "display_name": "AltadefinizioneZ",
+    "value": "altadefinizionez",
+    "version": "1.0",
+    "icon": "",
+    "type": "italy",
+    "disabled": false
   }
 ]
