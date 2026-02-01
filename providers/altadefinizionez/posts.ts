@@ -209,6 +209,14 @@ type ParseSample = {
     dataOriginal?: string;
     src?: string;
   };
+  detailCheck?: {
+    urlAvailable: boolean;
+    baseHost?: string;
+    resolvedHost?: string;
+    path?: string;
+    regexMatch?: boolean;
+    error?: string;
+  };
 };
 
 type ParseDebug = {
@@ -244,6 +252,7 @@ const getSampleFromMovie = (
       dataOriginal: img.attr("data-original") || undefined,
       src: img.attr("src") || undefined,
     },
+    detailCheck: getDetailCheck(resolvedHref, baseUrl),
   };
 };
 
@@ -273,7 +282,41 @@ const getSampleFromTable = (
       dataOriginal: img.attr("data-original") || undefined,
       src: img.attr("src") || undefined,
     },
+    detailCheck: getDetailCheck(resolvedHref, baseUrl),
   };
+};
+
+const getDetailCheck = (
+  href: string,
+  baseUrl: string
+): {
+  urlAvailable: boolean;
+  baseHost?: string;
+  resolvedHost?: string;
+  path?: string;
+  regexMatch?: boolean;
+  error?: string;
+} => {
+  if (typeof URL === "undefined") {
+    return { urlAvailable: false, error: "URL undefined" };
+  }
+  try {
+    const resolved = new URL(href, baseUrl);
+    const baseHost = new URL(baseUrl).hostname;
+    const regexMatch = /\/\d+[^/]*\.html$/i.test(resolved.pathname);
+    return {
+      urlAvailable: true,
+      baseHost,
+      resolvedHost: resolved.hostname,
+      path: resolved.pathname,
+      regexMatch,
+    };
+  } catch (error) {
+    return {
+      urlAvailable: true,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
 };
 
 const parsePostsFromHtml = (
