@@ -40,6 +40,101 @@ const extractImdbId = (html: string): string => {
 const normalizeText = (value: string): string =>
   value.replace(/\s+/g, " ").trim().toLowerCase();
 
+const extractJsonLdBlocks = (html: string): any[] => {
+  const blocks = html.match(
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  );
+  if (!blocks) return [];
+  const entries: any[] = [];
+  blocks.forEach((block) => {
+    const jsonText = block
+      .replace(/^[\s\S]*?<script[^>]*>/i, "")
+      .replace(/<\/script>\s*$/i, "")
+      .trim();
+    if (!jsonText) return;
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (Array.isArray(parsed)) {
+        entries.push(...parsed);
+      } else if (parsed) {
+        entries.push(parsed);
+      }
+    } catch (_) {
+      // ignore invalid JSON-LD blocks
+    }
+  });
+  return entries;
+};
+
+const pickJsonLd = (entries: any[]): any | null => {
+  if (!entries || entries.length === 0) return null;
+  const preferredTypes = new Set([
+    "Movie",
+    "TVSeries",
+    "TVEpisode",
+    "VideoObject",
+  ]);
+  const match = entries.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      preferredTypes.has(entry["@type"])
+  );
+  return match || entries[0];
+};
+
+const normalizeJsonLdArray = (value: any): any[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
+
+const extractPersonNames = (value: any): string[] => {
+  const items = normalizeJsonLdArray(value);
+  return items
+    .map((item) => {
+      if (!item) return "";
+      if (typeof item === "string") return item.trim();
+      if (typeof item === "object") {
+        return (item.name || item["@name"] || "").toString().trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+};
+
+const extractJsonLdTextList = (value: any): string[] => {
+  const items = normalizeJsonLdArray(value);
+  return items
+    .map((item) => {
+      if (!item) return "";
+      if (typeof item === "string") return item.trim();
+      if (typeof item === "object") {
+        return (item.name || item["@name"] || "").toString().trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+};
+
+const extractJsonLdYear = (value: string | undefined): string => {
+  if (!value) return "";
+  const match = value.match(/\d{4}/);
+  return match ? match[0] : "";
+};
+
+const parseIsoDuration = (value: string | undefined): string => {
+  if (!value) return "";
+  const match = value.match(/PT(?:(\d+)H)?(?:(\d+)M)?/i);
+  if (!match) return value;
+  const hours = match[1] ? Number.parseInt(match[1], 10) : 0;
+  const minutes = match[2] ? Number.parseInt(match[2], 10) : 0;
+  if (hours && minutes) return `${hours}h ${minutes}m`;
+  if (hours) return `${hours}h`;
+  if (minutes) return `${minutes}m`;
+  return value;
+};
+
 const extractImage = (element: any, baseUrl: string): string => {
   const img = element.find("img").first();
   const src =
@@ -329,18 +424,56 @@ export const getMeta = async function ({
       $(".movie_entry-poster").attr("src") ||
       $("meta[property='og:image']").attr("content") ||
       "";
-    const image = posterRaw ? resolveUrl(posterRaw, baseUrl) : "";
 
-    const synopsis = cleanText($(".movie_entry-plot").text() || "");
+    const jsonLdEntries = extractJsonLdBlocks(html);
+    const jsonLd = pickJsonLd(jsonLdEntries);
+    const jsonLdDescription = jsonLd
+      ? cleanText(jsonLd.description || "")
+      : "";
+    const jsonLdGenres = jsonLd ? extractJsonLdTextList(jsonLd.genre) : [];
+    const jsonLdActors = jsonLd ? extractPersonNames(jsonLd.actor) : [];
+    const jsonLdDirectors = jsonLd ? extractPersonNames(jsonLd.director) : [];
+    const jsonLdYear = jsonLd
+      ? extractJsonLdYear(
+          jsonLd.datePublished ||
+            jsonLd.dateCreated ||
+            jsonLd.startDate ||
+            jsonLd.releaseDate
+        )
+      : "";
+    const jsonLdRuntime = jsonLd ? parseIsoDuration(jsonLd.duration) : "";
+    const jsonLdRating =
+      jsonLd?.aggregateRating?.ratingValue != null
+        ? String(jsonLd.aggregateRating.ratingValue)
+        : "";
+    const jsonLdCountries = jsonLd
+      ? extractJsonLdTextList(
+          jsonLd.countryOfOrigin || jsonLd.contentLocation || jsonLd.location
+        )
+      : [];
+    const jsonLdImages = jsonLd ? extractJsonLdTextList(jsonLd.image) : [];
+
+    const image =
+      (posterRaw ? resolveUrl(posterRaw, baseUrl) : "") ||
+      (jsonLdImages[0] ? resolveUrl(jsonLdImages[0], baseUrl) : "");
+
+    const synopsis =
+      cleanText($(".movie_entry-plot").text() || "") || jsonLdDescription;
     const imdbId = extractImdbId(html);
-    const rating = $(".label.imdb").first().text().trim() || "";
+    const rating = $(".label.imdb").first().text().trim() || jsonLdRating;
 
-    const yearRaw = extractDetailValue($, "Anno");
-    const runtime = extractDetailValue($, "Durata");
-    const country = extractDetailValue($, "Paese");
+    const yearRaw = extractDetailValue($, "Anno") || jsonLdYear;
+    const runtime = extractDetailValue($, "Durata") || jsonLdRuntime;
+    const country = extractDetailValue($, "Paese") || jsonLdCountries[0] || "";
     const director =
-      extractDetailValue($, "Regista") || extractDetailValue($, "Regia");
-    const genres = extractDetailList($, "Genere");
+      extractDetailValue($, "Regista") ||
+      extractDetailValue($, "Regia") ||
+      jsonLdDirectors[0] ||
+      "";
+    let genres = extractDetailList($, "Genere");
+    if (genres.length === 0 && jsonLdGenres.length > 0) {
+      genres = jsonLdGenres;
+    }
     const tagKeys = buildTagKeys(genres);
     const tags = genres.length > 0 ? genres : undefined;
     const castRaw = extractDetailValue($, "Cast");
@@ -349,7 +482,7 @@ export const getMeta = async function ({
           .split(",")
           .map((value: string) => value.trim())
           .filter(Boolean)
-      : [];
+      : jsonLdActors;
 
     const isSeries =
       $(".series-select").length > 0 || /\/serie-tv\//i.test(pageUrl);
