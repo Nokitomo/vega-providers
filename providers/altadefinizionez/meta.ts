@@ -37,7 +37,31 @@ const extractImdbId = (html: string): string => {
   return match ? match[0] : "";
 };
 
-const extractDetailRow = (
+
+const GENRE_KEY_MAP: Record<string, string> = {
+  azione: "Action",
+  animazione: "Animation",
+  commedia: "Comedy",
+  drammatico: "Drama",
+  fantascienza: "Science Fiction",
+  thriller: "Thriller",
+};
+
+const resolveGenreKey = (value: string): string | undefined => {
+  const normalized = value.trim().toLowerCase();
+  return GENRE_KEY_MAP[normalized];
+};
+
+const buildTagKeys = (values: string[]): Record<string, string> => {
+  const tags: Record<string, string> = {};
+  values.forEach((value) => {
+    const key = resolveGenreKey(value);
+    if (key) {
+      tags[value] = key;
+    }
+  });
+  return tags;
+};const extractDetailRow = (
   $: ReturnType<ProviderContext["cheerio"]["load"]>,
   label: string
 ): ReturnType<ProviderContext["cheerio"]["load"]> | null => {
@@ -121,7 +145,7 @@ const buildSeriesLinks = (
         const episodeNumber = parts[1] || parts[0] || "";
         const label =
           $(item).text().trim() ||
-          (episodeNumber ? `Episodio ${episodeNumber}` : "Episodio");
+          (episodeNumber ? `Episode ${episodeNumber}` : "Episode");
 
         const list = seasons.get(season) || [];
         list.push({
@@ -139,16 +163,28 @@ const buildSeriesLinks = (
   Array.from(seasons.entries())
     .sort(([a], [b]) => Number(a) - Number(b))
     .forEach(([season, episodes]) => {
-      const directLinks = episodes.map((episode) => ({
-        title: episode.label,
-        link: `${pageUrl}::${episode.key}`,
-        type: "series" as const,
-      }));
+      const directLinks = episodes.map((episode) => {
+        const titleKey = episode.episodeNumber
+          ? "Episode {{number}}"
+          : undefined;
+        const titleParams = episode.episodeNumber
+          ? { number: episode.episodeNumber }
+          : undefined;
+        return {
+          title: episode.label,
+          titleKey,
+          titleParams,
+          link: `${pageUrl}::${episode.key}`,
+          type: "series" as const,
+        };
+      });
 
       episodesCount += episodes.length;
 
       linkList.push({
-        title: `Stagione ${season}`,
+        title: `Season ${season}`,
+        titleKey: season ? "Season {{number}}" : undefined,
+        titleParams: season ? { number: season } : undefined,
         directLinks,
       });
     });
@@ -198,6 +234,8 @@ export const getMeta = async function ({
     const rating = $(".label.imdb").first().text().trim() || "";
 
     const genres = extractDetailList($, "Genere");
+    const tagKeys = buildTagKeys(genres);
+    const tags = genres.length > 0 ? genres : undefined;
     const castRaw = extractDetailValue($, "Cast");
     const cast = castRaw
       ? castRaw
@@ -219,10 +257,12 @@ export const getMeta = async function ({
     } else {
       linkList = [
         {
-          title: "Streaming",
+          title: "Play",
+          titleKey: "Play",
           directLinks: [
             {
-              title: "Guarda",
+              title: "Play",
+              titleKey: "Play",
               link: pageUrl,
               type: "movie",
             },
@@ -240,6 +280,8 @@ export const getMeta = async function ({
       type: isSeries ? "series" : "movie",
       rating,
       genres,
+      tags,
+      tagKeys: Object.keys(tagKeys).length > 0 ? tagKeys : undefined,
       cast,
       episodesCount,
       linkList,
