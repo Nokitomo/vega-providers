@@ -198,10 +198,82 @@ const parseFallbackPosts = (
   });
 };
 
+type ParseSample = {
+  href: string;
+  resolvedHref: string;
+  isDetail: boolean;
+  title: string;
+  imageAttrs: {
+    dataSrc?: string;
+    dataLazySrc?: string;
+    dataOriginal?: string;
+    src?: string;
+  };
+};
+
 type ParseDebug = {
   movieCount: number;
   tableRowCount: number;
   posterLinkCount: number;
+  sample: ParseSample | null;
+};
+
+const getSampleFromMovie = (
+  $: any,
+  baseUrl: string
+): ParseSample | null => {
+  const item = $(".movie").first();
+  if (!item.length) return null;
+  const anchor = item.find(".movie-poster a[href]").first();
+  const href = anchor.attr("href") || "";
+  const resolvedHref = stripHash(resolveUrl(href, baseUrl));
+  const title =
+    item.find(".movie-title a").first().text().trim() ||
+    anchor.attr("title") ||
+    anchor.text().trim() ||
+    "";
+  const img = item.find(".movie-poster img").first();
+  return {
+    href,
+    resolvedHref,
+    isDetail: isDetailLink(resolvedHref, baseUrl),
+    title,
+    imageAttrs: {
+      dataSrc: img.attr("data-src") || undefined,
+      dataLazySrc: img.attr("data-lazy-src") || undefined,
+      dataOriginal: img.attr("data-original") || undefined,
+      src: img.attr("src") || undefined,
+    },
+  };
+};
+
+const getSampleFromTable = (
+  $: any,
+  baseUrl: string
+): ParseSample | null => {
+  const row = $("table.catalog-table tr").first();
+  if (!row.length) return null;
+  const anchor = row.find("a[href]").first();
+  const href = anchor.attr("href") || "";
+  const resolvedHref = stripHash(resolveUrl(href, baseUrl));
+  const title =
+    row.find("h2 a").first().text().trim() ||
+    anchor.attr("title") ||
+    anchor.text().trim() ||
+    "";
+  const img = row.find("img").first();
+  return {
+    href,
+    resolvedHref,
+    isDetail: isDetailLink(resolvedHref, baseUrl),
+    title,
+    imageAttrs: {
+      dataSrc: img.attr("data-src") || undefined,
+      dataLazySrc: img.attr("data-lazy-src") || undefined,
+      dataOriginal: img.attr("data-original") || undefined,
+      src: img.attr("src") || undefined,
+    },
+  };
 };
 
 const parsePostsFromHtml = (
@@ -213,10 +285,12 @@ const parsePostsFromHtml = (
   const posts: Post[] = [];
   const seen = new Set<string>();
 
+  const sample = getSampleFromMovie($, baseUrl) || getSampleFromTable($, baseUrl);
   const debug: ParseDebug = {
     movieCount: $(".movie").length,
     tableRowCount: $("table.catalog-table tr").length,
     posterLinkCount: $(".movie-poster a[href]").length,
+    sample,
   };
 
   parseGridPosts($, baseUrl, posts, seen);
