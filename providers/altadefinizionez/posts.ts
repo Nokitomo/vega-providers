@@ -198,143 +198,14 @@ const parseFallbackPosts = (
   });
 };
 
-type ParseSample = {
-  href: string;
-  resolvedHref: string;
-  isDetail: boolean;
-  title: string;
-  imageAttrs: {
-    dataSrc?: string;
-    dataLazySrc?: string;
-    dataOriginal?: string;
-    src?: string;
-  };
-  detailCheck?: {
-    urlAvailable: boolean;
-    baseHost?: string;
-    resolvedHost?: string;
-    path?: string;
-    regexMatch?: boolean;
-    error?: string;
-  };
-};
-
-type ParseDebug = {
-  movieCount: number;
-  tableRowCount: number;
-  posterLinkCount: number;
-  sample: ParseSample | null;
-};
-
-const getSampleFromMovie = (
-  $: any,
-  baseUrl: string
-): ParseSample | null => {
-  const item = $(".movie").first();
-  if (!item.length) return null;
-  const anchor = item.find(".movie-poster a[href]").first();
-  const href = anchor.attr("href") || "";
-  const resolvedHref = stripHash(resolveUrl(href, baseUrl));
-  const title =
-    item.find(".movie-title a").first().text().trim() ||
-    anchor.attr("title") ||
-    anchor.text().trim() ||
-    "";
-  const img = item.find(".movie-poster img").first();
-  return {
-    href,
-    resolvedHref,
-    isDetail: isDetailLink(resolvedHref, baseUrl),
-    title,
-    imageAttrs: {
-      dataSrc: img.attr("data-src") || undefined,
-      dataLazySrc: img.attr("data-lazy-src") || undefined,
-      dataOriginal: img.attr("data-original") || undefined,
-      src: img.attr("src") || undefined,
-    },
-    detailCheck: getDetailCheck(resolvedHref, baseUrl),
-  };
-};
-
-const getSampleFromTable = (
-  $: any,
-  baseUrl: string
-): ParseSample | null => {
-  const row = $("table.catalog-table tr").first();
-  if (!row.length) return null;
-  const anchor = row.find("a[href]").first();
-  const href = anchor.attr("href") || "";
-  const resolvedHref = stripHash(resolveUrl(href, baseUrl));
-  const title =
-    row.find("h2 a").first().text().trim() ||
-    anchor.attr("title") ||
-    anchor.text().trim() ||
-    "";
-  const img = row.find("img").first();
-  return {
-    href,
-    resolvedHref,
-    isDetail: isDetailLink(resolvedHref, baseUrl),
-    title,
-    imageAttrs: {
-      dataSrc: img.attr("data-src") || undefined,
-      dataLazySrc: img.attr("data-lazy-src") || undefined,
-      dataOriginal: img.attr("data-original") || undefined,
-      src: img.attr("src") || undefined,
-    },
-    detailCheck: getDetailCheck(resolvedHref, baseUrl),
-  };
-};
-
-const getDetailCheck = (
-  href: string,
-  baseUrl: string
-): {
-  urlAvailable: boolean;
-  baseHost?: string;
-  resolvedHost?: string;
-  path?: string;
-  regexMatch?: boolean;
-  error?: string;
-} => {
-  if (typeof URL === "undefined") {
-    return { urlAvailable: false, error: "URL undefined" };
-  }
-  try {
-    const resolved = new URL(href, baseUrl);
-    const baseHost = new URL(baseUrl).hostname;
-    const regexMatch = /\/\d+[^/]*\.html$/i.test(resolved.pathname);
-    return {
-      urlAvailable: true,
-      baseHost,
-      resolvedHost: resolved.hostname,
-      path: resolved.pathname,
-      regexMatch,
-    };
-  } catch (error) {
-    return {
-      urlAvailable: true,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-};
-
 const parsePostsFromHtml = (
   html: string,
   baseUrl: string,
   cheerio: ProviderContext["cheerio"]
-): { posts: Post[]; debug: ParseDebug } => {
+): Post[] => {
   const $ = cheerio.load(html || "");
   const posts: Post[] = [];
   const seen = new Set<string>();
-
-  const sample = getSampleFromMovie($, baseUrl) || getSampleFromTable($, baseUrl);
-  const debug: ParseDebug = {
-    movieCount: $(".movie").length,
-    tableRowCount: $("table.catalog-table tr").length,
-    posterLinkCount: $(".movie-poster a[href]").length,
-    sample,
-  };
 
   parseGridPosts($, baseUrl, posts, seen);
   parseTablePosts($, baseUrl, posts, seen);
@@ -343,43 +214,7 @@ const parsePostsFromHtml = (
     parseFallbackPosts($, baseUrl, posts, seen);
   }
 
-  return { posts, debug };
-};
-
-const extractTitle = (html: string): string => {
-  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-  return match ? match[1].trim() : "";
-};
-
-const detectBlockHint = (html: string): string | null => {
-  const normalized = (html || "").toLowerCase();
-  const hints = [
-    "cloudflare",
-    "cf-browser-verification",
-    "just a moment",
-    "checking your browser",
-    "attention required",
-    "access denied",
-    "ddos-guard",
-    "enable javascript",
-  ];
-  for (const hint of hints) {
-    if (normalized.includes(hint)) {
-      return hint;
-    }
-  }
-  return null;
-};
-
-const safeWarn = (...args: any[]): void => {
-  try {
-    const logger = (globalThis as any)?.["console"];
-    if (logger && typeof logger.warn === "function") {
-      logger.warn(...args);
-    }
-  } catch (_) {
-    // ignore logging failures
-  }
+  return posts;
 };
 
 export const getPosts = async function ({
@@ -409,29 +244,11 @@ export const getPosts = async function ({
       signal,
     });
 
-    const html =
-      typeof res.data === "string" ? res.data : String(res.data ?? "");
-    const parsed = parsePostsFromHtml(html, baseUrl, cheerio);
-
-    if (parsed.posts.length === 0) {
-      const title = extractTitle(html);
-      const blockHint = detectBlockHint(html);
-      const contentType =
-        typeof res.headers?.["content-type"] === "string"
-          ? res.headers["content-type"]
-          : "";
-      safeWarn(`[altadefinizionez] empty posts`, {
-        url,
-        status: res.status,
-        contentType,
-        htmlLength: html.length,
-        title,
-        blockHint,
-        ...parsed.debug,
-      });
-    }
-
-    return parsed.posts;
+    return parsePostsFromHtml(
+      typeof res.data === "string" ? res.data : String(res.data ?? ""),
+      baseUrl,
+      cheerio
+    );
   } catch (err) {
     console.error("altadefinizionez posts error", err);
     return [];
@@ -472,29 +289,11 @@ export const getSearchPosts = async function ({
       signal,
     });
 
-    const html =
-      typeof res.data === "string" ? res.data : String(res.data ?? "");
-    const parsed = parsePostsFromHtml(html, baseUrl, cheerio);
-
-    if (parsed.posts.length === 0) {
-      const title = extractTitle(html);
-      const blockHint = detectBlockHint(html);
-      const contentType =
-        typeof res.headers?.["content-type"] === "string"
-          ? res.headers["content-type"]
-          : "";
-      safeWarn(`[altadefinizionez] empty search posts`, {
-        searchQuery: normalized,
-        status: res.status,
-        contentType,
-        htmlLength: html.length,
-        title,
-        blockHint,
-        ...parsed.debug,
-      });
-    }
-
-    return parsed.posts;
+    return parsePostsFromHtml(
+      typeof res.data === "string" ? res.data : String(res.data ?? ""),
+      baseUrl,
+      cheerio
+    );
   } catch (err) {
     console.error("altadefinizionez search error", err);
     return [];
