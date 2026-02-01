@@ -41,6 +41,8 @@ export interface Stream {
 
 // getInfo
 export interface Info {
+  titleKey?: string;
+  titleParams?: I18nParams;
   title: string;
   image: string;
   poster?: string;

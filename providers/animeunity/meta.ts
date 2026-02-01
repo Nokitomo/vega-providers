@@ -95,6 +95,7 @@ export const getMeta = async function ({
     );
 
     return {
+      titleKey: metaPayload.titleKey,
       title: metaPayload.title,
       synopsis: metaPayload.synopsis,
       image: background || metaPayload.poster,

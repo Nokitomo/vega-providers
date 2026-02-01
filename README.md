@@ -90,7 +90,7 @@ The app can localize provider-provided labels when you include optional i18n fie
 - `Catalog`: `titleKey`, `titleParams`
 - `Post`: `episodeLabelKey`, `episodeLabelParams` (keep `episodeLabel` as fallback)
 - `Link` / `EpisodeLink` / `directLinks`: `titleKey`, `titleParams`
-- `Info`: `tagKeys` map `{ [rawTag]: i18nKey }` to translate tags in the app
+- `Info`: `titleKey`/`titleParams` for fallback titles, `tagKeys` map `{ [rawTag]: i18nKey }` to translate tags in the app
 
 ## `providerContext`?
 

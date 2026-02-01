@@ -217,6 +217,8 @@ export function parseAnimeFromHtml(
 }
 
 export type MetaPayload = {
+  titleKey?: string;
+  titleParams?: Info["titleParams"];
   title: string;
   synopsis: string;
   poster: string;
@@ -241,14 +243,16 @@ export function buildMetaFromInfo(
 ): MetaPayload {
   const htmlAnime =
     animeFromHtml && typeof animeFromHtml === "object" ? animeFromHtml : {};
-  const title =
+  const resolvedTitle =
     info?.title_eng ||
     info?.title ||
     info?.title_it ||
     htmlAnime?.title_eng ||
     htmlAnime?.title ||
     htmlAnime?.title_it ||
-    "Unknown";
+    "";
+  const title = resolvedTitle || "Unknown";
+  const titleKey = resolvedTitle ? undefined : "Unknown";
   const synopsis = (info?.plot ?? htmlAnime?.plot ?? "").toString();
   const poster = normalizeImageUrl(
     info?.imageurl || info?.cover || htmlAnime?.imageurl || htmlAnime?.cover
@@ -300,6 +304,7 @@ export function buildMetaFromInfo(
 
   const relatedBase = mapRelatedBase(info?.related || [], baseHost);
   return {
+    titleKey,
     title,
     synopsis,
     poster,
