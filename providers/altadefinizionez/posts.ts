@@ -114,7 +114,7 @@ const parseGridPosts = (
   posts: Post[],
   seen: Set<string>
 ): void => {
-  $(".movie").each((_, element) => {
+  $(".movie").each((_index: number, element: any) => {
     const item = $(element);
     const anchor = item.find(".movie-poster a[href]").first();
     const href = anchor.attr("href") || "";
@@ -154,7 +154,7 @@ const parseTablePosts = (
   posts: Post[],
   seen: Set<string>
 ): void => {
-  $("table.catalog-table tr").each((_, element) => {
+  $("table.catalog-table tr").each((_index: number, element: any) => {
     const row = $(element);
     const anchor = row.find("a[href]").first();
     const href = anchor.attr("href") || "";
@@ -181,7 +181,7 @@ const parseFallbackPosts = (
   posts: Post[],
   seen: Set<string>
 ): void => {
-  $(".movie-poster a[href]").each((_, element) => {
+  $(".movie-poster a[href]").each((_index: number, element: any) => {
     const anchor = $(element);
     const href = anchor.attr("href") || "";
     const resolved = stripHash(resolveUrl(href, baseUrl));

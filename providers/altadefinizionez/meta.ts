@@ -54,7 +54,7 @@ const resolveGenreKey = (value: string): string | undefined => {
 
 const buildTagKeys = (values: string[]): Record<string, string> => {
   const tags: Record<string, string> = {};
-  values.forEach((value) => {
+  values.forEach((value: string) => {
     const key = resolveGenreKey(value);
     if (key) {
       tags[value] = key;
@@ -140,7 +140,7 @@ const buildSeriesLinks = (
 
     $(element)
       .find(".dropdown-item[data-episode]")
-      .each((__, item) => {
+      .each((_index: number, item: any) => {
         const episodeKey = ($(item).attr("data-episode") || "").trim();
         if (!episodeKey) return;
         const parts = episodeKey.split("-");
