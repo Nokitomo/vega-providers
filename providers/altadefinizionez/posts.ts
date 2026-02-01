@@ -132,8 +132,10 @@ const parseGridPosts = (
       .text()
       .trim();
     const episodeLabelText = episodeLabel || "";
-    const episodeLabelKey = episodeLabelText ? "EP {{number}}" : undefined;
-    const episodeLabelParams = episodeLabelText
+    const isSeasonEpisodeLabel = /^\d+\s*x\s*\d+$/i.test(episodeLabelText);
+    const episodeLabelKey =
+      episodeLabelText && !isSeasonEpisodeLabel ? "EP {{number}}" : undefined;
+    const episodeLabelParams = episodeLabelKey
       ? { number: episodeLabelText }
       : undefined;
 
