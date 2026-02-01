@@ -37,6 +37,32 @@ const extractImdbId = (html: string): string => {
   return match ? match[0] : "";
 };
 
+const normalizeText = (value: string): string =>
+  value.replace(/\s+/g, " ").trim().toLowerCase();
+
+const extractImage = (element: any, baseUrl: string): string => {
+  const img = element.find("img").first();
+  const src =
+    img.attr("data-src") ||
+    img.attr("data-lazy-src") ||
+    img.attr("data-original") ||
+    img.attr("src") ||
+    "";
+  return src ? resolveUrl(src, baseUrl) : "";
+};
+
+const isDetailLink = (href: string, baseUrl: string): boolean => {
+  if (!href) return false;
+  try {
+    const resolved = new URL(href, baseUrl);
+    const baseHost = new URL(baseUrl).hostname;
+    if (!resolved.hostname.endsWith(baseHost)) return false;
+    return /\/\d+[^/]*\.html\/?$/i.test(resolved.pathname);
+  } catch (_) {
+    return false;
+  }
+};
+
 
 const GENRE_KEY_MAP: Record<string, string> = {
   azione: "Action",
@@ -194,6 +220,73 @@ const buildSeriesLinks = (
   return { linkList, episodesCount };
 };
 
+const extractRelatedItems = (
+  $: any,
+  baseUrl: string
+): Info["related"] | undefined => {
+  const relatedLabels = new Set([
+    "correlati",
+    "potrebbe piacerti",
+    "consigliati",
+    "simili",
+  ]);
+  const titleNode = $("h5.section-title, h4.section-title, h3.section-title")
+    .filter((_idx: number, element: any) =>
+      relatedLabels.has(normalizeText($(element).text()))
+    )
+    .first();
+
+  let container = titleNode.length
+    ? titleNode
+        .closest(".section-head")
+        .nextAll(
+          ".movie_horizontal, .movie-horizontal, .related-movies, .related-posts, .movie-related, .related"
+        )
+        .first()
+    : $(
+        ".movie_horizontal, .movie-horizontal, .related-movies, .related-posts, .movie-related, .related"
+      ).first();
+
+  if (!container.length) {
+    return undefined;
+  }
+
+  let anchors = container.find(".col-auto a[href]");
+  if (!anchors.length) {
+    anchors = container.find("a[href]");
+  }
+
+  const related: NonNullable<Info["related"]> = [];
+  const seen = new Set<string>();
+
+  anchors.each((_index: number, element: any) => {
+    const anchor = $(element);
+    const href = anchor.attr("href") || "";
+    const resolved = resolveUrl(href, baseUrl);
+    if (!isDetailLink(resolved, baseUrl)) return;
+    if (seen.has(resolved)) return;
+
+    const title =
+      anchor.attr("aria-label") ||
+      anchor.attr("title") ||
+      anchor.text().trim();
+    if (!title) return;
+
+    const image = extractImage(anchor, baseUrl);
+    const type = /\/serie-tv\//i.test(resolved) ? "series" : "movie";
+
+    related.push({
+      title,
+      link: resolved,
+      image: image || undefined,
+      type,
+    });
+    seen.add(resolved);
+  });
+
+  return related.length > 0 ? related : undefined;
+};
+
 export const getMeta = async function ({
   link,
   providerContext,
@@ -249,6 +342,8 @@ export const getMeta = async function ({
     const isSeries =
       $(".series-select").length > 0 || /\/serie-tv\//i.test(pageUrl);
 
+    const related = extractRelatedItems($, baseUrl);
+
     let linkList: Link[] = [];
     let episodesCount: number | undefined = undefined;
 
@@ -286,6 +381,7 @@ export const getMeta = async function ({
       tagKeys: Object.keys(tagKeys).length > 0 ? tagKeys : undefined,
       cast,
       episodesCount,
+      related,
       linkList,
     };
   } catch (err) {
