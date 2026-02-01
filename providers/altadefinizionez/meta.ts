@@ -236,43 +236,50 @@ const extractRelatedItems = (
     )
     .first();
 
-  let container = titleNode.length
-    ? titleNode
+  let containers: any[] = [];
+  if (titleNode.length) {
+    const section = titleNode.closest("section");
+    if (section.length) {
+      containers = section.find(".movie_horizontal").toArray();
+    } else {
+      containers = titleNode
         .closest(".section-head")
-        .nextAll(
-          ".movie_horizontal, .movie-horizontal, .related-movies, .related-posts, .movie-related, .related"
-        )
-        .first()
-    : $(
-        ".movie_horizontal, .movie-horizontal, .related-movies, .related-posts, .movie-related, .related"
-      ).first();
-
-  if (!container.length) {
-    return undefined;
+        .nextAll(".movie_horizontal")
+        .toArray();
+    }
   }
 
-  let anchors = container.find(".col-auto a[href]");
-  if (!anchors.length) {
-    anchors = container.find("a[href]");
+  if (containers.length === 0) {
+    containers = $(
+      ".related-movies, .related-posts, .movie-related, .related, .movie_horizontal"
+    ).toArray();
+  }
+
+  if (containers.length === 0) {
+    return undefined;
   }
 
   const related: NonNullable<Info["related"]> = [];
   const seen = new Set<string>();
 
-  anchors.each((_index: number, element: any) => {
-    const anchor = $(element);
+  containers.forEach((element: any) => {
+    const item = $(element);
+    const anchor =
+      item.find(".movie_horizontal-title a[href]").first() ||
+      item.find("a[href]").first();
     const href = anchor.attr("href") || "";
     const resolved = resolveUrl(href, baseUrl);
     if (!isDetailLink(resolved, baseUrl)) return;
     if (seen.has(resolved)) return;
 
     const title =
+      anchor.text().trim() ||
       anchor.attr("aria-label") ||
       anchor.attr("title") ||
-      anchor.text().trim();
+      "";
     if (!title) return;
 
-    const image = extractImage(anchor, baseUrl);
+    const image = extractImage(item, baseUrl);
     const type = /\/serie-tv\//i.test(resolved) ? "series" : "movie";
 
     related.push({
@@ -328,6 +335,11 @@ export const getMeta = async function ({
     const imdbId = extractImdbId(html);
     const rating = $(".label.imdb").first().text().trim() || "";
 
+    const yearRaw = extractDetailValue($, "Anno");
+    const runtime = extractDetailValue($, "Durata");
+    const country = extractDetailValue($, "Paese");
+    const director =
+      extractDetailValue($, "Regista") || extractDetailValue($, "Regia");
     const genres = extractDetailList($, "Genere");
     const tagKeys = buildTagKeys(genres);
     const tags = genres.length > 0 ? genres : undefined;
@@ -374,6 +386,10 @@ export const getMeta = async function ({
       image,
       poster: image,
       imdbId,
+      year: yearRaw || undefined,
+      runtime: runtime || undefined,
+      country: country || undefined,
+      director: director || undefined,
       type: isSeries ? "series" : "movie",
       rating,
       genres,
