@@ -121,7 +121,7 @@ const extractDetailList = (
   if (!raw) return [];
   return raw
     .split("/")
-    .map((value) => value.trim())
+    .map((value: string) => value.trim())
     .filter(Boolean);
 };
 
@@ -242,7 +242,7 @@ export const getMeta = async function ({
     const cast = castRaw
       ? castRaw
           .split(",")
-          .map((value) => value.trim())
+          .map((value: string) => value.trim())
           .filter(Boolean)
       : [];
 
