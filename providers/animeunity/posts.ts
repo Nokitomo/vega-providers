@@ -40,6 +40,11 @@ type ArchiveFilters = {
   season?: string;
 };
 
+type ArchiveResponse = {
+  records: any[];
+  total?: number;
+};
+
 type QueryParams = {
   get: (key: string) => string | null;
   has: (key: string) => boolean;
@@ -532,10 +537,12 @@ async function fetchArchive({
   page,
   providerContext,
   filters,
+  random,
 }: {
   page: number;
   providerContext: ProviderContext;
   filters?: ArchiveFilters;
+  random?: boolean;
 }): Promise<Post[]> {
   const { axios } = providerContext;
   const { baseHost } = await resolveBaseUrls(providerContext);
@@ -554,11 +561,16 @@ async function fetchArchive({
   };
 
   const requestRecords = async (
-    session: AnimeunitySession & { csrfToken?: string }
-  ): Promise<any[] | null> => {
+    session: AnimeunitySession & { csrfToken?: string },
+    targetOffset: number
+  ): Promise<ArchiveResponse | null> => {
     try {
       const headers = buildSessionHeaders(session, baseHost);
-      const res = await axios.post(`${baseHost}/archivio/get-animes`, payload, {
+      const requestPayload = {
+        ...payload,
+        offset: targetOffset,
+      };
+      const res = await axios.post(`${baseHost}/archivio/get-animes`, requestPayload, {
         headers: {
           ...headers,
           "Content-Type": "application/json",
@@ -567,21 +579,51 @@ async function fetchArchive({
         withCredentials: true,
       });
       const records = res?.data?.records;
-      return Array.isArray(records) ? records : null;
+      const total =
+        typeof res?.data?.tot === "number" ? res.data.tot : undefined;
+      const parsed = Array.isArray(records) ? records : null;
+      if (!parsed) {
+        return null;
+      }
+      return { records: parsed, total };
     } catch (_) {
       return null;
     }
   };
 
   let session = await getCachedSession(axios, baseHost);
-  let records = await requestRecords(session);
+  let response = await requestRecords(session, offset);
 
-  if (!records) {
+  if (!response) {
     session = await getCachedSession(axios, baseHost, true);
-    records = await requestRecords(session);
+    response = await requestRecords(session, offset);
   }
 
-  return parseArchiveRecords(records || [], baseHost);
+  if (!response) {
+    return [];
+  }
+
+  if (!random) {
+    return parseArchiveRecords(response.records || [], baseHost);
+  }
+
+  const total = response.total ?? response.records.length;
+  const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const randomPage = 1 + Math.floor(Math.random() * maxPage);
+  if (randomPage === 1 || maxPage === 1) {
+    return parseArchiveRecords(response.records || [], baseHost);
+  }
+
+  const randomOffset = Math.max(0, (randomPage - 1) * PAGE_SIZE);
+  let randomResponse = await requestRecords(session, randomOffset);
+  if (!randomResponse) {
+    session = await getCachedSession(axios, baseHost, true);
+    randomResponse = await requestRecords(session, randomOffset);
+  }
+  return parseArchiveRecords(
+    randomResponse?.records || response.records || [],
+    baseHost
+  );
 }
 
 export const getPosts = async function ({
@@ -627,7 +669,9 @@ export const getPosts = async function ({
         return await fetchArchive({
           page,
           providerContext,
-          filters: parsed.params.size > 0 ? buildArchiveFilters(parsed.params) : undefined,
+          filters:
+            parsed.params.size > 0 ? buildArchiveFilters(parsed.params) : undefined,
+          random: parseBooleanParam(parsed.params.get("random")) === true,
         });
       default:
         return await fetchLatest({ page, providerContext });
