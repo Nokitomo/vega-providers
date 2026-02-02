@@ -191,7 +191,9 @@ const resolveSubtitleType = (fileUrl: string): TextTracks[0]["type"] => {
 const parseTracksFromDecoded = (decoded: string): TextTracks => {
   if (!decoded) return [];
   const tracks: TextTracks = [];
-  const trackBlockMatch = decoded.match(/tracks\s*:\s*\[(.*?)\]/s);
+  const trackBlockMatch = decoded.match(
+    /tracks\s*:\s*\[([\s\S]*?)\]/
+  );
   const block = trackBlockMatch ? trackBlockMatch[1] : "";
   if (!block) {
     return [];
