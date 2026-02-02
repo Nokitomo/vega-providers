@@ -220,6 +220,35 @@ const parseTablePosts = (
   });
 };
 
+const parseTrendingPosts = (
+  $: any,
+  baseUrl: string,
+  posts: Post[],
+  seen: Set<string>
+): void => {
+  const container = $("#trending").first();
+  if (!container.length) return;
+  container.find(".swiper-slide").each((_index: number, element: any) => {
+    const item = $(element);
+    const anchor = item.find("a[href]").first();
+    const href = anchor.attr("href") || "";
+    const resolved = stripHash(resolveUrl(href, baseUrl));
+    if (!isDetailLink(resolved, baseUrl)) return;
+
+    const title =
+      anchor.attr("title") ||
+      anchor.text().trim() ||
+      item.find(".movie-title a").first().text().trim();
+    const image = extractImage(item.find(".movie-poster").first(), baseUrl);
+
+    addPost(posts, seen, {
+      title: title,
+      link: resolved,
+      image: image,
+    });
+  });
+};
+
 const parseFallbackPosts = (
   $: any,
   baseUrl: string,
@@ -261,6 +290,35 @@ const parsePostsFromHtml = (
 
   return posts;
 };
+
+const fetchTrendingPosts = async ({
+  baseUrl,
+  providerContext,
+  signal,
+}: {
+  baseUrl: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<Post[]> => {
+  const { axios, commonHeaders, cheerio } = providerContext;
+  const res = await axios.get(baseUrl, {
+    headers: {
+      ...commonHeaders,
+      Referer: `${baseUrl}/`,
+    },
+    timeout: REQUEST_TIMEOUT,
+    signal,
+  });
+  const html = typeof res.data === "string" ? res.data : String(res.data ?? "");
+  const $ = cheerio.load(html || "");
+  const posts: Post[] = [];
+  const seen = new Set<string>();
+  parseTrendingPosts($, baseUrl, posts, seen);
+  return posts;
+};
+
+const isTrendingFilter = (filter: string): boolean =>
+  (filter || "").trim().toLowerCase() === "trending";
 
 const extractMaxPageFromHtml = (
   html: string,
@@ -365,6 +423,14 @@ export const getPosts = async function ({
     if (signal?.aborted) return [];
     const baseUrl = await resolveBaseUrl(providerContext);
     const parsedFilter = parseFilterRandom(filter);
+
+    if (isTrendingFilter(parsedFilter.filter)) {
+      return await fetchTrendingPosts({
+        baseUrl,
+        providerContext,
+        signal,
+      });
+    }
 
     if (parsedFilter.random && isArchiveFilter(parsedFilter.filter)) {
       return await fetchRandomArchivePosts({
