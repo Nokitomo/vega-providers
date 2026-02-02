@@ -20,11 +20,6 @@ export const catalog = [
     filter: "film?tipo=2",
   },
   {
-    title: "Archive",
-    titleKey: "Archive",
-    filter: "catalog/all",
-  },
-  {
     title: "Comedy",
     titleKey: "Comedy",
     filter: "commedia",
@@ -38,6 +33,11 @@ export const catalog = [
     title: "Science Fiction",
     titleKey: "Science Fiction",
     filter: "fantascienza",
+  },
+  {
+    title: "Archive",
+    titleKey: "Archive",
+    filter: "catalog/all",
   },
 ];
 
