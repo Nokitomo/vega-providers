@@ -1,8 +1,13 @@
 export const catalog = [
   {
-    title: "Titoli del momento",
-    titleKey: "Trending Titles",
-    filter: "trending",
+    title: "Serie TV del momento",
+    titleKey: "Trending TV Series",
+    filter: "catalog/all?sorting=popserie",
+  },
+  {
+    title: "Film del momento",
+    titleKey: "Trending Movies",
+    filter: "catalog/all?sorting=popfilm",
   },
   {
     title: "Movie",
