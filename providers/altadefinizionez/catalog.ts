@@ -1,5 +1,10 @@
 export const catalog = [
   {
+    title: "Titoli del momento",
+    titleKey: "Trending Titles",
+    filter: "trending",
+  },
+  {
     title: "Movie",
     titleKey: "Movie",
     filter: "film?tipo=1",
