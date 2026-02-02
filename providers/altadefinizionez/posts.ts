@@ -4,6 +4,7 @@ const DEFAULT_BASE_URL = "https://altadefinizionez.sbs";
 const REQUEST_TIMEOUT = 10000;
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
+const HERO_RANDOM_FLAG = "random";
 
 const resolveBaseUrl = async (
   providerContext: ProviderContext
@@ -26,6 +27,48 @@ const resolveUrl = (href: string, baseUrl: string): string => {
 };
 
 const stripHash = (href: string): string => href.split("#")[0];
+
+const parseBooleanFlag = (value?: string): boolean =>
+  value === "1" || value === "true" || value === "yes";
+
+const parseFilterRandom = (
+  rawFilter: string
+): { filter: string; random: boolean } => {
+  const trimmed = (rawFilter || "").trim();
+  const queryIndex = trimmed.indexOf("?");
+  if (queryIndex === -1) {
+    return { filter: trimmed, random: false };
+  }
+  const path = trimmed.slice(0, queryIndex);
+  const rawQuery = trimmed.slice(queryIndex + 1);
+  if (!rawQuery) {
+    return { filter: trimmed, random: false };
+  }
+  const kept: string[] = [];
+  let random = false;
+  rawQuery
+    .split("&")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [rawKey, rawValue = ""] = part.split("=");
+      const key = decodeURIComponent(rawKey || "").toLowerCase();
+      const value = decodeURIComponent(rawValue || "");
+      if (key === HERO_RANDOM_FLAG) {
+        random = parseBooleanFlag(value);
+      } else if (rawKey) {
+        kept.push(part);
+      }
+    });
+  const filter = kept.length > 0 ? `${path}?${kept.join("&")}` : path;
+  return { filter, random };
+};
+
+const isArchiveFilter = (filter: string): boolean => {
+  const [path] = (filter || "").split("?");
+  const cleaned = path.replace(/^\/+/, "").replace(/\/+$/, "");
+  return cleaned.toLowerCase() === "catalog/all";
+};
 
 const isDetailLink = (href: string, baseUrl: string): boolean => {
   if (!href) return false;
@@ -219,6 +262,93 @@ const parsePostsFromHtml = (
   return posts;
 };
 
+const extractMaxPageFromHtml = (
+  html: string,
+  cheerio: ProviderContext["cheerio"]
+): number => {
+  const $ = cheerio.load(html || "");
+  const pageNumbers = $("a[href*=\"/page/\"]")
+    .map((_index: number, element: any) => {
+      const href = $(element).attr("href") || "";
+      const match = href.match(/\/page\/(\d+)/i);
+      return match ? Number.parseInt(match[1], 10) : null;
+    })
+    .get()
+    .filter((value: number | null) => Number.isFinite(value)) as number[];
+  if (pageNumbers.length === 0) return 1;
+  const maxPage = Math.max(...pageNumbers);
+  return Number.isFinite(maxPage) && maxPage > 0 ? maxPage : 1;
+};
+
+const fetchPostsPage = async ({
+  baseUrl,
+  filter,
+  page,
+  providerContext,
+  signal,
+}: {
+  baseUrl: string;
+  filter: string;
+  page: number;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<{ posts: Post[]; html: string }> => {
+  const { axios, commonHeaders, cheerio } = providerContext;
+  const url = buildListUrl(baseUrl, filter, page);
+  const res = await axios.get(url, {
+    headers: {
+      ...commonHeaders,
+      Referer: `${baseUrl}/`,
+    },
+    timeout: REQUEST_TIMEOUT,
+    signal,
+  });
+  const html = typeof res.data === "string" ? res.data : String(res.data ?? "");
+  return {
+    posts: parsePostsFromHtml(html, baseUrl, cheerio),
+    html,
+  };
+};
+
+const fetchRandomArchivePosts = async ({
+  baseUrl,
+  filter,
+  providerContext,
+  signal,
+}: {
+  baseUrl: string;
+  filter: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<Post[]> => {
+  const { cheerio } = providerContext;
+  const firstPage = await fetchPostsPage({
+    baseUrl,
+    filter,
+    page: 1,
+    providerContext,
+    signal,
+  });
+  const maxPage = extractMaxPageFromHtml(firstPage.html, cheerio);
+  if (maxPage <= 1) {
+    return firstPage.posts;
+  }
+  const randomPage = 1 + Math.floor(Math.random() * maxPage);
+  if (randomPage === 1) {
+    return firstPage.posts;
+  }
+  const randomPageData = await fetchPostsPage({
+    baseUrl,
+    filter,
+    page: randomPage,
+    providerContext,
+    signal,
+  });
+  return randomPageData.posts.length > 0
+    ? randomPageData.posts
+    : firstPage.posts;
+};
+
 export const getPosts = async function ({
   filter,
   page,
@@ -233,24 +363,26 @@ export const getPosts = async function ({
 }): Promise<Post[]> {
   try {
     if (signal?.aborted) return [];
-    const { axios, commonHeaders, cheerio } = providerContext;
     const baseUrl = await resolveBaseUrl(providerContext);
-    const url = buildListUrl(baseUrl, filter, page);
+    const parsedFilter = parseFilterRandom(filter);
 
-    const res = await axios.get(url, {
-      headers: {
-        ...commonHeaders,
-        Referer: `${baseUrl}/`,
-      },
-      timeout: REQUEST_TIMEOUT,
+    if (parsedFilter.random && isArchiveFilter(parsedFilter.filter)) {
+      return await fetchRandomArchivePosts({
+        baseUrl,
+        filter: parsedFilter.filter,
+        providerContext,
+        signal,
+      });
+    }
+
+    const result = await fetchPostsPage({
+      baseUrl,
+      filter: parsedFilter.filter,
+      page,
+      providerContext,
       signal,
     });
-
-    return parsePostsFromHtml(
-      typeof res.data === "string" ? res.data : String(res.data ?? ""),
-      baseUrl,
-      cheerio
-    );
+    return result.posts;
   } catch (err) {
     console.error("altadefinizionez posts error", err);
     return [];
