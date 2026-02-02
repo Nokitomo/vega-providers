@@ -461,9 +461,10 @@ export const getMeta = async function ({
     const image =
       (posterRaw ? resolveUrl(posterRaw, baseUrl) : "") ||
       (jsonLdImages[0] ? resolveUrl(jsonLdImages[0], baseUrl) : "");
-    const background = backgroundRaw
-      ? resolveUrl(backgroundRaw, baseUrl)
-      : "";
+    const background =
+      (backgroundRaw ? resolveUrl(backgroundRaw, baseUrl) : "") ||
+      (jsonLdImages[0] ? resolveUrl(jsonLdImages[0], baseUrl) : "") ||
+      image;
 
     const synopsis =
       cleanText($(".movie_entry-plot").text() || "") || jsonLdDescription;
