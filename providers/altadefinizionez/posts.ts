@@ -1,4 +1,13 @@
 import { Post, ProviderContext } from "../types";
+import {
+  normalizeArchiveCountry,
+  normalizeArchiveGenre,
+  normalizeArchiveLanguage,
+  normalizeArchiveRating,
+  normalizeArchiveSorting,
+  normalizeArchiveType,
+  normalizeArchiveYear,
+} from "./filters";
 
 const DEFAULT_BASE_URL = "https://altadefinizionez.sbs";
 const REQUEST_TIMEOUT = 10000;
@@ -64,10 +73,197 @@ const parseFilterRandom = (
   return { filter, random };
 };
 
+type QueryParams = {
+  get: (key: string) => string | null;
+  getAll: (key: string) => string[];
+  entries: () => Array<[string, string[]]>;
+  has: (key: string) => boolean;
+  size: number;
+};
+
+const decodeParam = (value: string): string => {
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch (_) {
+    return value;
+  }
+};
+
+const parseQueryParams = (rawQuery: string): QueryParams => {
+  const map = new Map<string, string[]>();
+  (rawQuery || "")
+    .split("&")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .forEach((part) => {
+      const [rawKey, rawValue = ""] = part.split("=");
+      if (!rawKey) return;
+      const key = decodeParam(rawKey).trim().toLowerCase();
+      if (!key) return;
+      const value = decodeParam(rawValue);
+      const existing = map.get(key) || [];
+      existing.push(value);
+      map.set(key, existing);
+    });
+
+  return {
+    get: (key: string) => {
+      const values = map.get(key.toLowerCase());
+      return values && values.length > 0 ? values[0] : null;
+    },
+    getAll: (key: string) => {
+      const values = map.get(key.toLowerCase());
+      return values ? [...values] : [];
+    },
+    entries: () => Array.from(map.entries()),
+    has: (key: string) => map.has(key.toLowerCase()),
+    size: map.size,
+  };
+};
+
+const parseFilterParams = (filter: string): { path: string; params: QueryParams } => {
+  const queryIndex = filter.indexOf("?");
+  const path = queryIndex >= 0 ? filter.slice(0, queryIndex) : filter;
+  const rawQuery = queryIndex >= 0 ? filter.slice(queryIndex + 1) : "";
+  return { path, params: parseQueryParams(rawQuery) };
+};
+
 const isArchiveFilter = (filter: string): boolean => {
   const [path] = (filter || "").split("?");
   const cleaned = path.replace(/^\/+/, "").replace(/\/+$/, "");
   return cleaned.toLowerCase() === "catalog/all";
+};
+
+const ARCHIVE_PARAM_KEYS = new Set([
+  "tipo",
+  "type",
+  "category",
+  "content",
+  "media",
+  "genere",
+  "genre",
+  "genres",
+  "years",
+  "year",
+  "anno",
+  "rating",
+  "score",
+  "valutazione",
+  "language",
+  "audio",
+  "lang",
+  "country",
+  "paese",
+  "nation",
+  "sorting",
+  "sort",
+  "order",
+]);
+
+const splitMultiValues = (value: string): string[] =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const normalizeArchiveFilter = (filter: string): string => {
+  if (!isArchiveFilter(filter)) return filter;
+  const parsed = parseFilterParams(filter);
+  if (parsed.params.size === 0) return filter;
+
+  const pairs: string[] = [];
+  const addPair = (key: string, value: string): void => {
+    if (!key) return;
+    pairs.push(`${key}=${encodeURIComponent(value)}`);
+  };
+
+  const typeValue =
+    parsed.params.get("tipo") ||
+    parsed.params.get("type") ||
+    parsed.params.get("category") ||
+    parsed.params.get("content") ||
+    parsed.params.get("media");
+  const normalizedType = normalizeArchiveType(typeValue);
+  if (normalizedType) {
+    addPair("tipo", normalizedType);
+  }
+
+  const rawGenres = [
+    ...parsed.params.getAll("genere"),
+    ...parsed.params.getAll("genre"),
+    ...parsed.params.getAll("genres"),
+  ];
+  const normalizedGenres = new Set<string>();
+  rawGenres.forEach((raw) => {
+    splitMultiValues(raw).forEach((value) => {
+      const normalized = normalizeArchiveGenre(value);
+      if (normalized) normalizedGenres.add(normalized);
+    });
+  });
+  normalizedGenres.forEach((genreId) => {
+    addPair("genere", genreId);
+  });
+
+  const yearValue =
+    parsed.params.get("years") ||
+    parsed.params.get("year") ||
+    parsed.params.get("anno");
+  const normalizedYear = normalizeArchiveYear(yearValue);
+  if (normalizedYear) {
+    addPair("years", normalizedYear);
+  }
+
+  const ratingValue =
+    parsed.params.get("rating") ||
+    parsed.params.get("score") ||
+    parsed.params.get("valutazione");
+  const normalizedRating = normalizeArchiveRating(ratingValue);
+  if (normalizedRating) {
+    addPair("rating", normalizedRating);
+  }
+
+  const languageValue =
+    parsed.params.get("language") ||
+    parsed.params.get("audio") ||
+    parsed.params.get("lang");
+  const normalizedLanguage = normalizeArchiveLanguage(languageValue);
+  if (normalizedLanguage) {
+    addPair("language", normalizedLanguage);
+  }
+
+  const countryValue =
+    parsed.params.get("country") ||
+    parsed.params.get("paese") ||
+    parsed.params.get("nation");
+  const normalizedCountry = normalizeArchiveCountry(countryValue);
+  if (normalizedCountry) {
+    addPair("country", normalizedCountry);
+  }
+
+  const sortingValue =
+    parsed.params.get("sorting") ||
+    parsed.params.get("sort") ||
+    parsed.params.get("order");
+  const normalizedSorting = normalizeArchiveSorting(sortingValue);
+  if (normalizedSorting) {
+    addPair("sorting", normalizedSorting);
+  }
+
+  parsed.params.entries().forEach(([key, values]) => {
+    if (ARCHIVE_PARAM_KEYS.has(key)) return;
+    values.forEach((value) => {
+      if (!key) return;
+      if (!value) {
+        pairs.push(encodeURIComponent(key));
+      } else {
+        pairs.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+      }
+    });
+  });
+
+  const query = pairs.join("&");
+  return query ? `${parsed.path}?${query}` : parsed.path;
 };
 
 const isDetailLink = (href: string, baseUrl: string): boolean => {
@@ -423,6 +619,7 @@ export const getPosts = async function ({
     if (signal?.aborted) return [];
     const baseUrl = await resolveBaseUrl(providerContext);
     const parsedFilter = parseFilterRandom(filter);
+    const normalizedFilter = normalizeArchiveFilter(parsedFilter.filter);
 
     if (isTrendingFilter(parsedFilter.filter)) {
       return await fetchTrendingPosts({
@@ -432,10 +629,10 @@ export const getPosts = async function ({
       });
     }
 
-    if (parsedFilter.random && isArchiveFilter(parsedFilter.filter)) {
+    if (parsedFilter.random && isArchiveFilter(normalizedFilter)) {
       return await fetchRandomArchivePosts({
         baseUrl,
-        filter: parsedFilter.filter,
+        filter: normalizedFilter,
         providerContext,
         signal,
       });
@@ -443,7 +640,7 @@ export const getPosts = async function ({
 
     const result = await fetchPostsPage({
       baseUrl,
-      filter: parsedFilter.filter,
+      filter: normalizedFilter,
       page,
       providerContext,
       signal,
