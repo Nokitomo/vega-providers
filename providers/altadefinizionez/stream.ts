@@ -33,6 +33,13 @@ const normalizeStreamLink = (href: string, baseUrl: string): string => {
   return new URL(href, baseUrl).href;
 };
 
+const resolveMediaUrl = (href: string, baseUrl: string): string => {
+  if (!href) return "";
+  if (href.startsWith("//")) return `https:${href}`;
+  if (/^https?:\/\//i.test(href)) return href;
+  return new URL(href, baseUrl).href;
+};
+
 const isSuperVideo = (href: string): boolean =>
   /supervideo\./i.test(href) || href.toLowerCase().includes("supervideo");
 
@@ -188,7 +195,10 @@ const resolveSubtitleType = (fileUrl: string): TextTracks[0]["type"] => {
   return "text/vtt";
 };
 
-const parseTracksFromDecoded = (decoded: string): TextTracks => {
+const parseTracksFromDecoded = (
+  decoded: string,
+  baseUrl?: string
+): TextTracks => {
   if (!decoded) return [];
   const tracks: TextTracks = [];
   const trackBlockMatch = decoded.match(
@@ -208,11 +218,12 @@ const parseTracksFromDecoded = (decoded: string): TextTracks => {
     if (!file || kind.toLowerCase() !== "captions") {
       continue;
     }
+    const resolved = baseUrl ? resolveMediaUrl(file, baseUrl) : file;
     tracks.push({
-      title: label || file,
+      title: label || resolved || file,
       language: normalizeSubtitleLanguage(label || "", file),
       type: resolveSubtitleType(file),
-      uri: file,
+      uri: resolved || file,
     });
   }
   if (tracks.length > 0) {
@@ -223,13 +234,15 @@ const parseTracksFromDecoded = (decoded: string): TextTracks => {
   let urlMatch: RegExpExecArray | null = null;
   while ((urlMatch = looseRegex.exec(block))) {
     const file = urlMatch[0];
-    if (seen.has(file)) continue;
-    seen.add(file);
+    const resolved = baseUrl ? resolveMediaUrl(file, baseUrl) : file;
+    const key = resolved || file;
+    if (seen.has(key)) continue;
+    seen.add(key);
     tracks.push({
-      title: file,
+      title: resolved || file,
       language: normalizeSubtitleLanguage("", file),
       type: resolveSubtitleType(file),
-      uri: file,
+      uri: resolved || file,
     });
   }
   return tracks;
@@ -257,26 +270,64 @@ const decodeSuperVideo = (html: string): string => {
   return decoded;
 };
 
-const extractSuperVideoData = (html: string): {
+const extractSuperVideoData = (
+  html: string,
+  baseUrl?: string
+): {
   streamUrl: string;
   subtitles: TextTracks;
 } => {
   const decoded = decodeSuperVideo(html);
   const streamUrl =
     decoded.match(/file:\s*"([^"]+\.m3u8[^"]*)"/i)?.[1] || "";
-  const subtitles = parseTracksFromDecoded(decoded);
+  const subtitles = parseTracksFromDecoded(decoded, baseUrl);
   return { streamUrl, subtitles };
 };
 
-const extractDroploadData = (html: string): {
+const extractDroploadData = (
+  html: string,
+  baseUrl?: string
+): {
   streamUrl: string;
   subtitles: TextTracks;
 } => {
   const decoded = unpackPacker(html);
   return {
     streamUrl: extractPackedStreamUrl(decoded),
-    subtitles: parseTracksFromDecoded(decoded),
+    subtitles: parseTracksFromDecoded(decoded, baseUrl),
   };
+};
+
+const extractDroploadCookies = (html: string): Record<string, string> => {
+  const cookies: Record<string, string> = {};
+  if (!html) return cookies;
+  const jqueryRegex = /\$\.cookie\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]/gi;
+  let match: RegExpExecArray | null = null;
+  while ((match = jqueryRegex.exec(html))) {
+    const name = match[1];
+    const value = match[2];
+    if (name) {
+      cookies[name] = value;
+    }
+  }
+  const docRegex =
+    /document\.cookie\s*=\s*['"]([^=;'"]+)=([^;'"]*)/gi;
+  while ((match = docRegex.exec(html))) {
+    const name = match[1];
+    const value = match[2];
+    if (name) {
+      cookies[name] = value;
+    }
+  }
+  return cookies;
+};
+
+const buildCookieHeader = (cookies: Record<string, string>): string => {
+  const entries = Object.entries(cookies).filter(
+    ([key, value]) => key && value != null
+  );
+  if (entries.length === 0) return "";
+  return entries.map(([key, value]) => `${key}=${value}`).join("; ");
 };
 
 const extractMostraguardaStreams = async (
@@ -315,7 +366,10 @@ const extractMostraguardaStreams = async (
           signal,
         });
 
-        const parsed = extractSuperVideoData(res.data || "");
+        const parsed = extractSuperVideoData(
+          res.data || "",
+          new URL(normalized).origin
+        );
         const streamUrl =
           parsed.streamUrl ||
           (await extractors.superVideoExtractor(res.data));
@@ -346,18 +400,36 @@ const extractMostraguardaStreams = async (
           signal,
         });
 
-        const parsed = extractDroploadData(res.data || "");
+        const droploadOrigin = new URL(normalized).origin;
+        const parsed = extractDroploadData(res.data || "", droploadOrigin);
         const streamUrl = parsed.streamUrl;
         if (streamUrl) {
           const type = streamUrl.toLowerCase().includes(".m3u8")
             ? "m3u8"
             : "mp4";
+          const cookies = extractDroploadCookies(res.data || "");
+          const cookieHeader = buildCookieHeader(cookies);
+          const headers: Record<string, string> = {
+            Referer: normalized,
+            Origin: droploadOrigin,
+          };
+          const userAgent =
+            typeof commonHeaders["User-Agent"] === "string"
+              ? commonHeaders["User-Agent"]
+              : "";
+          if (userAgent) {
+            headers["User-Agent"] = userAgent;
+          }
+          if (cookieHeader) {
+            headers["Cookie"] = cookieHeader;
+          }
           addStream({
             server: `Dropload ${droploadIndex}`,
             link: streamUrl,
             type,
             subtitles:
               parsed.subtitles.length > 0 ? parsed.subtitles : undefined,
+            headers,
           });
           droploadIndex += 1;
         }
