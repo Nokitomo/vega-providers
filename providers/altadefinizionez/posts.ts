@@ -110,9 +110,9 @@ const buildListUrl = (baseUrl: string, filter: string, page: number): string => 
 
   if (cleanedPath.startsWith("catalog/")) {
     if (safePage > 1) {
-      return `${baseUrl}/${cleanedPath}/page/${safePage}/`;
+      return `${baseUrl}/${cleanedPath}/page/${safePage}/${queryPart ? `?${queryPart}` : ""}`;
     }
-    return `${baseUrl}/${cleanedPath}/`;
+    return `${baseUrl}/${cleanedPath}/${queryPart ? `?${queryPart}` : ""}`;
   }
 
   if (safePage > 1) {
