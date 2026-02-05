@@ -342,5 +342,13 @@
     "icon": "",
     "type": "italy",
     "disabled": false
+  },
+  {
+    "display_name": "StreamingUnity",
+    "value": "streamingunity",
+    "version": "1.0.0",
+    "icon": "",
+    "type": "italy",
+    "disabled": false
   }
 ]
