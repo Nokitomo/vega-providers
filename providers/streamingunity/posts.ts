@@ -11,6 +11,17 @@ import {
   resolveTitleSlug,
   buildTitleUrl,
 } from "./utils";
+import {
+  normalizeArchiveAge,
+  normalizeArchiveGenre,
+  normalizeArchiveQuality,
+  normalizeArchiveScore,
+  normalizeArchiveService,
+  normalizeArchiveSort,
+  normalizeArchiveType,
+  normalizeArchiveViews,
+  normalizeArchiveYear,
+} from "./filters";
 
 const DEFAULT_CDN_URL = "https://cdn.streamingunity.tv";
 const PAGE_SIZE = 60;
@@ -18,16 +29,17 @@ const PAGE_SIZE = 60;
 const buildOffset = (page: number): number =>
   Math.max(0, (Math.max(1, page) - 1) * PAGE_SIZE);
 
-const normalizeType = (value: string | null): "tv" | "movie" | undefined => {
-  if (!value) return undefined;
-  const normalized = value.toLowerCase();
-  if (["tv", "series", "show", "serie", "serietv", "tvshow"].includes(normalized)) {
-    return "tv";
-  }
-  if (["movie", "movies", "film", "films"].includes(normalized)) {
-    return "movie";
-  }
-  return undefined;
+type ArchiveFilters = {
+  search?: string;
+  sort?: string;
+  type?: "tv" | "movie";
+  genres?: string[];
+  year?: string;
+  score?: string;
+  views?: string;
+  service?: string;
+  quality?: string;
+  age?: string;
 };
 
 const parseFilter = (filter: string): { path: string; params: URLSearchParams } => {
@@ -40,6 +52,76 @@ const parseFilter = (filter: string): { path: string; params: URLSearchParams } 
   return {
     path,
     params: new URLSearchParams(queryPart || ""),
+  };
+};
+
+const splitMultiValues = (value: string): string[] =>
+  value
+    .split(/[,|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const collectParamValues = (
+  params: URLSearchParams,
+  keys: string[]
+): string[] => {
+  if (!keys.length) return [];
+  const targets = keys.map((key) => key.toLowerCase());
+  const values: string[] = [];
+  params.forEach((value, key) => {
+    const normalizedKey = key.toLowerCase();
+    if (
+      targets.includes(normalizedKey) ||
+      targets.some((target) => normalizedKey.startsWith(`${target}[`))
+    ) {
+      values.push(value);
+    }
+  });
+  return values.filter(Boolean);
+};
+
+const normalizeArchiveFilters = (params: URLSearchParams): ArchiveFilters => {
+  const search =
+    params.get("search") ||
+    params.get("q") ||
+    params.get("query") ||
+    params.get("title") ||
+    "";
+
+  const sort = normalizeArchiveSort(
+    params.get("sort") || params.get("sort_by") || params.get("order")
+  );
+
+  const type = normalizeArchiveType(params.get("type") || params.get("category"));
+
+  const genres = new Set<string>();
+  collectParamValues(params, ["genre", "genres"]).forEach((raw) => {
+    splitMultiValues(raw).forEach((value) => {
+      const normalized = normalizeArchiveGenre(value);
+      if (normalized) genres.add(normalized);
+    });
+  });
+
+  const year = normalizeArchiveYear(params.get("year") || params.get("years"));
+  const score = normalizeArchiveScore(params.get("score") || params.get("rating"));
+  const views = normalizeArchiveViews(params.get("views"));
+  const service = normalizeArchiveService(params.get("service"));
+  const quality = normalizeArchiveQuality(params.get("quality"));
+  const age = normalizeArchiveAge(
+    params.get("age") || params.get("age_min") || params.get("rating_age")
+  );
+
+  return {
+    search: search.trim() || undefined,
+    sort,
+    type: type === "tv" || type === "movie" ? type : undefined,
+    genres: genres.size > 0 ? Array.from(genres) : undefined,
+    year,
+    score,
+    views,
+    service,
+    quality,
+    age,
   };
 };
 
@@ -189,39 +271,60 @@ const fetchHomePosts = async ({
 
 const fetchArchivePosts = async ({
   baseUrl,
-  type,
+  filters,
   providerContext,
   signal,
   page,
 }: {
   baseUrl: string;
-  type?: "tv" | "movie";
+  filters?: ArchiveFilters;
   providerContext: ProviderContext;
   signal: AbortSignal;
   page: number;
 }): Promise<Post[]> => {
   const offset = buildOffset(page);
   let cdnUrl = DEFAULT_CDN_URL;
+  const archiveFilters = filters || {};
+
+  const buildArchiveParams = (includeOffset: boolean): URLSearchParams => {
+    const params = new URLSearchParams();
+    if (archiveFilters.search) params.set("search", archiveFilters.search);
+    if (archiveFilters.sort) params.set("sort", archiveFilters.sort);
+    if (archiveFilters.type) params.set("type", archiveFilters.type);
+    if (archiveFilters.year) params.set("year", archiveFilters.year);
+    if (archiveFilters.score) params.set("score", archiveFilters.score);
+    if (archiveFilters.views) params.set("views", archiveFilters.views);
+    if (archiveFilters.service) params.set("service", archiveFilters.service);
+    if (archiveFilters.quality) params.set("quality", archiveFilters.quality);
+    if (archiveFilters.age) params.set("age", archiveFilters.age);
+    if (archiveFilters.genres && archiveFilters.genres.length > 0) {
+      archiveFilters.genres.forEach((genre) => {
+        if (genre) params.append("genre[]", genre);
+      });
+    }
+    if (includeOffset && offset > 0) {
+      params.set("offset", String(offset));
+    }
+    return params;
+  };
 
   if (page <= 1) {
-    const query = type ? `?type=${encodeURIComponent(type)}` : "";
-    const archiveUrl = buildLocaleUrl(`/archive${query}`, baseUrl);
+    const params = buildArchiveParams(false);
+    const query = params.toString();
+    const archiveUrl = buildLocaleUrl(
+      `/archive${query ? `?${query}` : ""}`,
+      baseUrl
+    );
     const html = await fetchHtml(archiveUrl, providerContext, signal);
     const pageData = extractInertiaPage(html, providerContext.cheerio);
     cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
     const titles = pageData?.props?.titles || [];
-    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
+    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
     if (posts.length > 0) return posts;
   }
 
   try {
-    const params = new URLSearchParams();
-    if (type) {
-      params.set("type", type);
-    }
-    if (offset > 0) {
-      params.set("offset", String(offset));
-    }
+    const params = buildArchiveParams(true);
     const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/archive${
       params.toString() ? `?${params.toString()}` : ""
     }`;
@@ -231,7 +334,7 @@ const fetchArchivePosts = async ({
       signal,
     });
     const apiTitles = res?.data?.titles || [];
-    return mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, type);
+    return mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, archiveFilters.type);
   } catch (err) {
     console.error("streamingunity archive fallback error", err);
     return [];
@@ -255,14 +358,14 @@ export const getPosts = async function ({
 
     const baseUrl = await resolveBaseUrl(providerContext);
     const parsed = parseFilter(filter);
-    const type = normalizeType(parsed.params.get("type"));
+    const archiveFilters = normalizeArchiveFilters(parsed.params);
     const sliderKey = resolveSliderKey(parsed.path);
 
     if (sliderKey) {
       return await fetchHomePosts({
         baseUrl,
         sliderKey,
-        type,
+        type: archiveFilters.type,
         providerContext,
         signal,
         page,
@@ -272,7 +375,7 @@ export const getPosts = async function ({
     if (parsed.path.startsWith("archive")) {
       return await fetchArchivePosts({
         baseUrl,
-        type,
+        filters: archiveFilters,
         providerContext,
         signal,
         page,
@@ -281,7 +384,7 @@ export const getPosts = async function ({
 
     return await fetchArchivePosts({
       baseUrl,
-      type,
+      filters: archiveFilters,
       providerContext,
       signal,
       page,
