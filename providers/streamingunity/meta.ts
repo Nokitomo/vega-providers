@@ -39,6 +39,12 @@ const normalizeRuntime = (
   return trimmed || undefined;
 };
 
+const toNumber = (value: any): number | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const extractSlugFromLink = (link: string): string => {
   if (!link) return "";
   const match = link.match(/\/titles\/\d+-([^/?#]+)/i);
@@ -385,7 +391,7 @@ export const getMeta = async function ({
         },
         stats: {
           scoreRaw: title?.score != null ? String(title.score) : undefined,
-          views: viewsRaw != null ? Number(viewsRaw) : undefined,
+          views: toNumber(viewsRaw),
           members: undefined,
           favorites: undefined,
           episodesCountRaw: title?.seasons_count || undefined,
