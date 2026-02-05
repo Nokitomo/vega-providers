@@ -103,15 +103,28 @@ export const resolveTitleName = (
       .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : ""))
       .join(" ");
   };
+  const hasLatinChars = (value: string): boolean =>
+    /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value);
+  const normalizeComparable = (value: string): string =>
+    normalizeText(value).toLowerCase();
 
   const translations = title?.translations;
+  const original = String(title?.name || title?.original_name || "").trim();
+  const isValidTranslated = (value: string): boolean => {
+    if (!value) return false;
+    if (!original) return true;
+    const sameAsOriginal =
+      normalizeComparable(value) === normalizeComparable(original);
+    return !sameAsOriginal || hasLatinChars(value);
+  };
+
   const translated = getTranslationValue(translations, "name", locale);
-  if (translated) {
+  if (isValidTranslated(translated)) {
     return translated;
   }
   if (locale !== "en") {
     const english = getTranslationValue(translations, "name", "en");
-    if (english) {
+    if (isValidTranslated(english)) {
       return english;
     }
   }
@@ -123,8 +136,7 @@ export const resolveTitleName = (
   if (normalizedSlug) {
     return normalizedSlug;
   }
-  const fallback = title?.name || title?.original_name || "";
-  return String(fallback || "").trim();
+  return original;
 };
 
 export const resolveTitleSlug = (
