@@ -93,9 +93,19 @@ export const resolveTitleName = (
   title: any,
   locale: string = DEFAULT_LOCALE
 ): string => {
-  const translated = getTranslationValue(title?.translations, "name", locale);
+  const translations = title?.translations;
+  const translated = getTranslationValue(translations, "name", locale);
+  if (translated) {
+    return translated;
+  }
+  if (locale !== "en") {
+    const english = getTranslationValue(translations, "name", "en");
+    if (english) {
+      return english;
+    }
+  }
   const fallback = title?.name || title?.original_name || "";
-  return translated || String(fallback || "").trim();
+  return String(fallback || "").trim();
 };
 
 export const resolveTitleSlug = (
