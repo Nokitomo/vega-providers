@@ -93,6 +93,17 @@ export const resolveTitleName = (
   title: any,
   locale: string = DEFAULT_LOCALE
 ): string => {
+  const normalizeSlugTitle = (value: string): string => {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const normalized = raw.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!normalized) return "";
+    return normalized
+      .split(" ")
+      .map((word) => (word ? word[0].toUpperCase() + word.slice(1) : ""))
+      .join(" ");
+  };
+
   const translations = title?.translations;
   const translated = getTranslationValue(translations, "name", locale);
   if (translated) {
@@ -103,6 +114,14 @@ export const resolveTitleName = (
     if (english) {
       return english;
     }
+  }
+  const slugCandidate =
+    getTranslationValue(translations, "slug", locale) ||
+    getTranslationValue(translations, "slug", "en") ||
+    String(title?.slug || "").trim();
+  const normalizedSlug = normalizeSlugTitle(slugCandidate);
+  if (normalizedSlug) {
+    return normalizedSlug;
   }
   const fallback = title?.name || title?.original_name || "";
   return String(fallback || "").trim();
