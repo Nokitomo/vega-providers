@@ -13,6 +13,10 @@ import {
 } from "./utils";
 
 const DEFAULT_CDN_URL = "https://cdn.streamingunity.tv";
+const PAGE_SIZE = 60;
+
+const buildOffset = (page: number): number =>
+  Math.max(0, (Math.max(1, page) - 1) * PAGE_SIZE);
 
 const normalizeType = (value: string | null): "tv" | "movie" | undefined => {
   if (!value) return undefined;
@@ -138,25 +142,38 @@ const fetchHomePosts = async ({
   type,
   providerContext,
   signal,
+  page,
 }: {
   baseUrl: string;
   sliderKey: string;
   type?: "tv" | "movie";
   providerContext: ProviderContext;
   signal: AbortSignal;
+  page: number;
 }): Promise<Post[]> => {
-  const homeUrl = buildLocaleUrl("/", baseUrl);
-  const html = await fetchHtml(homeUrl, providerContext, signal);
-  const page = extractInertiaPage(html, providerContext.cheerio);
-  const cdnUrl = page?.props?.cdn_url || DEFAULT_CDN_URL;
-  const sliders = page?.props?.sliders || [];
-  const slider = findSlider(sliders, sliderKey);
-  const titles = slider?.titles || [];
-  const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
-  if (posts.length > 0) return posts;
+  const offset = buildOffset(page);
+  let cdnUrl = DEFAULT_CDN_URL;
+
+  if (page <= 1) {
+    const homeUrl = buildLocaleUrl("/", baseUrl);
+    const html = await fetchHtml(homeUrl, providerContext, signal);
+    const pageData = extractInertiaPage(html, providerContext.cheerio);
+    cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
+    const sliders = pageData?.props?.sliders || [];
+    const slider = findSlider(sliders, sliderKey);
+    const titles = slider?.titles || [];
+    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
+    if (posts.length > 0) return posts;
+  }
 
   try {
-    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/browse/${sliderKey}`;
+    const params = new URLSearchParams();
+    if (offset > 0) {
+      params.set("offset", String(offset));
+    }
+    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/browse/${sliderKey}${
+      params.toString() ? `?${params.toString()}` : ""
+    }`;
     const res = await providerContext.axios.get(apiUrl, {
       headers: providerContext.commonHeaders,
       timeout: REQUEST_TIMEOUT,
@@ -175,23 +192,39 @@ const fetchArchivePosts = async ({
   type,
   providerContext,
   signal,
+  page,
 }: {
   baseUrl: string;
   type?: "tv" | "movie";
   providerContext: ProviderContext;
   signal: AbortSignal;
+  page: number;
 }): Promise<Post[]> => {
-  const query = type ? `?type=${encodeURIComponent(type)}` : "";
-  const archiveUrl = buildLocaleUrl(`/archive${query}`, baseUrl);
-  const html = await fetchHtml(archiveUrl, providerContext, signal);
-  const page = extractInertiaPage(html, providerContext.cheerio);
-  const cdnUrl = page?.props?.cdn_url || DEFAULT_CDN_URL;
-  const titles = page?.props?.titles || [];
-  const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
-  if (posts.length > 0) return posts;
+  const offset = buildOffset(page);
+  let cdnUrl = DEFAULT_CDN_URL;
+
+  if (page <= 1) {
+    const query = type ? `?type=${encodeURIComponent(type)}` : "";
+    const archiveUrl = buildLocaleUrl(`/archive${query}`, baseUrl);
+    const html = await fetchHtml(archiveUrl, providerContext, signal);
+    const pageData = extractInertiaPage(html, providerContext.cheerio);
+    cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
+    const titles = pageData?.props?.titles || [];
+    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
+    if (posts.length > 0) return posts;
+  }
 
   try {
-    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/archive${query}`;
+    const params = new URLSearchParams();
+    if (type) {
+      params.set("type", type);
+    }
+    if (offset > 0) {
+      params.set("offset", String(offset));
+    }
+    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/archive${
+      params.toString() ? `?${params.toString()}` : ""
+    }`;
     const res = await providerContext.axios.get(apiUrl, {
       headers: providerContext.commonHeaders,
       timeout: REQUEST_TIMEOUT,
@@ -219,7 +252,6 @@ export const getPosts = async function ({
 }): Promise<Post[]> {
   try {
     if (signal?.aborted) return [];
-    if (page > 1) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
     const parsed = parseFilter(filter);
@@ -233,6 +265,7 @@ export const getPosts = async function ({
         type,
         providerContext,
         signal,
+        page,
       });
     }
 
@@ -242,6 +275,7 @@ export const getPosts = async function ({
         type,
         providerContext,
         signal,
+        page,
       });
     }
 
@@ -250,6 +284,7 @@ export const getPosts = async function ({
       type,
       providerContext,
       signal,
+      page,
     });
   } catch (err) {
     console.error("streamingunity posts error", err);
@@ -271,23 +306,19 @@ export const getSearchPosts = async function ({
 }): Promise<Post[]> {
   try {
     if (signal?.aborted) return [];
-    if (page > 1) return [];
     const query = (searchQuery || "").trim();
     if (!query) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
-    const searchUrl = buildLocaleUrl(`/search?q=${encodeURIComponent(query)}`, baseUrl);
-    const html = await fetchHtml(searchUrl, providerContext, signal);
-    const pageData = extractInertiaPage(html, providerContext.cheerio);
-    const cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
-    const titles = pageData?.props?.titles || [];
-    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl);
-    if (posts.length > 0) return posts;
+    const offset = buildOffset(page);
 
-    try {
-      const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/search?q=${encodeURIComponent(
-        query
-      )}`;
+    const fetchSearchApi = async (cdnUrl: string): Promise<Post[]> => {
+      const params = new URLSearchParams();
+      params.set("q", query);
+      if (offset > 0) {
+        params.set("offset", String(offset));
+      }
+      const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/search?${params.toString()}`;
       const res = await providerContext.axios.get(apiUrl, {
         headers: providerContext.commonHeaders,
         timeout: REQUEST_TIMEOUT,
@@ -295,6 +326,24 @@ export const getSearchPosts = async function ({
       });
       const apiTitles = res?.data?.data || res?.data?.titles || [];
       return mapTitlesToPosts(apiTitles, baseUrl, cdnUrl);
+    };
+
+    if (page <= 1) {
+      const searchUrl = buildLocaleUrl(
+        `/search?q=${encodeURIComponent(query)}`,
+        baseUrl
+      );
+      const html = await fetchHtml(searchUrl, providerContext, signal);
+      const pageData = extractInertiaPage(html, providerContext.cheerio);
+      const cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
+      const titles = pageData?.props?.titles || [];
+      const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl);
+      if (posts.length > 0) return posts;
+      return await fetchSearchApi(cdnUrl);
+    }
+
+    try {
+      return await fetchSearchApi(DEFAULT_CDN_URL);
     } catch (err) {
       console.error("streamingunity search fallback error", err);
       return [];
