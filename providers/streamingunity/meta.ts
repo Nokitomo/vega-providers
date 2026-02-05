@@ -311,6 +311,7 @@ export const getMeta = async function ({
       "cover_mobile",
       "background",
     ]);
+    const logo = pickImageByType(title?.images, cdnUrl, ["logo"]);
     const background = pickImageByType(title?.images, cdnUrl, [
       "background",
       "cover",
@@ -373,6 +374,7 @@ export const getMeta = async function ({
       title: titleName,
       synopsis: normalizeText(plot || ""),
       image: poster || background || "",
+      logo: logo || undefined,
       background: background || poster || undefined,
       poster: poster || undefined,
       imdbId: String(title?.imdb_id || ""),
