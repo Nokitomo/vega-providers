@@ -105,6 +105,8 @@ export const resolveTitleName = (
   };
   const hasLatinChars = (value: string): boolean =>
     /[A-Za-zÀ-ÖØ-öø-ÿ]/.test(value);
+  const hasCjkChars = (value: string): boolean =>
+    /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(value);
   const normalizeComparable = (value: string): string =>
     normalizeText(value).toLowerCase();
 
@@ -115,6 +117,9 @@ export const resolveTitleName = (
     if (!original) return true;
     const sameAsOriginal =
       normalizeComparable(value) === normalizeComparable(original);
+    if (sameAsOriginal && hasCjkChars(value)) {
+      return false;
+    }
     return !sameAsOriginal || hasLatinChars(value);
   };
 
