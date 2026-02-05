@@ -276,7 +276,7 @@ export const getSearchPosts = async function ({
     if (!query) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
-    const searchUrl = buildLocaleUrl(`/search?query=${encodeURIComponent(query)}`, baseUrl);
+    const searchUrl = buildLocaleUrl(`/search?q=${encodeURIComponent(query)}`, baseUrl);
     const html = await fetchHtml(searchUrl, providerContext, signal);
     const pageData = extractInertiaPage(html, providerContext.cheerio);
     const cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
@@ -285,7 +285,7 @@ export const getSearchPosts = async function ({
     if (posts.length > 0) return posts;
 
     try {
-      const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/search?query=${encodeURIComponent(
+      const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/search?q=${encodeURIComponent(
         query
       )}`;
       const res = await providerContext.axios.get(apiUrl, {
