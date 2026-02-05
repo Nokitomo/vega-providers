@@ -184,15 +184,15 @@ const buildSeriesLinks = async ({
   const episodesBySeason = new Map<number, any[]>();
   if (loadedSeason?.id && Array.isArray(loadedSeason.episodes)) {
     const seasonInfo = seasonById.get(String(loadedSeason.id));
-    const seasonNumber = seasonInfo?.number;
-    if (typeof seasonNumber === "number") {
+    const seasonNumber = Number(seasonInfo?.number);
+    if (Number.isFinite(seasonNumber) && seasonNumber > 0) {
       episodesBySeason.set(seasonNumber, loadedSeason.episodes);
     }
   }
 
   const sortedSeasons = [...seasons].sort((a, b) => {
-    const left = typeof a?.number === "number" ? a.number : 0;
-    const right = typeof b?.number === "number" ? b.number : 0;
+    const left = Number(a?.number) || 0;
+    const right = Number(b?.number) || 0;
     return left - right;
   });
 
@@ -200,16 +200,19 @@ const buildSeriesLinks = async ({
   let episodesCount = 0;
 
   for (const season of sortedSeasons) {
-    if (!season?.number || !titleId) continue;
-    let episodes = episodesBySeason.get(season.number);
+    const seasonNumber = Number(season?.number);
+    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !titleId) {
+      continue;
+    }
+    let episodes = episodesBySeason.get(seasonNumber);
     if (!episodes) {
       try {
-        const seasonUrl = buildSeasonUrl(baseUrl, titleId, slug, season.number);
+        const seasonUrl = buildSeasonUrl(baseUrl, titleId, slug, seasonNumber);
         const html = await fetchHtml(seasonUrl, providerContext, signal);
         const page = extractInertiaPage(html, providerContext.cheerio);
         episodes = page?.props?.loadedSeason?.episodes || [];
         if (Array.isArray(episodes)) {
-          episodesBySeason.set(season.number, episodes);
+          episodesBySeason.set(seasonNumber, episodes);
         }
       } catch (err) {
         console.error("streamingunity season fetch error", err);
@@ -221,9 +224,9 @@ const buildSeriesLinks = async ({
     episodesCount += built.count;
 
     linkList.push({
-      title: `Season ${season.number}`,
+      title: `Season ${seasonNumber}`,
       titleKey: "Season {{number}}",
-      titleParams: { number: season.number },
+      titleParams: { number: seasonNumber },
       directLinks: built.links,
     });
   }
