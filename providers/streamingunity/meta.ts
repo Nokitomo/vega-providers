@@ -7,6 +7,7 @@ import {
   getTranslationValue,
   normalizeText,
   pickImageByType,
+  buildImageUrl,
   resolveBaseUrl,
   resolveTitleName,
   resolveTitleSlug,
@@ -15,6 +16,22 @@ import {
 } from "./utils";
 
 const DEFAULT_CDN_URL = "https://cdn.streamingunity.tv";
+
+const pickLogoImage = (
+  images: any[] | undefined,
+  cdnUrl: string
+): string => {
+  if (!Array.isArray(images) || images.length === 0) return "";
+  const logos = images.filter(
+    (img) => String(img?.type || "").toLowerCase() === "logo"
+  );
+  if (logos.length === 0) return "";
+  const localized = logos.find(
+    (img) => String(img?.lang || "").toLowerCase() === DEFAULT_LOCALE
+  );
+  const fallback = localized || logos.find((img) => !img?.lang) || logos[0];
+  return buildImageUrl(fallback, cdnUrl);
+};
 
 const extractYear = (value?: string | null): string | undefined => {
   if (!value) return undefined;
@@ -311,7 +328,7 @@ export const getMeta = async function ({
       "cover_mobile",
       "background",
     ]);
-    const logo = pickImageByType(title?.images, cdnUrl, ["logo"]);
+    const logo = pickLogoImage(title?.images, cdnUrl);
     const background = pickImageByType(title?.images, cdnUrl, [
       "background",
       "cover",
