@@ -7,6 +7,15 @@ function normalizeBaseUrl(value: string): string {
 
 const RANGE_SIZE = 120;
 
+function normalizeEpisodeNumber(value: unknown): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  const text = String(value).trim();
+  return text ? text : undefined;
+}
+
 export const getEpisodes = async function ({
   url,
   providerContext,
@@ -49,7 +58,9 @@ export const getEpisodes = async function ({
     if (!totalCount) return [];
 
     const episodes: EpisodeLink[] = [];
-    let start = rangeEnd > 0 ? rangeStart : 1;
+    const effectiveRangeStart =
+      rangeEnd > 0 ? (rangeStart <= 1 ? 0 : rangeStart) : 0;
+    let start = effectiveRangeStart;
     let last = rangeEnd > 0 ? rangeEnd : totalCount;
     while (start <= last) {
       const end = Math.min(start + RANGE_SIZE - 1, last);
@@ -64,16 +75,15 @@ export const getEpisodes = async function ({
         });
         const list = res.data?.episodes || [];
         list.forEach((episode: any) => {
-          const number = episode?.number ?? "";
+          const number = normalizeEpisodeNumber(episode?.number);
           const id = episode?.id;
           if (!id) return;
-          const parsedNumber = Number.parseInt(String(number), 10);
-          const hasNumber = Number.isFinite(parsedNumber);
-          const title = hasNumber ? `Episode ${parsedNumber}` : "Episode";
+          const hasNumber = !!number;
+          const title = hasNumber ? `Episode ${number}` : "Episode";
           episodes.push({
             title,
             titleKey: hasNumber ? "Episode {{number}}" : "Episode",
-            titleParams: hasNumber ? { number: parsedNumber } : undefined,
+            titleParams: hasNumber ? { number } : undefined,
             link: String(id),
           });
         });
