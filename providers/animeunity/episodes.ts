@@ -6,6 +6,7 @@ function normalizeBaseUrl(value: string): string {
 }
 
 const RANGE_SIZE = 120;
+const SPECIALS_LOOKAHEAD = 30;
 
 function normalizeEpisodeNumber(value: unknown): string | undefined {
   if (value === null || value === undefined) {
@@ -58,10 +59,15 @@ export const getEpisodes = async function ({
     if (!totalCount) return [];
 
     const episodes: EpisodeLink[] = [];
+    const seenEpisodeIds = new Set<string>();
     const effectiveRangeStart =
       rangeEnd > 0 ? (rangeStart <= 1 ? 0 : rangeStart) : 0;
     let start = effectiveRangeStart;
-    let last = rangeEnd > 0 ? rangeEnd : totalCount;
+    const requestedLast = rangeEnd > 0 ? rangeEnd : totalCount;
+    const isLastRequestedRange = requestedLast >= totalCount;
+    let last = isLastRequestedRange
+      ? requestedLast + SPECIALS_LOOKAHEAD
+      : requestedLast;
     while (start <= last) {
       const end = Math.min(start + RANGE_SIZE - 1, last);
       const rangeUrl = `${baseHost}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
@@ -78,13 +84,16 @@ export const getEpisodes = async function ({
           const number = normalizeEpisodeNumber(episode?.number);
           const id = episode?.id;
           if (!id) return;
+          const link = String(id);
+          if (seenEpisodeIds.has(link)) return;
+          seenEpisodeIds.add(link);
           const hasNumber = !!number;
           const title = hasNumber ? `Episode ${number}` : "Episode";
           episodes.push({
             title,
             titleKey: hasNumber ? "Episode {{number}}" : "Episode",
             titleParams: hasNumber ? { number } : undefined,
-            link: String(id),
+            link,
           });
         });
       } catch (_) {
