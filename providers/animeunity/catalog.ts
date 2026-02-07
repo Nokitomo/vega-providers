@@ -13,56 +13,67 @@ export const catalog = [
     title: "Latest Episodes",
     titleKey: "Latest Episodes",
     filter: "latest",
+    staleTimeMs: 10 * 60 * 1000,
   },
   {
     title: "Popular",
     titleKey: "Popular",
     filter: "top?popular=true",
+    staleTimeMs: 30 * 60 * 1000,
   },
   {
     title: "Upcoming",
     titleKey: "Upcoming",
     filter: "top?status=upcoming",
+    staleTimeMs: 30 * 60 * 1000,
   },
   {
     title: "Ongoing",
     titleKey: "Ongoing",
     filter: "top?status=ongoing",
+    staleTimeMs: 30 * 60 * 1000,
   },
   {
     title: "Most Viewed",
     titleKey: "Most Viewed",
     filter: "top?order=most_viewed",
+    staleTimeMs: 30 * 60 * 1000,
   },
   {
     title: "Favorites",
     titleKey: "Favorites",
     filter: "top?order=favorites",
+    staleTimeMs: 30 * 60 * 1000,
   },
   {
     title: "TV",
     titleKey: "TV",
     filter: "archive?type=tv&order=rating",
+    staleTimeMs: 6 * 60 * 60 * 1000,
   },
   {
     title: "Movie",
     titleKey: "Movie",
     filter: "archive?type=movie&order=rating",
+    staleTimeMs: 6 * 60 * 60 * 1000,
   },
   {
     title: "Special",
     titleKey: "Special",
     filter: "archive?type=special&order=rating",
+    staleTimeMs: 6 * 60 * 60 * 1000,
   },
   {
     title: "Calendar",
     titleKey: "Calendar",
     filter: "calendar",
+    staleTimeMs: 10 * 60 * 1000,
   },
   {
     title: "Archive",
     titleKey: "Archive",
     filter: "archive",
+    staleTimeMs: 6 * 60 * 60 * 1000,
   },
 ];
 
