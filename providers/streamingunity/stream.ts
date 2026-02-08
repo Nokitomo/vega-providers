@@ -44,15 +44,17 @@ const parseLink = (link: string): { titleId: string; episodeId?: string } => {
   return { titleId, episodeId };
 };
 
-const buildWatchUrl = (
+const buildWatchUrl = (baseUrl: string, titleId: string): string =>
+  buildLocaleUrl(`/watch/${titleId}`, baseUrl);
+
+const buildEpisodeIframeUrl = (
   baseUrl: string,
   titleId: string,
-  episodeId?: string
+  episodeId: string
 ): string => {
-  const watchUrl = buildLocaleUrl(`/watch/${titleId}`, baseUrl);
-  if (!episodeId) return watchUrl;
-  const encoded = encodeURIComponent(episodeId);
-  return `${watchUrl}?episode=${encoded}`;
+  const encodedEpisodeId = encodeURIComponent(episodeId);
+  const iframeUrl = buildLocaleUrl(`/iframe/${titleId}`, baseUrl);
+  return `${iframeUrl}?episode_id=${encodedEpisodeId}&next_episode=1`;
 };
 
 const extractEmbedUrl = (
@@ -129,20 +131,44 @@ export const getStream = async function ({
     const { titleId, episodeId } = parseLink(link);
     if (!titleId) return [];
 
-    const watchUrl = buildWatchUrl(baseUrl, titleId, episodeId);
-    const watchHtml = await fetchHtml(watchUrl, providerContext, signal, baseUrl);
-    const embedUrl = extractEmbedUrl(watchHtml, baseUrl, providerContext.cheerio);
-    if (!embedUrl) return [];
+    const watchUrl = buildWatchUrl(baseUrl, titleId);
+    let iframeSrc = "";
+    let iframeReferer = watchUrl;
 
-    const iframeHtml = await fetchHtml(embedUrl, providerContext, signal, watchUrl);
-    const iframeSrc = extractIframeSrc(
-      iframeHtml,
-      baseUrl,
-      providerContext.cheerio
+    if (episodeId) {
+      const iframeUrl = buildEpisodeIframeUrl(baseUrl, titleId, episodeId);
+      const iframeHtml = await fetchHtml(
+        iframeUrl,
+        providerContext,
+        signal,
+        watchUrl
+      );
+      iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
+      iframeReferer = iframeUrl;
+    }
+
+    if (!iframeSrc) {
+      const watchHtml = await fetchHtml(watchUrl, providerContext, signal, baseUrl);
+      const embedUrl = extractEmbedUrl(watchHtml, baseUrl, providerContext.cheerio);
+      if (!embedUrl) return [];
+
+      const iframeHtml = await fetchHtml(
+        embedUrl,
+        providerContext,
+        signal,
+        watchUrl
+      );
+      iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
+      if (!iframeSrc) return [];
+      iframeReferer = embedUrl;
+    }
+
+    const vixHtml = await fetchHtml(
+      iframeSrc,
+      providerContext,
+      signal,
+      iframeReferer
     );
-    if (!iframeSrc) return [];
-
-    const vixHtml = await fetchHtml(iframeSrc, providerContext, signal, embedUrl);
     const userAgent = getUserAgent(providerContext.commonHeaders);
     const streams = extractVixCloudStreams(vixHtml, iframeSrc, userAgent);
 
