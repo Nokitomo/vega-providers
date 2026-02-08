@@ -375,14 +375,6 @@ const buildSeriesLinks = async ({
 
     seasonLink.episodesLink = seasonUrl;
 
-    if (
-      Number.isFinite(loadedSeasonNumber) &&
-      loadedSeasonNumber === seasonNumber &&
-      loadedSeasonBuilt.count > 0
-    ) {
-      seasonLink.directLinks = loadedSeasonBuilt.links;
-    }
-
     linkList.push(seasonLink);
   }
 
