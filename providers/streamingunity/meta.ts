@@ -274,15 +274,11 @@ const buildSeriesLinks = async ({
   slug,
   baseUrl,
   loadedSeason,
-  providerContext,
-  signal,
 }: {
   title: any;
   slug: string;
   baseUrl: string;
   loadedSeason: any;
-  providerContext: ProviderContext;
-  signal?: AbortSignal;
 }): Promise<{ linkList: Link[]; episodesCount?: number }> => {
   const seasons: any[] = Array.isArray(title?.seasons) ? title.seasons : [];
   if (seasons.length === 0) {
@@ -290,6 +286,10 @@ const buildSeriesLinks = async ({
   }
 
   const titleId = String(title.id || "").trim();
+  if (!titleId) {
+    return { linkList: [] };
+  }
+
   const seasonById = new Map<string, any>();
   seasons.forEach((season) => {
     if (season?.id != null) {
@@ -297,78 +297,96 @@ const buildSeriesLinks = async ({
     }
   });
 
-  const episodesBySeason = new Map<number, any[]>();
-  if (loadedSeason?.id && Array.isArray(loadedSeason.episodes)) {
-    const seasonInfo = seasonById.get(String(loadedSeason.id));
-    const seasonNumber = Number(seasonInfo?.number);
-    if (Number.isFinite(seasonNumber) && seasonNumber > 0) {
-      episodesBySeason.set(seasonNumber, loadedSeason.episodes);
-    }
-  }
-
   const sortedSeasons = [...seasons].sort((a, b) => {
     const left = Number(a?.number) || 0;
     const right = Number(b?.number) || 0;
     return left - right;
   });
 
+  const loadedSeasonInfo =
+    loadedSeason?.id != null
+      ? seasonById.get(String(loadedSeason.id))
+      : undefined;
+  const loadedSeasonNumber = Number(loadedSeasonInfo?.number);
+  const loadedSeasonEpisodes = Array.isArray(loadedSeason?.episodes)
+    ? loadedSeason.episodes
+    : [];
+  const loadedSeasonBuilt =
+    Number.isFinite(loadedSeasonNumber) && loadedSeasonNumber > 0
+      ? buildEpisodeLinks(loadedSeasonEpisodes, titleId, loadedSeasonNumber)
+      : { links: [], count: 0 };
+
   const linkList: Link[] = [];
   let episodesCount = 0;
+  let hasEpisodesCount = false;
 
   for (const season of sortedSeasons) {
     const seasonNumber = Number(season?.number);
-    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0 || !titleId) {
+    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0) {
       continue;
     }
-    let episodes = episodesBySeason.get(seasonNumber);
-    if (!episodes) {
-      try {
-        const seasonUrl = buildSeasonUrl(baseUrl, titleId, slug, seasonNumber);
-        const html = await fetchHtml(seasonUrl, providerContext, signal);
-        const page = extractInertiaPage(html, providerContext.cheerio);
-        episodes = page?.props?.loadedSeason?.episodes || [];
-        if (Array.isArray(episodes)) {
-          episodesBySeason.set(seasonNumber, episodes);
-        }
-      } catch (err) {
-        console.error("streamingunity season fetch error", err);
-        episodes = [];
-      }
+    const seasonUrl = buildSeasonUrl(baseUrl, titleId, slug, seasonNumber);
+    const rawSeasonEpisodesCount = Number(season?.episodes_count);
+    const hasRawSeasonEpisodesCount = Number.isFinite(rawSeasonEpisodesCount);
+
+    let seasonEpisodesCount = hasRawSeasonEpisodesCount
+      ? Math.max(0, Math.floor(rawSeasonEpisodesCount))
+      : 0;
+
+    if (
+      seasonEpisodesCount === 0 &&
+      Number.isFinite(loadedSeasonNumber) &&
+      loadedSeasonNumber === seasonNumber
+    ) {
+      seasonEpisodesCount = loadedSeasonBuilt.count;
     }
 
-    const built = buildEpisodeLinks(episodes || [], titleId, seasonNumber);
-    episodesCount += built.count;
+    if (seasonEpisodesCount > 0) {
+      episodesCount += seasonEpisodesCount;
+      hasEpisodesCount = true;
+    }
 
     const seasonAvailability = parseAvailabilityDate(
       season?.release_date_it || season?.release_date
     );
-    const seasonEpisodesCount = Number(season?.episodes_count);
-    const hasSeasonEpisodesCount = Number.isFinite(seasonEpisodesCount);
     const isUpcomingSeason =
-      built.count === 0 &&
+      seasonEpisodesCount === 0 &&
       (seasonAvailability.isFuture ||
         (seasonAvailability.hasDate &&
-          hasSeasonEpisodesCount &&
-          seasonEpisodesCount === 0));
+          hasRawSeasonEpisodesCount &&
+          rawSeasonEpisodesCount === 0));
 
     const seasonLink: Link = {
       title: `Season ${seasonNumber}`,
       titleKey: "Season {{number}}",
       titleParams: { number: seasonNumber },
       seasonNumber,
-      directLinks: built.links,
       availabilityStatus: isUpcomingSeason ? "upcoming" : "available",
     };
 
-    if (isUpcomingSeason && seasonAvailability.hasDate) {
-      seasonLink.availabilityDate = seasonAvailability.date;
-      seasonLink.availabilityPrecision = seasonAvailability.precision;
+    if (isUpcomingSeason) {
+      if (seasonAvailability.hasDate) {
+        seasonLink.availabilityDate = seasonAvailability.date;
+        seasonLink.availabilityPrecision = seasonAvailability.precision;
+      }
+      linkList.push(seasonLink);
+      continue;
+    }
+
+    seasonLink.episodesLink = seasonUrl;
+
+    if (
+      Number.isFinite(loadedSeasonNumber) &&
+      loadedSeasonNumber === seasonNumber &&
+      loadedSeasonBuilt.count > 0
+    ) {
+      seasonLink.directLinks = loadedSeasonBuilt.links;
     }
 
     linkList.push(seasonLink);
   }
 
-  return { linkList, episodesCount: episodesCount || undefined };
+  return { linkList, episodesCount: hasEpisodesCount ? episodesCount : undefined };
 };
 
 const buildRelated = (
@@ -482,7 +500,6 @@ export const getMeta = async function ({
         slug,
         baseUrl,
         loadedSeason: page?.props?.loadedSeason,
-        providerContext,
       });
       linkList = seriesLinks.linkList;
       episodesCount = seriesLinks.episodesCount;
