@@ -17,6 +17,14 @@ function normalizeEpisodeNumber(value: unknown): string | undefined {
   return text ? text : undefined;
 }
 
+function parseEpisodeNumber(value: string | undefined): number | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export const getEpisodes = async function ({
   url,
   providerContext,
@@ -88,11 +96,13 @@ export const getEpisodes = async function ({
           if (seenEpisodeIds.has(link)) return;
           seenEpisodeIds.add(link);
           const hasNumber = !!number;
+          const parsedEpisodeNumber = parseEpisodeNumber(number);
           const title = hasNumber ? `Episode ${number}` : "Episode";
           episodes.push({
             title,
             titleKey: hasNumber ? "Episode {{number}}" : "Episode",
             titleParams: hasNumber ? { number } : undefined,
+            episodeNumber: parsedEpisodeNumber,
             link,
           });
         });

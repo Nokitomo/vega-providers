@@ -335,6 +335,8 @@ const buildSeriesLinks = (
     .sort(([a], [b]) => Number(a) - Number(b))
     .forEach(([season, episodes]) => {
       const directLinks = episodes.map((episode) => {
+        const parsedEpisodeNumber = Number.parseInt(episode.episodeNumber, 10);
+        const parsedSeasonNumber = Number.parseInt(season, 10);
         const titleKey = episode.episodeNumber
           ? "Episode {{number}}"
           : undefined;
@@ -345,6 +347,12 @@ const buildSeriesLinks = (
           title: episode.label,
           titleKey,
           titleParams,
+          episodeNumber: Number.isFinite(parsedEpisodeNumber)
+            ? parsedEpisodeNumber
+            : undefined,
+          seasonNumber: Number.isFinite(parsedSeasonNumber)
+            ? parsedSeasonNumber
+            : undefined,
           link: `${pageUrl}::${episode.key}`,
           type: "series" as const,
         };
@@ -356,6 +364,9 @@ const buildSeriesLinks = (
         title: `Season ${season}`,
         titleKey: season ? "Season {{number}}" : undefined,
         titleParams: season ? { number: season } : undefined,
+        seasonNumber: Number.isFinite(Number.parseInt(season, 10))
+          ? Number.parseInt(season, 10)
+          : undefined,
         directLinks,
       };
 

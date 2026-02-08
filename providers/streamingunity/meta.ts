@@ -229,7 +229,8 @@ const buildSeasonUrl = (
 
 const buildEpisodeLinks = (
   episodes: any[],
-  titleId: string
+  titleId: string,
+  seasonNumber?: number
 ): { links: Link["directLinks"]; count: number } => {
   if (!Array.isArray(episodes) || episodes.length === 0) {
     return { links: [], count: 0 };
@@ -238,6 +239,7 @@ const buildEpisodeLinks = (
   const links = episodes
     .map((episode) => {
       const number = episode?.number != null ? String(episode.number) : "";
+      const parsedEpisodeNumber = number ? Number.parseInt(number, 10) : NaN;
       const translatedName = getTranslationValue(
         episode?.translations,
         "name",
@@ -251,6 +253,13 @@ const buildEpisodeLinks = (
         title,
         titleKey,
         titleParams,
+        episodeNumber: Number.isFinite(parsedEpisodeNumber)
+          ? parsedEpisodeNumber
+          : undefined,
+        seasonNumber:
+          seasonNumber && Number.isFinite(seasonNumber)
+            ? seasonNumber
+            : undefined,
         link: `${titleId}::${episode?.id || ""}`,
         type: "series" as const,
       };
@@ -327,7 +336,7 @@ const buildSeriesLinks = async ({
       }
     }
 
-    const built = buildEpisodeLinks(episodes || [], titleId);
+    const built = buildEpisodeLinks(episodes || [], titleId, seasonNumber);
     episodesCount += built.count;
 
     const seasonAvailability = parseAvailabilityDate(
@@ -346,6 +355,7 @@ const buildSeriesLinks = async ({
       title: `Season ${seasonNumber}`,
       titleKey: "Season {{number}}",
       titleParams: { number: seasonNumber },
+      seasonNumber,
       directLinks: built.links,
       availabilityStatus: isUpcomingSeason ? "upcoming" : "available",
     };
