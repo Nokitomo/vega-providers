@@ -105,6 +105,96 @@ const mergeTags = (genres: string[], keywords: string[]): string[] => {
   return Array.from(merged);
 };
 
+type AvailabilityPrecision = NonNullable<Link["availabilityPrecision"]>;
+
+type AvailabilityInfo = {
+  hasDate: boolean;
+  date?: string;
+  precision?: AvailabilityPrecision;
+  isFuture: boolean;
+};
+
+const UPCOMING_STATUS_TOKENS = [
+  "upcoming",
+  "inproduction",
+  "postproduction",
+  "planned",
+  "announced",
+  "inarrivo",
+  "comingsoon",
+];
+
+const RELEASED_STATUS_TOKENS = [
+  "released",
+  "returningseries",
+  "ended",
+  "cancelled",
+  "canceled",
+];
+
+const normalizeStatusToken = (value: unknown): string =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+
+const hasStatusToken = (value: unknown, tokens: string[]): boolean => {
+  const normalized = normalizeStatusToken(value);
+  if (!normalized) return false;
+  return tokens.some((token) => normalized.includes(token));
+};
+
+const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
+  if (value === null || value === undefined) {
+    return { hasDate: false, isFuture: false };
+  }
+
+  const text = String(value).trim();
+  if (!text) {
+    return { hasDate: false, isFuture: false };
+  }
+
+  const utcNow = new Date();
+  const todayUtc = Date.UTC(
+    utcNow.getUTCFullYear(),
+    utcNow.getUTCMonth(),
+    utcNow.getUTCDate()
+  );
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const dateValue = new Date(`${text}T00:00:00Z`);
+    const time = dateValue.getTime();
+    if (Number.isFinite(time)) {
+      return {
+        hasDate: true,
+        date: text,
+        precision: "day",
+        isFuture: time > todayUtc,
+      };
+    }
+  }
+
+  const yearMatch = text.match(/\b(\d{4})\b/);
+  if (yearMatch?.[1]) {
+    const year = Number.parseInt(yearMatch[1], 10);
+    if (Number.isFinite(year)) {
+      return {
+        hasDate: true,
+        date: String(year),
+        precision: "year",
+        isFuture: year > utcNow.getUTCFullYear(),
+      };
+    }
+  }
+
+  return {
+    hasDate: true,
+    date: text,
+    precision: "unknown",
+    isFuture: false,
+  };
+};
+
 const fetchHtml = async (
   url: string,
   providerContext: ProviderContext,
@@ -240,12 +330,32 @@ const buildSeriesLinks = async ({
     const built = buildEpisodeLinks(episodes || [], titleId);
     episodesCount += built.count;
 
-    linkList.push({
+    const seasonAvailability = parseAvailabilityDate(
+      season?.release_date_it || season?.release_date
+    );
+    const seasonEpisodesCount = Number(season?.episodes_count);
+    const hasSeasonEpisodesCount = Number.isFinite(seasonEpisodesCount);
+    const isUpcomingSeason =
+      built.count === 0 &&
+      (seasonAvailability.isFuture ||
+        (seasonAvailability.hasDate &&
+          hasSeasonEpisodesCount &&
+          seasonEpisodesCount === 0));
+
+    const seasonLink: Link = {
       title: `Season ${seasonNumber}`,
       titleKey: "Season {{number}}",
       titleParams: { number: seasonNumber },
       directLinks: built.links,
-    });
+      availabilityStatus: isUpcomingSeason ? "upcoming" : "available",
+    };
+
+    if (isUpcomingSeason && seasonAvailability.hasDate) {
+      seasonLink.availabilityDate = seasonAvailability.date;
+      seasonLink.availabilityPrecision = seasonAvailability.precision;
+    }
+
+    linkList.push(seasonLink);
   }
 
   return { linkList, episodesCount: episodesCount || undefined };
@@ -368,20 +478,35 @@ export const getMeta = async function ({
       episodesCount = seriesLinks.episodesCount;
     } else {
       const titleUrl = buildTitleUrl(titleId, slug, baseUrl);
-      linkList = [
-        {
-          title: "Play",
-          titleKey: "Play",
-          directLinks: [
-            {
-              title: "Play",
-              titleKey: "Play",
-              link: titleUrl,
-              type: "movie",
-            },
-          ],
-        },
-      ];
+      const movieAvailability = parseAvailabilityDate(releaseDate);
+      const movieStatus = title?.status;
+      const isMovieUpcoming =
+        hasStatusToken(movieStatus, UPCOMING_STATUS_TOKENS) ||
+        (!hasStatusToken(movieStatus, RELEASED_STATUS_TOKENS) &&
+          movieAvailability.hasDate &&
+          movieAvailability.isFuture);
+
+      const movieLink: Link = {
+        title: "Play",
+        titleKey: "Play",
+        availabilityStatus: isMovieUpcoming ? "upcoming" : "available",
+      };
+
+      if (isMovieUpcoming && movieAvailability.hasDate) {
+        movieLink.availabilityDate = movieAvailability.date;
+        movieLink.availabilityPrecision = movieAvailability.precision;
+      } else {
+        movieLink.directLinks = [
+          {
+            title: "Play",
+            titleKey: "Play",
+            link: titleUrl,
+            type: "movie",
+          },
+        ];
+      }
+
+      linkList = [movieLink];
     }
 
     const viewsRaw = title?.views_it || title?.views;

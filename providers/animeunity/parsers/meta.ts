@@ -3,6 +3,7 @@ import { buildAnimeLink, decodeHtmlAttribute, normalizeImageUrl } from "../utils
 
 const EPISODE_RANGE_KEY = "Episodes {{start}}-{{end}}";
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
+type AvailabilityPrecision = NonNullable<Link["availabilityPrecision"]>;
 
 const TAG_KEY_MAP: Record<string, string> = {
   tv: "TV",
@@ -163,6 +164,72 @@ function pickYear(item: any): string | undefined {
   return match?.[1];
 }
 
+const UPCOMING_STATUS_KEYS = [
+  "upcoming",
+  "inuscita",
+  "inuscitaprossimamente",
+  "comingsoon",
+  "prossimamente",
+];
+
+function isUpcomingStatus(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  const normalized = normalizeTagKey(String(value));
+  if (!normalized) return false;
+  return UPCOMING_STATUS_KEYS.some((key) => normalized.includes(key));
+}
+
+function parseAvailabilityDate(value: unknown): {
+  date?: string;
+  precision?: AvailabilityPrecision;
+  isFuture: boolean;
+} {
+  if (value === null || value === undefined) {
+    return { isFuture: false };
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return { isFuture: false };
+  }
+
+  const utcNow = new Date();
+  const todayUtc = Date.UTC(
+    utcNow.getUTCFullYear(),
+    utcNow.getUTCMonth(),
+    utcNow.getUTCDate()
+  );
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const dateValue = new Date(`${text}T00:00:00Z`);
+    const time = dateValue.getTime();
+    if (Number.isFinite(time)) {
+      return {
+        date: text,
+        precision: "day",
+        isFuture: time > todayUtc,
+      };
+    }
+  }
+
+  const yearMatch = text.match(/\b(\d{4})\b/);
+  if (yearMatch?.[1]) {
+    const year = Number.parseInt(yearMatch[1], 10);
+    if (Number.isFinite(year)) {
+      return {
+        date: String(year),
+        precision: "year",
+        isFuture: year > utcNow.getUTCFullYear(),
+      };
+    }
+  }
+
+  return {
+    date: text,
+    precision: "unknown",
+    isFuture: false,
+  };
+}
+
 export type RelatedItem = {
   id?: number | string;
   title: string;
@@ -283,24 +350,49 @@ export function buildMetaFromInfo(
 
   const episodesCountRaw =
     info?.episodes_count ?? htmlAnime?.episodes_count ?? 0;
-  const ranges = buildEpisodeRanges(
+  const parsedEpisodesCount =
     typeof episodesCountRaw === "number"
       ? episodesCountRaw
-      : parseInt(String(episodesCountRaw), 10) || 0
+      : parseInt(String(episodesCountRaw), 10) || 0;
+  const normalizedEpisodesCount =
+    Number.isFinite(parsedEpisodesCount) && parsedEpisodesCount > 0
+      ? parsedEpisodesCount
+      : 0;
+  const availability = parseAvailabilityDate(dateValue);
+  const isUpcomingContent =
+    normalizedEpisodesCount === 0 &&
+    (isUpcomingStatus(status) || availability.isFuture);
+  const ranges = buildEpisodeRanges(
+    normalizedEpisodesCount
   );
-  const linkList: Link[] = ranges.length
-    ? ranges.map((range) => ({
-        title: range.title,
-        titleKey: range.titleKey,
-        titleParams: range.titleParams,
-        episodesLink: `${animeId}|${range.start}|${range.end}`,
-      }))
-    : [
-        {
-          title,
-          episodesLink: String(animeId),
-        },
-      ];
+  let linkList: Link[] = [];
+  if (ranges.length > 0) {
+    linkList = ranges.map((range) => ({
+      title: range.title,
+      titleKey: range.titleKey,
+      titleParams: range.titleParams,
+      availabilityStatus: "available",
+      episodesLink: `${animeId}|${range.start}|${range.end}`,
+    }));
+  } else if (isUpcomingContent) {
+    linkList = [
+      {
+        title: "Upcoming",
+        titleKey: "Upcoming",
+        availabilityStatus: "upcoming",
+        availabilityDate: availability.date,
+        availabilityPrecision: availability.precision,
+      },
+    ];
+  } else {
+    linkList = [
+      {
+        title,
+        availabilityStatus: "available",
+        episodesLink: String(animeId),
+      },
+    ];
+  }
 
   const relatedBase = mapRelatedBase(info?.related || [], baseHost);
   return {
@@ -314,10 +406,7 @@ export function buildMetaFromInfo(
     genres,
     isMovie,
     linkList,
-    episodesCount:
-      typeof episodesCountRaw === "number"
-        ? episodesCountRaw
-        : parseInt(String(episodesCountRaw), 10) || undefined,
+    episodesCount: normalizedEpisodesCount || undefined,
     studio: info?.studio || htmlAnime?.studio || "",
     rating: formatRating(info?.score ?? htmlAnime?.score),
     extra: {

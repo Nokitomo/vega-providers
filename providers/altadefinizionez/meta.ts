@@ -135,6 +135,46 @@ const parseIsoDuration = (value: string | undefined): string => {
   return value;
 };
 
+type AvailabilityPrecision = NonNullable<Link["availabilityPrecision"]>;
+
+const UPCOMING_PATTERN = /\b(prossimamente|in arrivo|coming soon|upcoming)\b/i;
+
+const hasUpcomingSignal = (values: Array<string | undefined>): boolean =>
+  values.some((value) => {
+    if (!value) return false;
+    return UPCOMING_PATTERN.test(value);
+  });
+
+const extractAvailabilityDate = (
+  values: Array<string | undefined>
+): { date?: string; precision?: AvailabilityPrecision } => {
+  for (const value of values) {
+    if (!value) continue;
+    const text = value.trim();
+    if (!text) continue;
+
+    const isoMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (isoMatch?.[1]) {
+      return { date: isoMatch[1], precision: "day" };
+    }
+
+    const dayMonthYearMatch = text.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);
+    if (dayMonthYearMatch?.[1] && dayMonthYearMatch[2] && dayMonthYearMatch[3]) {
+      const day = dayMonthYearMatch[1].padStart(2, "0");
+      const month = dayMonthYearMatch[2].padStart(2, "0");
+      const year = dayMonthYearMatch[3];
+      return { date: `${year}-${month}-${day}`, precision: "day" };
+    }
+
+    const yearMatch = text.match(/\b(19\d{2}|20\d{2}|21\d{2})\b/);
+    if (yearMatch?.[1]) {
+      return { date: yearMatch[1], precision: "year" };
+    }
+  }
+
+  return {};
+};
+
 const extractImage = (element: any, baseUrl: string): string => {
   const img = element.find("img").first();
   const src =
@@ -248,7 +288,12 @@ const extractDetailList = (
 
 const buildSeriesLinks = (
   $: any,
-  pageUrl: string
+  pageUrl: string,
+  upcomingMeta?: {
+    isUpcoming: boolean;
+    availabilityDate?: string;
+    availabilityPrecision?: AvailabilityPrecision;
+  }
 ): { linkList: Link[]; episodesCount: number } => {
   const seasons = new Map<
     string,
@@ -258,6 +303,9 @@ const buildSeriesLinks = (
   $(".dropdown.episodes[data-season]").each((_index: number, element: any) => {
     const season = ($(element).attr("data-season") || "").trim();
     if (!season) return;
+    if (!seasons.has(season)) {
+      seasons.set(season, []);
+    }
 
     $(element)
       .find(".dropdown-item[data-episode]")
@@ -304,12 +352,22 @@ const buildSeriesLinks = (
 
       episodesCount += episodes.length;
 
-      linkList.push({
+      const seasonLink: Link = {
         title: `Season ${season}`,
         titleKey: season ? "Season {{number}}" : undefined,
         titleParams: season ? { number: season } : undefined,
         directLinks,
-      });
+      };
+
+      if (episodes.length > 0) {
+        seasonLink.availabilityStatus = "available";
+      } else if (upcomingMeta?.isUpcoming) {
+        seasonLink.availabilityStatus = "upcoming";
+        seasonLink.availabilityDate = upcomingMeta.availabilityDate;
+        seasonLink.availabilityPrecision = upcomingMeta.availabilityPrecision;
+      }
+
+      linkList.push(seasonLink);
     });
 
   return { linkList, episodesCount };
@@ -500,26 +558,54 @@ export const getMeta = async function ({
 
     let linkList: Link[] = [];
     let episodesCount: number | undefined = undefined;
+    const isUpcomingContent = hasUpcomingSignal([
+      genres.join(" "),
+      synopsis,
+      title,
+    ]);
+    const availability = extractAvailabilityDate([yearRaw, synopsis, title]);
 
     if (isSeries) {
-      const seriesLinks = buildSeriesLinks($, pageUrl);
+      const seriesLinks = buildSeriesLinks($, pageUrl, {
+        isUpcoming: isUpcomingContent,
+        availabilityDate: availability.date,
+        availabilityPrecision: availability.precision,
+      });
       linkList = seriesLinks.linkList;
       episodesCount = seriesLinks.episodesCount || undefined;
+      if (linkList.length === 0 && isUpcomingContent) {
+        linkList = [
+          {
+            title: "Upcoming",
+            titleKey: "Upcoming",
+            availabilityStatus: "upcoming",
+            availabilityDate: availability.date,
+            availabilityPrecision: availability.precision,
+          },
+        ];
+      }
     } else {
-      linkList = [
-        {
-          title: "Play",
-          titleKey: "Play",
-          directLinks: [
-            {
-              title: "Play",
-              titleKey: "Play",
-              link: pageUrl,
-              type: "movie",
-            },
-          ],
-        },
-      ];
+      const movieLink: Link = {
+        title: "Play",
+        titleKey: "Play",
+        availabilityStatus: isUpcomingContent ? "upcoming" : "available",
+      };
+
+      if (isUpcomingContent) {
+        movieLink.availabilityDate = availability.date;
+        movieLink.availabilityPrecision = availability.precision;
+      } else {
+        movieLink.directLinks = [
+          {
+            title: "Play",
+            titleKey: "Play",
+            link: pageUrl,
+            type: "movie",
+          },
+        ];
+      }
+
+      linkList = [movieLink];
     }
 
     return {
