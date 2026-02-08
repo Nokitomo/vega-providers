@@ -250,6 +250,7 @@ const fetchHomePosts = async ({
 
   try {
     const params = new URLSearchParams();
+    params.set("lang", DEFAULT_LOCALE);
     if (offset > 0) {
       params.set("offset", String(offset));
     }
@@ -288,6 +289,7 @@ const fetchArchivePosts = async ({
 
   const buildArchiveParams = (includeOffset: boolean): URLSearchParams => {
     const params = new URLSearchParams();
+    params.set("lang", DEFAULT_LOCALE);
     if (archiveFilters.search) params.set("search", archiveFilters.search);
     if (archiveFilters.sort) params.set("sort", archiveFilters.sort);
     if (archiveFilters.type) params.set("type", archiveFilters.type);
@@ -417,6 +419,7 @@ export const getSearchPosts = async function ({
 
     const fetchSearchApi = async (cdnUrl: string): Promise<Post[]> => {
       const params = new URLSearchParams();
+      params.set("lang", DEFAULT_LOCALE);
       params.set("q", query);
       if (offset > 0) {
         params.set("offset", String(offset));
