@@ -40,6 +40,7 @@ type ArchiveFilters = {
   service?: string;
   quality?: string;
   age?: string;
+  random?: boolean;
 };
 
 const parseFilter = (filter: string): { path: string; params: URLSearchParams } => {
@@ -80,6 +81,12 @@ const collectParamValues = (
   return values.filter(Boolean);
 };
 
+const parseBooleanParam = (value?: string | null): boolean => {
+  if (!value) return false;
+  const normalized = normalizeText(String(value)).toLowerCase();
+  return ["1", "true", "yes", "y", "on"].includes(normalized);
+};
+
 const normalizeArchiveFilters = (params: URLSearchParams): ArchiveFilters => {
   const search =
     params.get("search") ||
@@ -110,6 +117,7 @@ const normalizeArchiveFilters = (params: URLSearchParams): ArchiveFilters => {
   const age = normalizeArchiveAge(
     params.get("age") || params.get("age_min") || params.get("rating_age")
   );
+  const random = parseBooleanParam(params.get("random"));
 
   return {
     search: search.trim() || undefined,
@@ -122,6 +130,7 @@ const normalizeArchiveFilters = (params: URLSearchParams): ArchiveFilters => {
     service,
     quality,
     age,
+    random,
   };
 };
 
@@ -293,8 +302,24 @@ const fetchArchivePosts = async ({
   const offset = buildOffset(page);
   let cdnUrl = DEFAULT_CDN_URL;
   const archiveFilters = filters || {};
+  const shouldUseRandomOffset =
+    page <= 1 &&
+    archiveFilters.random === true &&
+    !archiveFilters.search &&
+    !archiveFilters.sort &&
+    !archiveFilters.type &&
+    !archiveFilters.year &&
+    !archiveFilters.score &&
+    !archiveFilters.views &&
+    !archiveFilters.service &&
+    !archiveFilters.quality &&
+    !archiveFilters.age &&
+    (!archiveFilters.genres || archiveFilters.genres.length === 0);
 
-  const buildArchiveParams = (includeOffset: boolean): URLSearchParams => {
+  const buildArchiveParams = (
+    includeOffset: boolean,
+    customOffset?: number
+  ): URLSearchParams => {
     const params = new URLSearchParams();
     params.set("lang", DEFAULT_LOCALE);
     if (archiveFilters.search) params.set("search", archiveFilters.search);
@@ -311,11 +336,17 @@ const fetchArchivePosts = async ({
         if (genre) params.append("genre[]", genre);
       });
     }
-    if (includeOffset && offset > 0) {
-      params.set("offset", String(offset));
+    if (includeOffset) {
+      const effectiveOffset =
+        typeof customOffset === "number" ? customOffset : offset;
+      if (effectiveOffset > 0) {
+        params.set("offset", String(effectiveOffset));
+      }
     }
     return params;
   };
+
+  let randomOffset: number | undefined;
 
   if (page <= 1) {
     const params = buildArchiveParams(false);
@@ -327,13 +358,25 @@ const fetchArchivePosts = async ({
     const html = await fetchHtml(archiveUrl, providerContext, signal);
     const pageData = extractInertiaPage(html, providerContext.cheerio);
     cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
-    const titles = pageData?.props?.titles || [];
-    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
-    if (posts.length > 0) return posts;
+    const totalCount = Number(pageData?.props?.totalCount);
+
+    if (shouldUseRandomOffset && Number.isFinite(totalCount) && totalCount > 0) {
+      randomOffset = Math.floor(Math.random() * totalCount);
+    }
+
+    if (shouldUseRandomOffset) {
+      // For random archive fetches (hero), use API with random offset instead
+      // of the first page, so selection spans the whole archive.
+      randomOffset = randomOffset || 0;
+    } else {
+      const titles = pageData?.props?.titles || [];
+      const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
+      if (posts.length > 0) return posts;
+    }
   }
 
   try {
-    const params = buildArchiveParams(true);
+    const params = buildArchiveParams(true, randomOffset);
     const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/archive${
       params.toString() ? `?${params.toString()}` : ""
     }`;
