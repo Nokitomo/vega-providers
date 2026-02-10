@@ -125,7 +125,7 @@ const normalizeArchiveFilters = (params: URLSearchParams): ArchiveFilters => {
   };
 };
 
-const HOME_SLIDER_KEYS = new Set(["trending", "latest", "top10"]);
+const HOME_SLIDER_KEYS = new Set(["trending", "latest", "top10", "upcoming"]);
 
 const resolveSliderKey = (path: string): string | null => {
   if (!path) return null;
@@ -135,6 +135,12 @@ const resolveSliderKey = (path: string): string | null => {
     return HOME_SLIDER_KEYS.has(key) ? key : null;
   }
   return HOME_SLIDER_KEYS.has(normalized) ? normalized : null;
+};
+
+const resolveBrowseGenre = (params: URLSearchParams): string | undefined => {
+  const genre = params.get("g") || params.get("genre") || "";
+  const normalized = normalizeText(genre);
+  return normalized || undefined;
 };
 
 const findSlider = (sliders: any[], key: string): any | null => {
@@ -149,6 +155,7 @@ const findSlider = (sliders: any[], key: string): any | null => {
     trending: ["titoli del momento", "trending"],
     latest: ["aggiunti di recente", "recently"],
     top10: ["top 10"],
+    upcoming: ["in arrivo", "upcoming"],
   };
   const labelHints = labelMap[normalizedKey] || [];
 
@@ -343,6 +350,64 @@ const fetchArchivePosts = async ({
   }
 };
 
+const fetchBrowseGenrePosts = async ({
+  baseUrl,
+  genre,
+  providerContext,
+  signal,
+  page,
+}: {
+  baseUrl: string;
+  genre: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+  page: number;
+}): Promise<Post[]> => {
+  const normalizedGenre = normalizeText(genre);
+  if (!normalizedGenre) return [];
+
+  const offset = buildOffset(page);
+  let cdnUrl = DEFAULT_CDN_URL;
+
+  if (page <= 1) {
+    const browseParams = new URLSearchParams();
+    browseParams.set("g", normalizedGenre);
+    const browseUrl = buildLocaleUrl(
+      `/browse/genre?${browseParams.toString()}`,
+      baseUrl
+    );
+    const html = await fetchHtml(browseUrl, providerContext, signal);
+    const pageData = extractInertiaPage(html, providerContext.cheerio);
+    cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
+    const titles = pageData?.props?.titles || [];
+    const posts = mapTitlesToPosts(titles, baseUrl, cdnUrl);
+    if (posts.length > 0) return posts;
+  }
+
+  try {
+    const params = new URLSearchParams();
+    params.set("lang", DEFAULT_LOCALE);
+    params.set("g", normalizedGenre);
+    if (offset > 0) {
+      params.set("offset", String(offset));
+    }
+
+    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/browse/genre?${
+      params.toString()
+    }`;
+    const res = await providerContext.axios.get(apiUrl, {
+      headers: providerContext.commonHeaders,
+      timeout: REQUEST_TIMEOUT,
+      signal,
+    });
+    const apiTitles = res?.data?.titles || [];
+    return mapTitlesToPosts(apiTitles, baseUrl, cdnUrl);
+  } catch (err) {
+    console.error("streamingunity browse genre fallback error", err);
+    return [];
+  }
+};
+
 export const getPosts = async function ({
   filter,
   page,
@@ -361,7 +426,18 @@ export const getPosts = async function ({
     const baseUrl = await resolveBaseUrl(providerContext);
     const parsed = parseFilter(filter);
     const archiveFilters = normalizeArchiveFilters(parsed.params);
+    const browseGenre = resolveBrowseGenre(parsed.params);
     const sliderKey = resolveSliderKey(parsed.path);
+
+    if (parsed.path === "browse/genre" && browseGenre) {
+      return await fetchBrowseGenrePosts({
+        baseUrl,
+        genre: browseGenre,
+        providerContext,
+        signal,
+        page,
+      });
+    }
 
     if (sliderKey) {
       return await fetchHomePosts({
