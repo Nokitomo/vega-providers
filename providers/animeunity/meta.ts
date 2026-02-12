@@ -7,6 +7,7 @@ import {
 } from "./parsers/meta";
 import { normalizeImageUrl } from "./utils";
 import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
+import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -87,20 +88,30 @@ export const getMeta = async function ({
       animeId,
       animeFromHtml
     );
+    const providerIds = metaPayload.extra?.ids || {};
+    const [related, externalMeta] = await Promise.all([
+      resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
+      resolveAnimeUnityCinemetaMetadata({
+        axios,
+        anilistId: providerIds.anilistId,
+        malId: providerIds.malId,
+        isMovie: metaPayload.isMovie,
+      }),
+    ]);
     const background = metaPayload.background;
-    const related = await resolveRelatedImages(
-      metaPayload.relatedBase,
-      axios,
-      baseHost
-    );
+    const title = externalMeta.cinemetaTitle || metaPayload.title;
+    const titleKey = externalMeta.cinemetaTitle
+      ? undefined
+      : metaPayload.titleKey;
+    const imdbId = externalMeta.imdbId || "";
 
     return {
-      titleKey: metaPayload.titleKey,
-      title: metaPayload.title,
+      titleKey,
+      title,
       synopsis: metaPayload.synopsis,
       image: background || metaPayload.poster,
       poster: metaPayload.poster,
-      imdbId: "",
+      imdbId,
       type: metaPayload.isMovie ? "movie" : "series",
       tags: metaPayload.tags,
       tagKeys: metaPayload.tagKeys,
