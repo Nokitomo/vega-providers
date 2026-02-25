@@ -8,7 +8,11 @@ import {
   resolveBaseUrl,
   resolveUrl,
 } from "./utils";
-import { extractVixCloudStreams } from "../animeunity/parsers/stream";
+import {
+  buildStreamHeaders,
+  extractDownloadUrl,
+  extractVixCloudStreams,
+} from "../animeunity/parsers/stream";
 
 const SERVER_PREFIX = "StreamingUnity";
 
@@ -171,11 +175,37 @@ export const getStream = async function ({
     );
     const userAgent = getUserAgent(providerContext.commonHeaders);
     const streams = extractVixCloudStreams(vixHtml, iframeSrc, userAgent);
-
-    return streams.map((stream) => ({
+    const normalizedStreams = streams.map((stream) => ({
       ...stream,
       server: normalizeServerName(stream.server || ""),
     }));
+
+    const downloadUrl = extractDownloadUrl(vixHtml);
+    if (!downloadUrl) {
+      return normalizedStreams;
+    }
+
+    const downloadType = downloadUrl.toLowerCase().includes(".m3u8")
+      ? "m3u8"
+      : "mp4";
+    const downloadHeaders = buildStreamHeaders(iframeSrc, userAgent);
+    const hasDuplicate = normalizedStreams.some(
+      (stream) => stream.link === downloadUrl
+    );
+
+    if (hasDuplicate) {
+      return normalizedStreams;
+    }
+
+    return [
+      ...normalizedStreams,
+      {
+        server: `${SERVER_PREFIX} Download`,
+        link: downloadUrl,
+        type: downloadType,
+        headers: downloadHeaders,
+      },
+    ];
   } catch (err) {
     console.error("streamingunity stream error", err);
     return [];
