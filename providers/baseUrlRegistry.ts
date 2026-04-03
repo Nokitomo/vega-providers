@@ -12,7 +12,7 @@ export const PASTEBIN_PROVIDERS: Record<string, PastebinProviderConfig> = {
   },
   streamingunity: {
     match: /(?:^|\.)streamingunity\./i,
-    fallback: "https://streamingunity.tv",
+    fallback: "https://streamingunity.biz",
   },
   guardaserietv: {
     match: /(?:^|\.)guardaserietv\./i,

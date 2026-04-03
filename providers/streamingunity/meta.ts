@@ -1,5 +1,6 @@
 import { Info, Link, ProviderContext } from "../types";
 import {
+  DEFAULT_CDN_URL,
   DEFAULT_LOCALE,
   REQUEST_TIMEOUT,
   buildLocaleUrl,
@@ -9,6 +10,7 @@ import {
   normalizeText,
   pickImageByType,
   buildImageUrl,
+  resolveCdnUrl,
   resolveBaseUrl,
   resolveUrl,
   resolveTitleName,
@@ -16,8 +18,6 @@ import {
   buildTitleUrl,
   extractTitleId,
 } from "./utils";
-
-const DEFAULT_CDN_URL = "https://cdn.streamingunity.tv";
 
 const pickLogoImage = (
   images: any[] | undefined,
@@ -573,7 +573,7 @@ export const getMeta = async function ({
     }
 
     const slug = resolveTitleSlug(title, DEFAULT_LOCALE) || slugFromLink;
-    const cdnUrl = page?.props?.cdn_url || DEFAULT_CDN_URL;
+    const cdnUrl = resolveCdnUrl(page?.props, baseUrl, DEFAULT_CDN_URL);
 
     const titleName = resolveTitleName(title, DEFAULT_LOCALE);
     const plot = getTranslationValue(title?.translations, "plot", DEFAULT_LOCALE) ||

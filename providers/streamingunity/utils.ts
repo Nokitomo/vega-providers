@@ -1,11 +1,18 @@
 import { ProviderContext } from "../types";
 
-export const DEFAULT_BASE_URL = "https://streamingunity.tv";
+export const DEFAULT_BASE_URL = "https://streamingunity.biz";
+export const DEFAULT_CDN_URL = "https://cdn.streamingunity.biz";
 export const DEFAULT_LOCALE = "it";
 export const REQUEST_TIMEOUT = 15000;
 
 export const normalizeBaseUrl = (value: string): string =>
   value.replace(/\/+$/, "");
+
+const normalizeAbsoluteUrl = (value: unknown): string => {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  return raw.replace(/\/+$/, "");
+};
 
 export const resolveBaseUrl = async (
   providerContext: ProviderContext
@@ -19,6 +26,44 @@ export const resolveBaseUrl = async (
     // ignore and fall back to default
   }
   return DEFAULT_BASE_URL;
+};
+
+export const deriveCdnUrlFromBaseUrl = (
+  baseUrl: string,
+  fallback: string = DEFAULT_CDN_URL
+): string => {
+  const normalizedBase = normalizeAbsoluteUrl(baseUrl);
+  if (!normalizedBase) return fallback;
+
+  const candidate = /^https?:\/\//i.test(normalizedBase)
+    ? normalizedBase
+    : `https://${normalizedBase}`;
+  try {
+    const parsed = new URL(candidate);
+    const hostname = String(parsed.hostname || "")
+      .trim()
+      .replace(/^www\./i, "");
+    if (!hostname) return fallback;
+    const cdnHost = hostname.startsWith("cdn.") ? hostname : `cdn.${hostname}`;
+    return `https://${cdnHost}`;
+  } catch (_) {
+    return fallback;
+  }
+};
+
+export const resolveCdnUrl = (
+  payload: any,
+  baseUrl: string,
+  fallback: string = DEFAULT_CDN_URL
+): string => {
+  const candidates = [payload?.cdn_url, payload?.cdnUrl, payload?.cdn];
+  for (const candidate of candidates) {
+    const normalized = normalizeAbsoluteUrl(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return deriveCdnUrlFromBaseUrl(baseUrl, fallback);
 };
 
 const withLeadingSlash = (value: string): string =>

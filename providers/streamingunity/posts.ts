@@ -1,11 +1,13 @@
 import { Post, ProviderContext } from "../types";
 import {
+  DEFAULT_CDN_URL,
   DEFAULT_LOCALE,
   REQUEST_TIMEOUT,
   buildLocaleUrl,
   extractInertiaPage,
   normalizeText,
   pickImageByType,
+  resolveCdnUrl,
   resolveBaseUrl,
   resolveTitleName,
   resolveTitleSlug,
@@ -23,7 +25,6 @@ import {
   normalizeArchiveYear,
 } from "./filters";
 
-const DEFAULT_CDN_URL = "https://cdn.streamingunity.tv";
 const PAGE_SIZE = 60;
 
 const buildOffset = (page: number): number =>
@@ -217,18 +218,6 @@ const mapTitlesToPosts = (
   return posts;
 };
 
-const resolveApiCdnUrl = (
-  payload: any,
-  fallback = DEFAULT_CDN_URL
-): string => {
-  const candidates = [payload?.cdn_url, payload?.cdnUrl, payload?.cdn];
-  for (const candidate of candidates) {
-    const value = normalizeText(String(candidate || ""));
-    if (value) return value;
-  }
-  return fallback;
-};
-
 const fetchHtml = async (
   url: string,
   providerContext: ProviderContext,
@@ -262,7 +251,7 @@ const fetchHomePosts = async ({
   page: number;
 }): Promise<Post[]> => {
   const offset = buildOffset(page);
-  let cdnUrl = DEFAULT_CDN_URL;
+  let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
 
   try {
     const params = new URLSearchParams();
@@ -278,7 +267,7 @@ const fetchHomePosts = async ({
       timeout: REQUEST_TIMEOUT,
       signal,
     });
-    cdnUrl = resolveApiCdnUrl(res?.data, cdnUrl);
+    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
     const apiTitles = res?.data?.titles || [];
     const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, type);
     if (apiPosts.length > 0 || page > 1) return apiPosts;
@@ -294,7 +283,7 @@ const fetchHomePosts = async ({
       const homeUrl = buildLocaleUrl("/", baseUrl);
       const html = await fetchHtml(homeUrl, providerContext, signal);
       const pageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = pageData?.props?.cdn_url || cdnUrl;
+      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
       const sliders = pageData?.props?.sliders || [];
       const slider = findSlider(sliders, sliderKey);
       const titles = slider?.titles || [];
@@ -321,7 +310,7 @@ const fetchArchivePosts = async ({
   page: number;
 }): Promise<Post[]> => {
   const offset = buildOffset(page);
-  let cdnUrl = DEFAULT_CDN_URL;
+  let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
   let htmlPageData: any | null = null;
   const archiveFilters = filters || {};
   const shouldUseRandomOffset =
@@ -380,7 +369,7 @@ const fetchArchivePosts = async ({
       );
       const html = await fetchHtml(archiveUrl, providerContext, signal);
       htmlPageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = htmlPageData?.props?.cdn_url || cdnUrl;
+      cdnUrl = resolveCdnUrl(htmlPageData?.props, baseUrl, cdnUrl);
       const totalCount = Number(htmlPageData?.props?.totalCount);
       if (Number.isFinite(totalCount) && totalCount > 0) {
         randomOffset = Math.floor(Math.random() * totalCount);
@@ -402,7 +391,7 @@ const fetchArchivePosts = async ({
       timeout: REQUEST_TIMEOUT,
       signal,
     });
-    cdnUrl = resolveApiCdnUrl(res?.data, cdnUrl);
+    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
     const apiTitles = res?.data?.titles || [];
     const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, archiveFilters.type);
     if (apiPosts.length > 0 || page > 1) return apiPosts;
@@ -426,7 +415,7 @@ const fetchArchivePosts = async ({
         const html = await fetchHtml(archiveUrl, providerContext, signal);
         pageData = extractInertiaPage(html, providerContext.cheerio);
       }
-      cdnUrl = pageData?.props?.cdn_url || cdnUrl;
+      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
       const titles = pageData?.props?.titles || [];
       return mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
     } catch (err) {
@@ -454,7 +443,7 @@ const fetchBrowseGenrePosts = async ({
   if (!normalizedGenre) return [];
 
   const offset = buildOffset(page);
-  let cdnUrl = DEFAULT_CDN_URL;
+  let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
 
   try {
     const params = new URLSearchParams();
@@ -472,7 +461,7 @@ const fetchBrowseGenrePosts = async ({
       timeout: REQUEST_TIMEOUT,
       signal,
     });
-    cdnUrl = resolveApiCdnUrl(res?.data, cdnUrl);
+    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
     const apiTitles = res?.data?.titles || [];
     const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl);
     if (apiPosts.length > 0 || page > 1) return apiPosts;
@@ -493,7 +482,7 @@ const fetchBrowseGenrePosts = async ({
       );
       const html = await fetchHtml(browseUrl, providerContext, signal);
       const pageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = pageData?.props?.cdn_url || cdnUrl;
+      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
       const titles = pageData?.props?.titles || [];
       return mapTitlesToPosts(titles, baseUrl, cdnUrl);
     } catch (err) {
@@ -604,7 +593,7 @@ export const getSearchPosts = async function ({
         timeout: REQUEST_TIMEOUT,
         signal,
       });
-      const cdnUrl = resolveApiCdnUrl(res?.data, fallbackCdnUrl);
+      const cdnUrl = resolveCdnUrl(res?.data, baseUrl, fallbackCdnUrl);
       const apiTitles = res?.data?.data || res?.data?.titles || [];
       return {
         posts: mapTitlesToPosts(apiTitles, baseUrl, cdnUrl),
@@ -622,7 +611,7 @@ export const getSearchPosts = async function ({
         );
         const html = await fetchHtml(searchUrl, providerContext, signal);
         const pageData = extractInertiaPage(html, providerContext.cheerio);
-        const htmlCdnUrl = pageData?.props?.cdn_url || cdnUrl;
+        const htmlCdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
         const titles = pageData?.props?.titles || [];
         return mapTitlesToPosts(titles, baseUrl, htmlCdnUrl);
       }
@@ -639,7 +628,7 @@ export const getSearchPosts = async function ({
         );
         const html = await fetchHtml(searchUrl, providerContext, signal);
         const pageData = extractInertiaPage(html, providerContext.cheerio);
-        const cdnUrl = pageData?.props?.cdn_url || DEFAULT_CDN_URL;
+        const cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, DEFAULT_CDN_URL);
         const titles = pageData?.props?.titles || [];
         return mapTitlesToPosts(titles, baseUrl, cdnUrl);
       } catch (htmlErr) {
