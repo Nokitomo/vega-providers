@@ -1,6 +1,6 @@
 import { ProviderContext, Stream, TextTracks } from "../types";
 
-const DEFAULT_BASE_URL = "https://altadefinizionez.sbs";
+const DEFAULT_BASE_URL = "https://altadefinizione.autos";
 const MOSTRAGUARDA_BASE = "https://mostraguarda.stream";
 const REQUEST_TIMEOUT = 10000;
 

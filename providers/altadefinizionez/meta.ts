@@ -1,6 +1,6 @@
 import { Info, Link, ProviderContext } from "../types";
 
-const DEFAULT_BASE_URL = "https://altadefinizionez.sbs";
+const DEFAULT_BASE_URL = "https://altadefinizione.autos";
 const REQUEST_TIMEOUT = 10000;
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");

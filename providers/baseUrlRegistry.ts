@@ -19,6 +19,7 @@ export const PASTEBIN_PROVIDERS: Record<string, PastebinProviderConfig> = {
     fallback: "https://guardaserietv.biz",
   },
   altadefinizionez: {
-    match: /(?:^|\.)altadefinizionez\./i,
-    fallback: "https://altadefinizionez.sbs",
-  },};
+    match: /(?:^|\.)altadefinizione(?:z)?\./i,
+    fallback: "https://altadefinizione.autos",
+  },
+};
