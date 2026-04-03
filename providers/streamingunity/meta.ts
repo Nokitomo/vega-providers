@@ -3,12 +3,14 @@ import {
   DEFAULT_LOCALE,
   REQUEST_TIMEOUT,
   buildLocaleUrl,
+  decodeHtmlEntities,
   extractInertiaPage,
   getTranslationValue,
   normalizeText,
   pickImageByType,
   buildImageUrl,
   resolveBaseUrl,
+  resolveUrl,
   resolveTitleName,
   resolveTitleSlug,
   buildTitleUrl,
@@ -195,6 +197,15 @@ const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
   };
 };
 
+const VIXCLOUD_PLAYABLE_PATTERN =
+  /https?:\/\/[^"'\s]*vixcloud\.co\/(?:embed|playlist)\/\d+[^"'\s]*/i;
+const ABSOLUTE_IFRAME_PATTERN =
+  /https?:\/\/[^"'\s]+\/it\/iframe\/\d+[^"'\s]*/i;
+const RELATIVE_IFRAME_PATTERN = /\/it\/iframe\/\d+[^"'\s]*/i;
+
+const shouldProbeInconsistentUpcoming = (availability: AvailabilityInfo): boolean =>
+  availability.hasDate && !availability.isFuture;
+
 const fetchHtml = async (
   url: string,
   providerContext: ProviderContext,
@@ -225,6 +236,99 @@ const buildSeasonUrl = (
 ): string => {
   const path = `${buildTitlePath(titleId, slug)}/season-${seasonNumber}`;
   return buildLocaleUrl(path, baseUrl);
+};
+
+const extractIframeUrlFromHtml = (
+  html: string,
+  baseUrl: string,
+  cheerio: ProviderContext["cheerio"]
+): string => {
+  if (!html) return "";
+  const $ = cheerio.load(html);
+  const iframeSrc = $("iframe[src]").first().attr("src") || "";
+  if (iframeSrc) {
+    return resolveUrl(decodeHtmlEntities(String(iframeSrc)), baseUrl);
+  }
+  const iframeHref = $("a[href*='/it/iframe/']").first().attr("href") || "";
+  if (iframeHref) {
+    return resolveUrl(decodeHtmlEntities(String(iframeHref)), baseUrl);
+  }
+  const absoluteMatch = html.match(ABSOLUTE_IFRAME_PATTERN);
+  if (absoluteMatch?.[0]) {
+    return decodeHtmlEntities(absoluteMatch[0]);
+  }
+  const relativeMatch = html.match(RELATIVE_IFRAME_PATTERN);
+  if (relativeMatch?.[0]) {
+    return resolveUrl(decodeHtmlEntities(relativeMatch[0]), baseUrl);
+  }
+  return "";
+};
+
+const extractPlayableVixcloudUrl = (
+  html: string,
+  cheerio: ProviderContext["cheerio"]
+): string => {
+  if (!html) return "";
+  const $ = cheerio.load(html);
+  const iframeSrc = $("iframe[src]").first().attr("src") || "";
+  const normalizedIframeSrc = decodeHtmlEntities(String(iframeSrc || ""));
+  if (normalizedIframeSrc && VIXCLOUD_PLAYABLE_PATTERN.test(normalizedIframeSrc)) {
+    return normalizedIframeSrc;
+  }
+  const directMatch = html.match(VIXCLOUD_PLAYABLE_PATTERN);
+  return directMatch?.[0] ? decodeHtmlEntities(directMatch[0]) : "";
+};
+
+const probeMovieAvailability = async ({
+  baseUrl,
+  titleId,
+  providerContext,
+  cheerio,
+}: {
+  baseUrl: string;
+  titleId: string;
+  providerContext: ProviderContext;
+  cheerio: ProviderContext["cheerio"];
+}): Promise<boolean> => {
+  try {
+    const watchUrl = buildLocaleUrl(`/watch/${titleId}`, baseUrl);
+    const watchHtml = await fetchHtml(watchUrl, providerContext);
+    const watchPage = extractInertiaPage(watchHtml, cheerio);
+    const embedUrlFromPage = normalizeText(String(watchPage?.props?.embedUrl || ""));
+    const iframeUrl = embedUrlFromPage
+      ? resolveUrl(decodeHtmlEntities(embedUrlFromPage), baseUrl)
+      : extractIframeUrlFromHtml(watchHtml, baseUrl, cheerio);
+    if (!iframeUrl) {
+      return false;
+    }
+
+    const iframeHtml = await fetchHtml(iframeUrl, providerContext);
+    const playableUrl = extractPlayableVixcloudUrl(iframeHtml, cheerio);
+    return Boolean(playableUrl);
+  } catch (err) {
+    console.warn("streamingunity movie availability probe failed", err);
+    return false;
+  }
+};
+
+const probeSeasonEpisodesCount = async ({
+  seasonUrl,
+  providerContext,
+  cheerio,
+}: {
+  seasonUrl: string;
+  providerContext: ProviderContext;
+  cheerio: ProviderContext["cheerio"];
+}): Promise<number> => {
+  try {
+    const seasonHtml = await fetchHtml(seasonUrl, providerContext);
+    const seasonPage = extractInertiaPage(seasonHtml, cheerio);
+    const episodes = seasonPage?.props?.loadedSeason?.episodes;
+    return Array.isArray(episodes) ? episodes.length : 0;
+  } catch (err) {
+    console.warn("streamingunity season availability probe failed", err);
+    return 0;
+  }
 };
 
 const buildEpisodeLinks = (
@@ -274,11 +378,15 @@ const buildSeriesLinks = async ({
   slug,
   baseUrl,
   loadedSeason,
+  providerContext,
+  cheerio,
 }: {
   title: any;
   slug: string;
   baseUrl: string;
   loadedSeason: any;
+  providerContext: ProviderContext;
+  cheerio: ProviderContext["cheerio"];
 }): Promise<{ linkList: Link[]; episodesCount?: number }> => {
   const seasons: any[] = Array.isArray(title?.seasons) ? title.seasons : [];
   if (seasons.length === 0) {
@@ -356,15 +464,34 @@ const buildSeriesLinks = async ({
           hasRawSeasonEpisodesCount &&
           rawSeasonEpisodesCount === 0));
 
+    let reconciledSeasonEpisodesCount = seasonEpisodesCount;
+    if (
+      isUpcomingSeason &&
+      shouldProbeInconsistentUpcoming(seasonAvailability)
+    ) {
+      const probedEpisodesCount = await probeSeasonEpisodesCount({
+        seasonUrl,
+        providerContext,
+        cheerio,
+      });
+      if (probedEpisodesCount > 0) {
+        reconciledSeasonEpisodesCount = probedEpisodesCount;
+        episodesCount += probedEpisodesCount;
+        hasEpisodesCount = true;
+      }
+    }
+    const shouldKeepSeasonUpcoming =
+      isUpcomingSeason && reconciledSeasonEpisodesCount === 0;
+
     const seasonLink: Link = {
       title: `Season ${seasonNumber}`,
       titleKey: "Season {{number}}",
       titleParams: { number: seasonNumber },
       seasonNumber,
-      availabilityStatus: isUpcomingSeason ? "upcoming" : "available",
+      availabilityStatus: shouldKeepSeasonUpcoming ? "upcoming" : "available",
     };
 
-    if (isUpcomingSeason) {
+    if (shouldKeepSeasonUpcoming) {
       if (seasonAvailability.hasDate) {
         seasonLink.availabilityDate = seasonAvailability.date;
         seasonLink.availabilityPrecision = seasonAvailability.precision;
@@ -492,6 +619,8 @@ export const getMeta = async function ({
         slug,
         baseUrl,
         loadedSeason: page?.props?.loadedSeason,
+        providerContext,
+        cheerio,
       });
       linkList = seriesLinks.linkList;
       episodesCount = seriesLinks.episodesCount;
@@ -504,14 +633,25 @@ export const getMeta = async function ({
         (!hasStatusToken(movieStatus, RELEASED_STATUS_TOKENS) &&
           movieAvailability.hasDate &&
           movieAvailability.isFuture);
+      const shouldProbeMovieAvailability =
+        isMovieUpcoming && shouldProbeInconsistentUpcoming(movieAvailability);
+      const hasPlayableMovie = shouldProbeMovieAvailability
+        ? await probeMovieAvailability({
+            baseUrl,
+            titleId,
+            providerContext,
+            cheerio,
+          })
+        : false;
+      const shouldKeepMovieUpcoming = isMovieUpcoming && !hasPlayableMovie;
 
       const movieLink: Link = {
         title: "Play",
         titleKey: "Play",
-        availabilityStatus: isMovieUpcoming ? "upcoming" : "available",
+        availabilityStatus: shouldKeepMovieUpcoming ? "upcoming" : "available",
       };
 
-      if (isMovieUpcoming && movieAvailability.hasDate) {
+      if (shouldKeepMovieUpcoming && movieAvailability.hasDate) {
         movieLink.availabilityDate = movieAvailability.date;
         movieLink.availabilityPrecision = movieAvailability.precision;
       } else {
