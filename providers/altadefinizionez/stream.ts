@@ -33,6 +33,33 @@ const normalizeStreamLink = (href: string, baseUrl: string): string => {
   return new URL(href, baseUrl).href;
 };
 
+const normalizeMirrorUrl = (href: string): string => {
+  if (!href) return "";
+  try {
+    const url = new URL(href);
+    const host = url.hostname.toLowerCase();
+
+    if (host === "dropload.tv" || host.endsWith(".dropload.tv")) {
+      url.hostname = "dr0pstream.com";
+    }
+
+    if (
+      url.hostname.toLowerCase() === "dr0pstream.com" &&
+      /^\/embed-([a-z0-9]+)\.html$/i.test(url.pathname)
+    ) {
+      const match = url.pathname.match(/^\/embed-([a-z0-9]+)\.html$/i);
+      if (match?.[1]) {
+        url.pathname = `/g/${match[1]}`;
+        url.search = "";
+      }
+    }
+
+    return url.toString();
+  } catch (_) {
+    return href;
+  }
+};
+
 const resolveMediaUrl = (href: string, baseUrl: string): string => {
   if (!href) return "";
   if (href.startsWith("//")) return `https:${href}`;
@@ -43,7 +70,8 @@ const resolveMediaUrl = (href: string, baseUrl: string): string => {
 const isSuperVideo = (href: string): boolean =>
   /supervideo\./i.test(href) || href.toLowerCase().includes("supervideo");
 
-const isDropload = (href: string): boolean => /dropload\./i.test(href);
+const isDroploadLike = (href: string): boolean =>
+  /(?:dropload|dr0pstream)\./i.test(href);
 
 const extractImdbIdFromValue = (value: string): string => {
   if (!value) return "";
@@ -350,7 +378,9 @@ const extractMostraguardaStreams = async (
   for (const raw of rawLinks) {
     if (signal?.aborted) break;
     if (!raw) continue;
-    const normalized = normalizeStreamLink(raw, MOSTRAGUARDA_BASE);
+    const normalized = normalizeMirrorUrl(
+      normalizeStreamLink(raw, MOSTRAGUARDA_BASE)
+    );
     if (!normalized) continue;
     if (seen.has(normalized)) continue;
     seen.add(normalized);
@@ -389,7 +419,7 @@ const extractMostraguardaStreams = async (
       continue;
     }
 
-    if (isDropload(normalized)) {
+    if (isDroploadLike(normalized)) {
       try {
         const res = await axios.get(normalized, {
           headers: {
