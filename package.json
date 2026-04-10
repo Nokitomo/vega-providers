@@ -10,6 +10,8 @@
     "test": "node test-providers.js",
     "test:single": "node test-providers.js",
     "test:provider": "node test-provider.js",
+    "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
+    "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",
     "test:ui": "npm run test:interactive",
     "build": "node build-simple.js",
     "build:dev": "cross-env SKIP_MINIFY=true node build-simple.js",

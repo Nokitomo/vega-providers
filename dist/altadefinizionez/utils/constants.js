@@ -1,0 +1,1 @@
+"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.REQUEST_TIMEOUT=exports.GUARDAHD_BASE=exports.MOSTRAGUARDA_BASE=exports.DEFAULT_BASE_URL=void 0,exports.DEFAULT_BASE_URL="https://altadefinizione.autos",exports.MOSTRAGUARDA_BASE="https://mostraguarda.stream",exports.GUARDAHD_BASE="https://guardahd.stream",exports.REQUEST_TIMEOUT=1e4;
