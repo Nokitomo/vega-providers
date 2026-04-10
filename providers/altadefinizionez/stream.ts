@@ -2,6 +2,7 @@ import { ProviderContext, Stream, TextTracks } from "../types";
 
 const DEFAULT_BASE_URL = "https://altadefinizione.autos";
 const MOSTRAGUARDA_BASE = "https://mostraguarda.stream";
+const GUARDAHD_BASE = "https://guardahd.stream";
 const REQUEST_TIMEOUT = 10000;
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
@@ -72,6 +73,9 @@ const isSuperVideo = (href: string): boolean =>
 
 const isDroploadLike = (href: string): boolean =>
   /(?:dropload|dr0pstream)\./i.test(href);
+
+const isVixsrcLike = (href: string): boolean =>
+  /(?:vixsrc|vixcloud)\./i.test(href);
 
 const isMixdropLike = (href: string): boolean =>
   /(?:mixdrop|m1xdrop)\./i.test(href);
@@ -361,6 +365,126 @@ const extractMixdropData = (
   };
 };
 
+const decodeHtmlEntities = (value: string): string =>
+  value.replace(/&amp;/g, "&");
+
+const normalizeUrlValue = (value: string): string =>
+  decodeHtmlEntities(value.replace(/\\\//g, "/")).trim();
+
+const safeDecodeUrlComponent = (value: string): string => {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch (_) {
+    return value;
+  }
+};
+
+const extractQueryParamsFromUrl = (url: string): Record<string, string> => {
+  const params: Record<string, string> = {};
+  if (!url) return params;
+  const queryStart = url.indexOf("?");
+  if (queryStart === -1) return params;
+  const hashStart = url.indexOf("#", queryStart);
+  const queryString =
+    hashStart === -1 ? url.slice(queryStart + 1) : url.slice(queryStart + 1, hashStart);
+  if (!queryString) return params;
+  for (const part of queryString.split("&")) {
+    if (!part) continue;
+    const [rawKey, rawValue = ""] = part.split("=");
+    if (!rawKey) continue;
+    const key = safeDecodeUrlComponent(rawKey);
+    if (!key) continue;
+    const value = safeDecodeUrlComponent(rawValue);
+    params[key] = value;
+  }
+  return params;
+};
+
+const appendQueryParams = (
+  url: string,
+  params: Record<string, string>
+): string => {
+  const normalized = normalizeUrlValue(url);
+  if (!normalized) return normalized;
+  const [baseWithQuery, hashPart] = normalized.split("#", 2);
+  const base = baseWithQuery.split("?")[0];
+  const existing = extractQueryParamsFromUrl(baseWithQuery);
+  const merged: Record<string, string> = { ...existing };
+  for (const [key, value] of Object.entries(params)) {
+    if (value && !Object.prototype.hasOwnProperty.call(merged, key)) {
+      merged[key] = value;
+    }
+  }
+  const query = Object.entries(merged)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+  const rebuilt = query ? `${base}?${query}` : base;
+  return hashPart ? `${rebuilt}#${hashPart}` : rebuilt;
+};
+
+const extractVixsrcData = (
+  html: string,
+  pageUrl: string
+): {
+  streamUrl: string;
+  fallbackUrl: string;
+} => {
+  const masterUrlMatch = html.match(
+    /window\.masterPlaylist\s*=\s*{[\s\S]*?url\s*:\s*['"]([^'"]+)['"]/i
+  );
+  const masterUrlRaw = masterUrlMatch?.[1] || "";
+  const paramsBlockMatch = html.match(
+    /window\.masterPlaylist\s*=\s*{[\s\S]*?params\s*:\s*{([\s\S]*?)}[\s\S]*?}/i
+  );
+  const paramsBlock = paramsBlockMatch?.[1] || "";
+  const params: Record<string, string> = {};
+  const paramRegex = /['"]([^'"]+)['"]\s*:\s*'([^']*)'/g;
+  let match: RegExpExecArray | null = null;
+  while ((match = paramRegex.exec(paramsBlock))) {
+    if (match[1]) {
+      params[match[1]] = match[2] || "";
+    }
+  }
+  const embedParams = extractQueryParamsFromUrl(pageUrl);
+  if (!params.token && embedParams.token) params.token = embedParams.token;
+  if (!params.expires && embedParams.expires) params.expires = embedParams.expires;
+  if (!params.asn && embedParams.asn) params.asn = embedParams.asn;
+  const canPlayFhd = /window\.canPlayFHD\s*=\s*true/i.test(html);
+  if (canPlayFhd && !params.h) {
+    params.h = "1";
+  }
+  const masterUrlResolved = masterUrlRaw
+    ? resolveMediaUrl(normalizeUrlValue(masterUrlRaw), pageUrl)
+    : "";
+  const streamUrl = masterUrlResolved
+    ? appendQueryParams(masterUrlResolved, params)
+    : "";
+  const downloadMatch = html.match(/window\.downloadUrl\s*=\s*['"]([^'"]+)['"]/i);
+  const fallbackUrl = downloadMatch?.[1]
+    ? resolveMediaUrl(normalizeUrlValue(downloadMatch[1]), pageUrl)
+    : "";
+  return { streamUrl, fallbackUrl };
+};
+
+const buildStreamHgRedirectUrl = (url: string): string => {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    const idMatch = parsed.pathname.match(/^\/e\/([a-z0-9]+)$/i);
+    if (
+      idMatch?.[1] &&
+      (host === "dhcplay.com" ||
+        host.endsWith(".dhcplay.com") ||
+        host.includes("streamhg"))
+    ) {
+      return `https://vibuxer.com/e/${idMatch[1]}`;
+    }
+  } catch (_) {
+    // ignore malformed URL
+  }
+  return "";
+};
+
 const extractDirectMediaCandidates = (
   text: string,
   baseUrl: string
@@ -388,6 +512,9 @@ const extractDirectMediaCandidates = (
   for (const match of text.matchAll(/\/\/[^"'\s]+?\.(?:m3u8|mp4)[^"'\s]*/gi)) {
     pushCandidate(match[0]);
   }
+  for (const match of text.matchAll(/\/[a-z0-9/_-]+?\.m3u8[^"'\s]*/gi)) {
+    pushCandidate(match[0]);
+  }
 
   return Array.from(candidates);
 };
@@ -403,6 +530,10 @@ const extractStreamHgData = async ({
   providerContext: ProviderContext;
   signal: AbortSignal;
 }): Promise<string> => {
+  const decoded = unpackPacker(html);
+  const directInDecoded = extractDirectMediaCandidates(decoded, pageUrl);
+  if (directInDecoded.length > 0) return directInDecoded[0];
+
   const directInHtml = extractDirectMediaCandidates(html, pageUrl);
   if (directInHtml.length > 0) return directInHtml[0];
 
@@ -425,6 +556,14 @@ const extractStreamHgData = async ({
         signal,
       });
       const scriptText = String(scriptRes.data || "");
+      const decodedScript = unpackPacker(scriptText);
+      const directInDecodedScript = extractDirectMediaCandidates(
+        decodedScript,
+        pageUrl
+      );
+      if (directInDecodedScript.length > 0) {
+        return directInDecodedScript[0];
+      }
       const directInScript = extractDirectMediaCandidates(scriptText, pageUrl);
       if (directInScript.length > 0) {
         return directInScript[0];
@@ -477,6 +616,7 @@ const extractMostraguardaStreams = async (
   const { axios, extractors, commonHeaders } = providerContext;
   const streams: Stream[] = [];
   const seen = new Set<string>();
+  let server1Index = 1;
   let superVideoIndex = 1;
   let droploadIndex = 1;
   let mixdropIndex = 1;
@@ -532,6 +672,51 @@ const extractMostraguardaStreams = async (
       continue;
     }
 
+    if (isVixsrcLike(normalized)) {
+      try {
+        const res = await axios.get(normalized, {
+          headers: {
+            ...commonHeaders,
+            Referer: `${GUARDAHD_BASE}/`,
+          },
+          timeout: REQUEST_TIMEOUT,
+          signal,
+        });
+
+        const parsed = extractVixsrcData(String(res.data || ""), normalized);
+        const streamUrl = parsed.streamUrl || parsed.fallbackUrl;
+        if (streamUrl) {
+          const isPlaylistLink =
+            streamUrl.toLowerCase().includes("/playlist/") ||
+            streamUrl.toLowerCase().includes(".m3u8");
+          const type = isPlaylistLink ? "m3u8" : "mp4";
+          const vixOrigin = new URL(normalized).origin;
+          const headers: Record<string, string> = {
+            Referer: normalized,
+            Origin: vixOrigin,
+            Accept: "*/*",
+          };
+          const userAgent =
+            typeof commonHeaders["User-Agent"] === "string"
+              ? commonHeaders["User-Agent"]
+              : "";
+          if (userAgent) {
+            headers["User-Agent"] = userAgent;
+          }
+          addStream({
+            server: `Server 1 ${server1Index}`,
+            link: streamUrl,
+            type,
+            headers,
+          });
+          server1Index += 1;
+        }
+      } catch (err) {
+        console.error("altadefinizionez vixsrc error", err);
+      }
+      continue;
+    }
+
     if (isDroploadLike(normalized)) {
       try {
         const res = await axios.get(normalized, {
@@ -567,7 +752,7 @@ const extractMostraguardaStreams = async (
             headers["Cookie"] = cookieHeader;
           }
           addStream({
-            server: `Server 1 ${droploadIndex}`,
+            server: `Dropload ${droploadIndex}`,
             link: streamUrl,
             type,
             subtitles:
@@ -645,13 +830,43 @@ const extractMostraguardaStreams = async (
           providerContext,
           signal,
         });
-        if (streamUrl) {
-          const type = streamUrl.toLowerCase().includes(".m3u8")
+        let resolvedStreamUrl = streamUrl;
+        const redirectedUrl = buildStreamHgRedirectUrl(normalized);
+        if (!resolvedStreamUrl && redirectedUrl) {
+          try {
+            const redirectedRes = await axios.get(redirectedUrl, {
+              headers: {
+                ...commonHeaders,
+                Referer: normalized,
+              },
+              timeout: REQUEST_TIMEOUT,
+              signal,
+            });
+            resolvedStreamUrl = await extractStreamHgData({
+              html: String(redirectedRes.data || ""),
+              pageUrl: redirectedUrl,
+              providerContext,
+              signal,
+            });
+          } catch (_) {
+            // best effort: ignore redirected extraction failures
+          }
+        }
+        if (resolvedStreamUrl) {
+          const type = resolvedStreamUrl.toLowerCase().includes(".m3u8")
             ? "m3u8"
             : "mp4";
+          const resolvedOrigin = (() => {
+            try {
+              return new URL(resolvedStreamUrl).origin;
+            } catch (_) {
+              return streamHgOrigin;
+            }
+          })();
+          const refererBase = redirectedUrl || normalized;
           const headers: Record<string, string> = {
-            Referer: `${streamHgOrigin}/`,
-            Origin: streamHgOrigin,
+            Referer: `${refererBase}`,
+            Origin: resolvedOrigin,
           };
           const userAgent =
             typeof commonHeaders["User-Agent"] === "string"
@@ -662,7 +877,7 @@ const extractMostraguardaStreams = async (
           }
           addStream({
             server: `StreamHG ${streamHgIndex}`,
-            link: streamUrl,
+            link: resolvedStreamUrl,
             type,
             headers,
           });
@@ -675,6 +890,30 @@ const extractMostraguardaStreams = async (
   }
 
   return streams;
+};
+
+const extractPlayerLinksFromHtml = (
+  html: string,
+  cheerio: ProviderContext["cheerio"]
+): string[] => {
+  const $ = cheerio.load(html || "");
+  const links: string[] = [];
+
+  $("li[data-link], span[data-link]").each((_, element) => {
+    const link = $(element).attr("data-link");
+    if (link) {
+      links.push(link);
+    }
+  });
+
+  if (links.length === 0) {
+    const iframe = $("iframe").attr("src");
+    if (iframe) {
+      links.push(iframe);
+    }
+  }
+
+  return links;
 };
 
 const getMovieStreams = async (
@@ -697,30 +936,38 @@ const getMovieStreams = async (
   const imdbId = extractImdbIdFromHtml(html, cheerio);
   if (!imdbId) return [];
 
-  const playerUrl = `${MOSTRAGUARDA_BASE}/index.php?task=set-movie-a&id_imdb=${imdbId}`;
-  const playerRes = await axios.get(playerUrl, {
-    headers: {
-      ...commonHeaders,
-      Referer: `${MOSTRAGUARDA_BASE}/`,
+  const playerCandidates: { url: string; referer: string }[] = [
+    {
+      url: `${GUARDAHD_BASE}/index.php?task=set-movie-u&id_imdb=${imdbId}`,
+      referer: `${GUARDAHD_BASE}/`,
     },
-    timeout: REQUEST_TIMEOUT,
-    signal,
-  });
+    {
+      url: `${MOSTRAGUARDA_BASE}/index.php?task=set-movie-a&id_imdb=${imdbId}`,
+      referer: `${MOSTRAGUARDA_BASE}/`,
+    },
+  ];
 
-  const $ = cheerio.load(playerRes.data || "");
-  const links: string[] = [];
-
-  $("li[data-link], span[data-link]").each((_, element) => {
-    const link = $(element).attr("data-link");
-    if (link) {
-      links.push(link);
-    }
-  });
-
-  if (links.length === 0) {
-    const iframe = $("iframe").attr("src");
-    if (iframe) {
-      links.push(iframe);
+  let links: string[] = [];
+  for (const candidate of playerCandidates) {
+    try {
+      const playerRes = await axios.get(candidate.url, {
+        headers: {
+          ...commonHeaders,
+          Referer: candidate.referer,
+        },
+        timeout: REQUEST_TIMEOUT,
+        signal,
+      });
+      const extracted = extractPlayerLinksFromHtml(
+        String(playerRes.data || ""),
+        cheerio
+      );
+      if (extracted.length > 0) {
+        links = extracted;
+        break;
+      }
+    } catch (_) {
+      // continue with next source
     }
   }
 
