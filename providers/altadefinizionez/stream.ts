@@ -73,6 +73,12 @@ const isSuperVideo = (href: string): boolean =>
 const isDroploadLike = (href: string): boolean =>
   /(?:dropload|dr0pstream)\./i.test(href);
 
+const isMixdropLike = (href: string): boolean =>
+  /(?:mixdrop|m1xdrop)\./i.test(href);
+
+const isStreamHgLike = (href: string): boolean =>
+  /(?:streamhg|dhcplay)\./i.test(href);
+
 const extractImdbIdFromValue = (value: string): string => {
   if (!value) return "";
   const match = value.match(/tt\d{6,9}/i);
@@ -124,7 +130,7 @@ const extractImdbIdFromHtml = (
 };
 
 const PACKER_REGEX =
-  /eval\(function\(p,a,c,k,e,d\)\{[\s\S]*?\}\((['"])((?:\\.|[^\\])*)\1,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['"])((?:\\.|[^\\])*)\5\.split\('\|'\)\)\)/;
+  /eval\(function\(p,a,c,k,e,d\)\{[\s\S]*?return p\}\(\s*(['"])([\s\S]*?)\1\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(['"])([\s\S]*?)\5\.split\('\|'\)\s*(?:,\s*[\s\S]*?)?\)\)/i;
 
 const unescapePackerString = (value: string): string =>
   value.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
@@ -138,7 +144,14 @@ const unpackPacker = (html: string): string => {
   const count = Number.parseInt(match[4], 10);
   const dictionary = unescapePackerString(match[6]).split("|");
 
-  if (!Number.isFinite(base) || !Number.isFinite(count)) return "";
+  if (
+    !Number.isFinite(base) ||
+    !Number.isFinite(count) ||
+    base < 2 ||
+    base > 36
+  ) {
+    return "";
+  }
 
   let decoded = payload;
   for (let index = count - 1; index >= 0; index -= 1) {
@@ -326,6 +339,104 @@ const extractDroploadData = (
   };
 };
 
+const extractMixdropData = (
+  html: string,
+  baseUrl: string
+): {
+  streamUrl: string;
+  subtitles: TextTracks;
+} => {
+  const decoded = unpackPacker(html);
+  const wurl = decoded.match(/MDCore\.wurl\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+  const furl = decoded.match(/MDCore\.furl\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+  const rawCandidate = (wurl || furl || extractPackedStreamUrl(decoded) || "")
+    .trim()
+    .replace(/\\\//g, "/");
+  const streamUrlRaw = /\.(?:m3u8|mp4)(?:[?#].*)?$/i.test(rawCandidate)
+    ? rawCandidate
+    : "";
+  return {
+    streamUrl: streamUrlRaw ? resolveMediaUrl(streamUrlRaw, baseUrl) : "",
+    subtitles: parseTracksFromDecoded(decoded, baseUrl),
+  };
+};
+
+const extractDirectMediaCandidates = (
+  text: string,
+  baseUrl: string
+): string[] => {
+  if (!text) return [];
+  const candidates = new Set<string>();
+
+  const pushCandidate = (value: string): void => {
+    if (!value) return;
+    const cleaned = value.replace(/\\\//g, "/").replace(/&amp;/g, "&").trim();
+    if (!cleaned) return;
+    const resolved = resolveMediaUrl(cleaned, baseUrl);
+    if (/\.m3u8(?:[?#][^"'\s]*)?$/i.test(resolved)) {
+      candidates.add(resolved);
+      return;
+    }
+    if (/\.mp4(?:[?#][^"'\s]*)?$/i.test(resolved)) {
+      candidates.add(resolved);
+    }
+  };
+
+  for (const match of text.matchAll(/https?:[^"'\s]+?\.(?:m3u8|mp4)[^"'\s]*/gi)) {
+    pushCandidate(match[0]);
+  }
+  for (const match of text.matchAll(/\/\/[^"'\s]+?\.(?:m3u8|mp4)[^"'\s]*/gi)) {
+    pushCandidate(match[0]);
+  }
+
+  return Array.from(candidates);
+};
+
+const extractStreamHgData = async ({
+  html,
+  pageUrl,
+  providerContext,
+  signal,
+}: {
+  html: string;
+  pageUrl: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<string> => {
+  const directInHtml = extractDirectMediaCandidates(html, pageUrl);
+  if (directInHtml.length > 0) return directInHtml[0];
+
+  const { axios, cheerio, commonHeaders } = providerContext;
+  const $ = cheerio.load(html || "");
+  const scriptSources = $("script[src]")
+    .map((_index, element) => $(element).attr("src") || "")
+    .get()
+    .filter(Boolean)
+    .map((src) => resolveMediaUrl(src, pageUrl));
+
+  for (const scriptUrl of scriptSources.slice(0, 6)) {
+    try {
+      const scriptRes = await axios.get(scriptUrl, {
+        headers: {
+          ...commonHeaders,
+          Referer: pageUrl,
+        },
+        timeout: REQUEST_TIMEOUT,
+        signal,
+      });
+      const scriptText = String(scriptRes.data || "");
+      const directInScript = extractDirectMediaCandidates(scriptText, pageUrl);
+      if (directInScript.length > 0) {
+        return directInScript[0];
+      }
+    } catch (_) {
+      // best effort: try next script
+    }
+  }
+
+  return "";
+};
+
 const extractDroploadCookies = (html: string): Record<string, string> => {
   const cookies: Record<string, string> = {};
   if (!html) return cookies;
@@ -368,6 +479,8 @@ const extractMostraguardaStreams = async (
   const seen = new Set<string>();
   let superVideoIndex = 1;
   let droploadIndex = 1;
+  let mixdropIndex = 1;
+  let streamHgIndex = 1;
 
   const addStream = (stream: Stream): void => {
     if (!stream.link || seen.has(stream.link)) return;
@@ -454,7 +567,7 @@ const extractMostraguardaStreams = async (
             headers["Cookie"] = cookieHeader;
           }
           addStream({
-            server: `Dropload ${droploadIndex}`,
+            server: `Server 1 ${droploadIndex}`,
             link: streamUrl,
             type,
             subtitles:
@@ -465,6 +578,98 @@ const extractMostraguardaStreams = async (
         }
       } catch (err) {
         console.error("altadefinizionez dropload error", err);
+      }
+      continue;
+    }
+
+    if (isMixdropLike(normalized)) {
+      try {
+        const res = await axios.get(normalized, {
+          headers: {
+            ...commonHeaders,
+            Referer: `${MOSTRAGUARDA_BASE}/`,
+          },
+          timeout: REQUEST_TIMEOUT,
+          signal,
+        });
+
+        const mixdropOrigin = new URL(normalized).origin;
+        const parsed = extractMixdropData(res.data || "", mixdropOrigin);
+        const streamUrl = parsed.streamUrl;
+        if (streamUrl) {
+          const type = streamUrl.toLowerCase().includes(".m3u8")
+            ? "m3u8"
+            : "mp4";
+          const headers: Record<string, string> = {
+            Referer: `${mixdropOrigin}/`,
+            Origin: mixdropOrigin,
+          };
+          const userAgent =
+            typeof commonHeaders["User-Agent"] === "string"
+              ? commonHeaders["User-Agent"]
+              : "";
+          if (userAgent) {
+            headers["User-Agent"] = userAgent;
+          }
+          addStream({
+            server: `Mixdrop ${mixdropIndex}`,
+            link: streamUrl,
+            type,
+            subtitles:
+              parsed.subtitles.length > 0 ? parsed.subtitles : undefined,
+            headers,
+          });
+          mixdropIndex += 1;
+        }
+      } catch (err) {
+        console.error("altadefinizionez mixdrop error", err);
+      }
+      continue;
+    }
+
+    if (isStreamHgLike(normalized)) {
+      try {
+        const res = await axios.get(normalized, {
+          headers: {
+            ...commonHeaders,
+            Referer: `${MOSTRAGUARDA_BASE}/`,
+          },
+          timeout: REQUEST_TIMEOUT,
+          signal,
+        });
+
+        const streamHgOrigin = new URL(normalized).origin;
+        const streamUrl = await extractStreamHgData({
+          html: String(res.data || ""),
+          pageUrl: normalized,
+          providerContext,
+          signal,
+        });
+        if (streamUrl) {
+          const type = streamUrl.toLowerCase().includes(".m3u8")
+            ? "m3u8"
+            : "mp4";
+          const headers: Record<string, string> = {
+            Referer: `${streamHgOrigin}/`,
+            Origin: streamHgOrigin,
+          };
+          const userAgent =
+            typeof commonHeaders["User-Agent"] === "string"
+              ? commonHeaders["User-Agent"]
+              : "";
+          if (userAgent) {
+            headers["User-Agent"] = userAgent;
+          }
+          addStream({
+            server: `StreamHG ${streamHgIndex}`,
+            link: streamUrl,
+            type,
+            headers,
+          });
+          streamHgIndex += 1;
+        }
+      } catch (err) {
+        console.error("altadefinizionez streamhg error", err);
       }
     }
   }
