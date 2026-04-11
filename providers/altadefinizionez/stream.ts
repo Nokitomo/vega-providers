@@ -144,7 +144,7 @@ const appendGlobalVixsrcFallback = async ({
 
       output.push({
         ...fallbackStream,
-        server: `Server 1 Fallback ${fallbackIndex}`,
+        server: `VixSrc ${fallbackIndex}`,
       });
       seenStreamLinks.add(normalizedStreamLink);
       fallbackIndex += 1;
@@ -154,6 +154,114 @@ const appendGlobalVixsrcFallback = async ({
   }
 
   return output;
+};
+
+const STREAM_PROBE_TIMEOUT = 3000;
+const MAX_PROBE_STREAMS = 3;
+
+const buildProbeHeaders = (
+  stream: Stream,
+  commonHeaders: Record<string, string>
+): Record<string, string> => {
+  const headers: Record<string, string> = {};
+
+  Object.entries(commonHeaders || {}).forEach(([key, value]) => {
+    if (!key || value == null || value === "") return;
+    headers[key] = String(value);
+  });
+
+  Object.entries((stream?.headers || {}) as Record<string, unknown>).forEach(
+    ([key, value]) => {
+      if (!key || value == null || value === "") return;
+      headers[key] = String(value);
+    }
+  );
+
+  if (!headers.Accept) {
+    headers.Accept = "*/*";
+  }
+
+  return headers;
+};
+
+const probeStreamAvailability = async (
+  stream: Stream,
+  providerContext: ProviderContext,
+  signal: AbortSignal
+): Promise<boolean> => {
+  const { axios, commonHeaders } = providerContext;
+  const url = (stream?.link || "").trim();
+  if (!url) return false;
+
+  const isM3u8 =
+    (stream?.type || "").toLowerCase().includes("m3u8") ||
+    /\.m3u8(?:$|\?)/i.test(url);
+
+  const headers = buildProbeHeaders(stream, commonHeaders || {});
+  if (!isM3u8) {
+    headers.Range = headers.Range || "bytes=0-1";
+  }
+
+  try {
+    const res = await axios.get(url, {
+      headers,
+      timeout: STREAM_PROBE_TIMEOUT,
+      signal,
+      maxRedirects: 5,
+      responseType: isM3u8 ? "text" : "arraybuffer",
+      validateStatus: () => true,
+    });
+
+    const status = Number(res?.status || 0);
+    if (status >= 400 || status < 200) {
+      return false;
+    }
+
+    if (isM3u8) {
+      const body = String(res?.data || "");
+      return /#EXTM3U/i.test(body);
+    }
+
+    return status === 200 || status === 206;
+  } catch (_) {
+    return false;
+  }
+};
+
+const prioritizeResponsiveStream = async ({
+  streams,
+  providerContext,
+  signal,
+}: {
+  streams: Stream[];
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<Stream[]> => {
+  if (!Array.isArray(streams) || streams.length <= 1) {
+    return streams;
+  }
+  if (signal?.aborted) {
+    return streams;
+  }
+
+  const candidates = streams.slice(0, Math.min(MAX_PROBE_STREAMS, streams.length));
+  const checks = await Promise.all(
+    candidates.map((stream) =>
+      probeStreamAvailability(stream, providerContext, signal)
+    )
+  );
+
+  if (checks[0]) {
+    return streams;
+  }
+
+  const firstResponsiveIndex = checks.findIndex((ok) => ok);
+  if (firstResponsiveIndex <= 0) {
+    return streams;
+  }
+
+  const promoted = streams[firstResponsiveIndex];
+  return [promoted, ...streams.filter((_, index) => index !== firstResponsiveIndex)];
 };
 
 const extractPlayerLinksFromHtml = (
@@ -361,9 +469,15 @@ const getMovieStreams = async (
 
   const extracted = await extractMostraguardaStreams(links, providerContext, signal);
   const fallbackCandidateUrls = buildGlobalMovieVixsrcUrls(imdbId, tmdbIds);
-  return await appendGlobalVixsrcFallback({
+  const withFallback = await appendGlobalVixsrcFallback({
     streams: extracted,
     candidateUrls: fallbackCandidateUrls,
+    providerContext,
+    signal,
+  });
+
+  return await prioritizeResponsiveStream({
+    streams: withFallback,
     providerContext,
     signal,
   });
@@ -430,9 +544,15 @@ const getSeriesStreams = async (
     parsedEpisode.episode
   );
 
-  return await appendGlobalVixsrcFallback({
+  const withFallback = await appendGlobalVixsrcFallback({
     streams: extracted,
     candidateUrls: fallbackCandidateUrls,
+    providerContext,
+    signal,
+  });
+
+  return await prioritizeResponsiveStream({
+    streams: withFallback,
     providerContext,
     signal,
   });
