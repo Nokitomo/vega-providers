@@ -24,6 +24,138 @@ import {
   resolveUrl,
 } from "./utils/url";
 
+const extractTmdbIdsFromHtml = (html: string): string[] => {
+  const ids = new Set<string>();
+  const patterns = [
+    /themoviedb\.org\/(?:movie|tv)\/(\d{2,})/gi,
+    /data-tmdb(?:-id)?=["'](\d{2,})["']/gi,
+    /(?:tmdb(?:_id|Id)?|id_tmdb)\s*["'=:\s]+\s*["']?(\d{2,})["']?/gi,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null = null;
+    while ((match = pattern.exec(html))) {
+      const value = (match[1] || "").trim();
+      if (value) {
+        ids.add(value);
+      }
+    }
+  }
+
+  return Array.from(ids);
+};
+
+const parseEpisodeKey = (
+  episodeKey: string
+): { season: number; episode: number } | null => {
+  const [seasonRaw, episodeRaw] = (episodeKey || "").split("-");
+  const season = Number.parseInt(seasonRaw || "", 10);
+  const episode = Number.parseInt(episodeRaw || "", 10);
+  if (!Number.isFinite(season) || !Number.isFinite(episode)) {
+    return null;
+  }
+  if (season <= 0 || episode <= 0) {
+    return null;
+  }
+  return { season, episode };
+};
+
+const buildGlobalMovieVixsrcUrls = (
+  imdbId: string,
+  tmdbIds: string[]
+): string[] => {
+  const urls: string[] = [];
+  if (imdbId) {
+    urls.push(`https://vixsrc.to/movie/${imdbId}`);
+  }
+  tmdbIds.forEach((tmdbId) => {
+    if (tmdbId) {
+      urls.push(`https://vixsrc.to/movie/${tmdbId}`);
+    }
+  });
+  return urls;
+};
+
+const buildGlobalSeriesVixsrcUrls = (
+  imdbId: string,
+  tmdbIds: string[],
+  season: number,
+  episode: number
+): string[] => {
+  const urls: string[] = [];
+  if (imdbId) {
+    urls.push(`https://vixsrc.to/tv/${imdbId}/${season}/${episode}`);
+  }
+  tmdbIds.forEach((tmdbId) => {
+    if (tmdbId) {
+      urls.push(`https://vixsrc.to/tv/${tmdbId}/${season}/${episode}`);
+    }
+  });
+  return urls;
+};
+
+const appendGlobalVixsrcFallback = async ({
+  streams,
+  candidateUrls,
+  providerContext,
+  signal,
+}: {
+  streams: Stream[];
+  candidateUrls: string[];
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<Stream[]> => {
+  if (!Array.isArray(candidateUrls) || candidateUrls.length === 0) {
+    return streams;
+  }
+
+  const output = [...streams];
+  const seenStreamLinks = new Set(
+    output
+      .map((stream) => (stream?.link || "").trim())
+      .filter((link) => link.length > 0)
+  );
+  const seenCandidateUrls = new Set<string>();
+  let fallbackIndex = 1;
+
+  for (const candidateUrl of candidateUrls) {
+    if (signal?.aborted) break;
+    const normalizedUrl = (candidateUrl || "").trim();
+    if (!normalizedUrl || seenCandidateUrls.has(normalizedUrl)) {
+      continue;
+    }
+    seenCandidateUrls.add(normalizedUrl);
+
+    try {
+      const fallbackStream = await resolveVixsrcStream({
+        normalizedUrl,
+        index: fallbackIndex,
+        providerContext,
+        signal,
+      });
+      if (!fallbackStream?.link) {
+        continue;
+      }
+
+      const normalizedStreamLink = fallbackStream.link.trim();
+      if (!normalizedStreamLink || seenStreamLinks.has(normalizedStreamLink)) {
+        continue;
+      }
+
+      output.push({
+        ...fallbackStream,
+        server: `Server 1 Fallback ${fallbackIndex}`,
+      });
+      seenStreamLinks.add(normalizedStreamLink);
+      fallbackIndex += 1;
+    } catch (err) {
+      console.error("altadefinizionez global vixsrc fallback error", err);
+    }
+  }
+
+  return output;
+};
+
 const extractPlayerLinksFromHtml = (
   html: string,
   cheerio: ProviderContext["cheerio"]
@@ -188,18 +320,20 @@ const getMovieStreams = async (
 
   const html = res.data || "";
   const imdbId = extractImdbIdFromHtml(html, cheerio);
-  if (!imdbId) return [];
+  const tmdbIds = extractTmdbIdsFromHtml(html);
 
-  const playerCandidates: { url: string; referer: string }[] = [
-    {
-      url: `${GUARDAHD_BASE}/index.php?task=set-movie-u&id_imdb=${imdbId}`,
-      referer: `${GUARDAHD_BASE}/`,
-    },
-    {
-      url: `${MOSTRAGUARDA_BASE}/index.php?task=set-movie-a&id_imdb=${imdbId}`,
-      referer: `${MOSTRAGUARDA_BASE}/`,
-    },
-  ];
+  const playerCandidates: { url: string; referer: string }[] = imdbId
+    ? [
+        {
+          url: `${GUARDAHD_BASE}/index.php?task=set-movie-u&id_imdb=${imdbId}`,
+          referer: `${GUARDAHD_BASE}/`,
+        },
+        {
+          url: `${MOSTRAGUARDA_BASE}/index.php?task=set-movie-a&id_imdb=${imdbId}`,
+          referer: `${MOSTRAGUARDA_BASE}/`,
+        },
+      ]
+    : [];
 
   let links: string[] = [];
   for (const candidate of playerCandidates) {
@@ -225,7 +359,14 @@ const getMovieStreams = async (
     }
   }
 
-  return await extractMostraguardaStreams(links, providerContext, signal);
+  const extracted = await extractMostraguardaStreams(links, providerContext, signal);
+  const fallbackCandidateUrls = buildGlobalMovieVixsrcUrls(imdbId, tmdbIds);
+  return await appendGlobalVixsrcFallback({
+    streams: extracted,
+    candidateUrls: fallbackCandidateUrls,
+    providerContext,
+    signal,
+  });
 };
 
 const getSeriesStreams = async (
@@ -245,7 +386,8 @@ const getSeriesStreams = async (
     signal,
   });
 
-  const $ = cheerio.load(res.data || "");
+  const html = String(res.data || "");
+  const $ = cheerio.load(html);
   const parts = episodeKey.split("-");
   const season = parts[0] || "";
   const selector = season
@@ -273,7 +415,27 @@ const getSeriesStreams = async (
       });
   }
 
-  return await extractMostraguardaStreams(links, providerContext, signal);
+  const extracted = await extractMostraguardaStreams(links, providerContext, signal);
+  const parsedEpisode = parseEpisodeKey(episodeKey);
+  if (!parsedEpisode) {
+    return extracted;
+  }
+
+  const imdbId = extractImdbIdFromHtml(html, cheerio);
+  const tmdbIds = extractTmdbIdsFromHtml(html);
+  const fallbackCandidateUrls = buildGlobalSeriesVixsrcUrls(
+    imdbId,
+    tmdbIds,
+    parsedEpisode.season,
+    parsedEpisode.episode
+  );
+
+  return await appendGlobalVixsrcFallback({
+    streams: extracted,
+    candidateUrls: fallbackCandidateUrls,
+    providerContext,
+    signal,
+  });
 };
 
 export const getStream = async function ({
