@@ -1,0 +1,24 @@
+[
+  {
+    "name": "AnimeUnity",
+    "id": 4225767024,
+    "baseUrl": "https://www.animeunity.so",
+    "lang": "it",
+    "typeSource": "single",
+    "iconUrl": "https://www.google.com/s2/favicons?sz=256&domain=https://www.animeunity.so",
+    "dateFormat": "",
+    "dateFormatLocale": "",
+    "isNsfw": false,
+    "hasCloudflare": false,
+    "sourceCodeUrl": "https://raw.githubusercontent.com/Nokitomo/vega-providers/main/dist-shonenx/javascript/anime/src/it/animeunity.js",
+    "apiUrl": "",
+    "version": "1.3.0",
+    "isManga": false,
+    "itemType": 1,
+    "isFullData": false,
+    "appMinVerReq": "0.5.0",
+    "additionalParams": "",
+    "sourceCodeLanguage": 1,
+    "notes": "generated from vega-providers"
+  }
+]

@@ -13,6 +13,7 @@ class DevServer {
     this.app = express();
     this.port = 3001;
     this.distDir = path.join(__dirname, "dist");
+    this.shonenxDistDir = path.join(__dirname, "dist-shonenx");
     this.currentDir = path.join(__dirname);
 
     this.setupMiddleware();
@@ -31,6 +32,7 @@ class DevServer {
 
     // Serve static files from dist directory
     this.app.use("/dist", express.static(this.distDir));
+    this.app.use("/dist-shonenx", express.static(this.shonenxDistDir));
 
     // JSON parsing
     this.app.use(express.json());
@@ -66,6 +68,20 @@ class DevServer {
         res.status(404).json({
           error: `File not found: ${provider}/${file}`,
           hint: "Make sure to run build first",
+        });
+      }
+    });
+
+    // Serve ShonenX anime index
+    this.app.get("/anime_index.json", (req, res) => {
+      const animeIndexPath = path.join(this.shonenxDistDir, "anime_index.json");
+
+      if (fs.existsSync(animeIndexPath)) {
+        res.sendFile(animeIndexPath);
+      } else {
+        res.status(404).json({
+          error: "anime_index.json not found. Run build first.",
+          hint: "npm run build",
         });
       }
     });
@@ -115,6 +131,8 @@ class DevServer {
         availableEndpoints: [
           "GET /manifest.json",
           "GET /dist/:provider/:file",
+          "GET /anime_index.json",
+          "GET /dist-shonenx/:file",
           "POST /build",
           "GET /status",
           "GET /providers",

@@ -312,3 +312,21 @@ This gives you flexibility to support both providers that need extra requests fo
 This workflow allows you to quickly test and debug new providers before deploying them.
 
 Follow this structure and naming convention to ensure your provider integrates smoothly with the project.
+
+---
+
+## ShonenX Output (AnimeUnity)
+
+This repo now generates a second output dedicated to ShonenX/Mangayomi JS extensions for `animeunity`.
+
+- Build command:
+  - `npm run build` (builds both Vega output and ShonenX output)
+  - `npm run build:shonenx` (builds only ShonenX files)
+- Generated files:
+  - `dist-shonenx/anime_index.json`
+  - `dist-shonenx/javascript/anime/src/it/animeunity.js`
+- Smoke tests:
+  - `npm run test:animeunity:vega:smoke`
+  - `npm run test:animeunity:shonenx:smoke`
+
+`build-shonenx.js` reads the AnimeUnity version from `manifest.json`, then injects it into both the JS extension file and the generated `anime_index.json`.
