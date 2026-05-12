@@ -25,10 +25,8 @@ import {
   normalizeArchiveYear,
 } from "./filters";
 
-const PAGE_SIZE = 60;
-
-const buildOffset = (page: number): number =>
-  Math.max(0, (Math.max(1, page) - 1) * PAGE_SIZE);
+const HTML_ACCEPT_HEADER =
+  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
 
 type ArchiveFilters = {
   search?: string;
@@ -218,21 +216,64 @@ const mapTitlesToPosts = (
   return posts;
 };
 
-const fetchHtml = async (
-  url: string,
-  providerContext: ProviderContext,
-  signal: AbortSignal
-): Promise<string> => {
+const extractPayloadFromResponse = (
+  responseData: unknown,
+  providerContext: ProviderContext
+): any | null => {
+  if (responseData == null) return null;
+
+  if (typeof responseData === "object") {
+    return responseData;
+  }
+
+  const text = String(responseData ?? "").trim();
+  if (!text) return null;
+
+  if (text.startsWith("{") || text.startsWith("[")) {
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      // fall through to HTML parsing
+    }
+  }
+
+  return extractInertiaPage(text, providerContext.cheerio)?.props || null;
+};
+
+const fetchPayload = async ({
+  url,
+  providerContext,
+  signal,
+  preferHtml = false,
+}: {
+  url: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+  preferHtml?: boolean;
+}): Promise<any | null> => {
   const { axios, commonHeaders } = providerContext;
   const res = await axios.get(url, {
     headers: {
       ...commonHeaders,
       Referer: url,
+      ...(preferHtml ? { Accept: HTML_ACCEPT_HEADER } : {}),
     },
     timeout: REQUEST_TIMEOUT,
     signal,
+    responseType: "text",
+    transformResponse: [(value) => value],
   });
-  return typeof res.data === "string" ? res.data : String(res.data ?? "");
+  return extractPayloadFromResponse(res.data, providerContext);
+};
+
+const extractTitlesFromPayload = (payload: any): any[] => {
+  if (Array.isArray(payload?.titles)) {
+    return payload.titles;
+  }
+  if (Array.isArray(payload?.data)) {
+    return payload.data;
+  }
+  return [];
 };
 
 const fetchHomePosts = async ({
@@ -250,41 +291,45 @@ const fetchHomePosts = async ({
   signal: AbortSignal;
   page: number;
 }): Promise<Post[]> => {
-  const offset = buildOffset(page);
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
 
   try {
     const params = new URLSearchParams();
-    params.set("lang", DEFAULT_LOCALE);
-    if (offset > 0) {
-      params.set("offset", String(offset));
+    if (page > 1) {
+      params.set("page", String(page));
     }
-    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/browse/${sliderKey}${
-      params.toString() ? `?${params.toString()}` : ""
-    }`;
-    const res = await providerContext.axios.get(apiUrl, {
-      headers: providerContext.commonHeaders,
-      timeout: REQUEST_TIMEOUT,
+    const browseUrl = buildLocaleUrl(
+      `/browse/${sliderKey}${params.toString() ? `?${params.toString()}` : ""}`,
+      baseUrl
+    );
+    const payload = await fetchPayload({
+      url: browseUrl,
+      providerContext,
       signal,
     });
-    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
-    const apiTitles = res?.data?.titles || [];
-    const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, type);
-    if (apiPosts.length > 0 || page > 1) return apiPosts;
+    cdnUrl = resolveCdnUrl(payload, baseUrl, cdnUrl);
+    const posts = mapTitlesToPosts(
+      extractTitlesFromPayload(payload),
+      baseUrl,
+      cdnUrl,
+      type
+    );
+    if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
-    if (page > 1) {
-      console.error("streamingunity browse api error", err);
-      return [];
-    }
+    console.error("streamingunity browse route error", err);
   }
 
   if (page <= 1) {
     try {
       const homeUrl = buildLocaleUrl("/", baseUrl);
-      const html = await fetchHtml(homeUrl, providerContext, signal);
-      const pageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
-      const sliders = pageData?.props?.sliders || [];
+      const pageData = await fetchPayload({
+        url: homeUrl,
+        providerContext,
+        signal,
+        preferHtml: true,
+      });
+      cdnUrl = resolveCdnUrl(pageData, baseUrl, cdnUrl);
+      const sliders = pageData?.sliders || [];
       const slider = findSlider(sliders, sliderKey);
       const titles = slider?.titles || [];
       return mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
@@ -309,30 +354,11 @@ const fetchArchivePosts = async ({
   signal: AbortSignal;
   page: number;
 }): Promise<Post[]> => {
-  const offset = buildOffset(page);
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
-  let htmlPageData: any | null = null;
   const archiveFilters = filters || {};
-  const shouldUseRandomOffset =
-    page <= 1 &&
-    archiveFilters.random === true &&
-    !archiveFilters.search &&
-    !archiveFilters.sort &&
-    !archiveFilters.type &&
-    !archiveFilters.year &&
-    !archiveFilters.score &&
-    !archiveFilters.views &&
-    !archiveFilters.service &&
-    !archiveFilters.quality &&
-    !archiveFilters.age &&
-    (!archiveFilters.genres || archiveFilters.genres.length === 0);
 
-  const buildArchiveParams = (
-    includeOffset: boolean,
-    customOffset?: number
-  ): URLSearchParams => {
+  const buildArchiveParams = (): URLSearchParams => {
     const params = new URLSearchParams();
-    params.set("lang", DEFAULT_LOCALE);
     if (archiveFilters.search) params.set("search", archiveFilters.search);
     if (archiveFilters.sort) params.set("sort", archiveFilters.sort);
     if (archiveFilters.type) params.set("type", archiveFilters.type);
@@ -347,76 +373,54 @@ const fetchArchivePosts = async ({
         if (genre) params.append("genre[]", genre);
       });
     }
-    if (includeOffset) {
-      const effectiveOffset =
-        typeof customOffset === "number" ? customOffset : offset;
-      if (effectiveOffset > 0) {
-        params.set("offset", String(effectiveOffset));
-      }
+    if (archiveFilters.random) {
+      params.set("random", "true");
+    }
+    if (page > 1) {
+      params.set("page", String(page));
     }
     return params;
   };
 
-  let randomOffset: number | undefined;
-
-  if (shouldUseRandomOffset) {
-    try {
-      const params = buildArchiveParams(false);
-      const query = params.toString();
-      const archiveUrl = buildLocaleUrl(
-        `/archive${query ? `?${query}` : ""}`,
-        baseUrl
-      );
-      const html = await fetchHtml(archiveUrl, providerContext, signal);
-      htmlPageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = resolveCdnUrl(htmlPageData?.props, baseUrl, cdnUrl);
-      const totalCount = Number(htmlPageData?.props?.totalCount);
-      if (Number.isFinite(totalCount) && totalCount > 0) {
-        randomOffset = Math.floor(Math.random() * totalCount);
-      } else {
-        randomOffset = 0;
-      }
-    } catch (err) {
-      randomOffset = 0;
-    }
-  }
-
   try {
-    const params = buildArchiveParams(true, randomOffset);
-    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/archive${
-      params.toString() ? `?${params.toString()}` : ""
-    }`;
-    const res = await providerContext.axios.get(apiUrl, {
-      headers: providerContext.commonHeaders,
-      timeout: REQUEST_TIMEOUT,
+    const params = buildArchiveParams();
+    const archiveUrl = buildLocaleUrl(
+      `/archive${params.toString() ? `?${params.toString()}` : ""}`,
+      baseUrl
+    );
+    const payload = await fetchPayload({
+      url: archiveUrl,
+      providerContext,
       signal,
     });
-    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
-    const apiTitles = res?.data?.titles || [];
-    const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl, archiveFilters.type);
-    if (apiPosts.length > 0 || page > 1) return apiPosts;
+    cdnUrl = resolveCdnUrl(payload, baseUrl, cdnUrl);
+    const posts = mapTitlesToPosts(
+      extractTitlesFromPayload(payload),
+      baseUrl,
+      cdnUrl,
+      archiveFilters.type
+    );
+    if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
-    if (page > 1) {
-      console.error("streamingunity archive api error", err);
-      return [];
-    }
+    console.error("streamingunity archive route error", err);
   }
 
   if (page <= 1) {
     try {
-      let pageData = htmlPageData;
-      if (!pageData) {
-        const params = buildArchiveParams(false);
-        const query = params.toString();
-        const archiveUrl = buildLocaleUrl(
-          `/archive${query ? `?${query}` : ""}`,
-          baseUrl
-        );
-        const html = await fetchHtml(archiveUrl, providerContext, signal);
-        pageData = extractInertiaPage(html, providerContext.cheerio);
-      }
-      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
-      const titles = pageData?.props?.titles || [];
+      const params = buildArchiveParams();
+      params.delete("page");
+      const archiveUrl = buildLocaleUrl(
+        `/archive${params.toString() ? `?${params.toString()}` : ""}`,
+        baseUrl
+      );
+      const pageData = await fetchPayload({
+        url: archiveUrl,
+        providerContext,
+        signal,
+        preferHtml: true,
+      });
+      cdnUrl = resolveCdnUrl(pageData, baseUrl, cdnUrl);
+      const titles = extractTitlesFromPayload(pageData);
       return mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
     } catch (err) {
       console.error("streamingunity archive html fallback error", err);
@@ -442,34 +446,32 @@ const fetchBrowseGenrePosts = async ({
   const normalizedGenre = normalizeText(genre);
   if (!normalizedGenre) return [];
 
-  const offset = buildOffset(page);
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
 
   try {
     const params = new URLSearchParams();
-    params.set("lang", DEFAULT_LOCALE);
     params.set("g", normalizedGenre);
-    if (offset > 0) {
-      params.set("offset", String(offset));
+    if (page > 1) {
+      params.set("page", String(page));
     }
-
-    const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/browse/genre?${
-      params.toString()
-    }`;
-    const res = await providerContext.axios.get(apiUrl, {
-      headers: providerContext.commonHeaders,
-      timeout: REQUEST_TIMEOUT,
+    const browseUrl = buildLocaleUrl(
+      `/browse/genre?${params.toString()}`,
+      baseUrl
+    );
+    const payload = await fetchPayload({
+      url: browseUrl,
+      providerContext,
       signal,
     });
-    cdnUrl = resolveCdnUrl(res?.data, baseUrl, cdnUrl);
-    const apiTitles = res?.data?.titles || [];
-    const apiPosts = mapTitlesToPosts(apiTitles, baseUrl, cdnUrl);
-    if (apiPosts.length > 0 || page > 1) return apiPosts;
+    cdnUrl = resolveCdnUrl(payload, baseUrl, cdnUrl);
+    const posts = mapTitlesToPosts(
+      extractTitlesFromPayload(payload),
+      baseUrl,
+      cdnUrl
+    );
+    if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
-    if (page > 1) {
-      console.error("streamingunity browse genre api error", err);
-      return [];
-    }
+    console.error("streamingunity browse genre route error", err);
   }
 
   if (page <= 1) {
@@ -480,10 +482,14 @@ const fetchBrowseGenrePosts = async ({
         `/browse/genre?${browseParams.toString()}`,
         baseUrl
       );
-      const html = await fetchHtml(browseUrl, providerContext, signal);
-      const pageData = extractInertiaPage(html, providerContext.cheerio);
-      cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
-      const titles = pageData?.props?.titles || [];
+      const pageData = await fetchPayload({
+        url: browseUrl,
+        providerContext,
+        signal,
+        preferHtml: true,
+      });
+      cdnUrl = resolveCdnUrl(pageData, baseUrl, cdnUrl);
+      const titles = extractTitlesFromPayload(pageData);
       return mapTitlesToPosts(titles, baseUrl, cdnUrl);
     } catch (err) {
       console.error("streamingunity browse genre html fallback error", err);
@@ -584,60 +590,55 @@ export const getSearchPosts = async function ({
       console.error("streamingunity search error: missing base url");
       return [];
     }
-    const offset = buildOffset(page);
-
-    const fetchSearchApi = async (
-      fallbackCdnUrl: string
-    ): Promise<{ posts: Post[]; cdnUrl: string }> => {
+    try {
       const params = new URLSearchParams();
-      params.set("lang", DEFAULT_LOCALE);
       params.set("q", query);
-      if (offset > 0) {
-        params.set("offset", String(offset));
+      if (page > 1) {
+        params.set("page", String(page));
       }
-      const apiUrl = `${baseUrl.replace(/\/+$/, "")}/api/search?${params.toString()}`;
-      const res = await providerContext.axios.get(apiUrl, {
-        headers: providerContext.commonHeaders,
-        timeout: REQUEST_TIMEOUT,
+      const searchUrl = buildLocaleUrl(
+        `/search?${params.toString()}`,
+        baseUrl
+      );
+      const payload = await fetchPayload({
+        url: searchUrl,
+        providerContext,
         signal,
       });
-      const cdnUrl = resolveCdnUrl(res?.data, baseUrl, fallbackCdnUrl);
-      const apiTitles = res?.data?.data || res?.data?.titles || [];
-      return {
-        posts: mapTitlesToPosts(apiTitles, baseUrl, cdnUrl),
-        cdnUrl,
-      };
-    };
-
-    try {
-      const { posts, cdnUrl } = await fetchSearchApi(DEFAULT_CDN_URL);
+      const cdnUrl = resolveCdnUrl(payload, baseUrl, DEFAULT_CDN_URL);
+      const posts = mapTitlesToPosts(
+        extractTitlesFromPayload(payload),
+        baseUrl,
+        cdnUrl
+      );
       if (posts.length > 0 || page > 1) return posts;
       if (page <= 1) {
-        const searchUrl = buildLocaleUrl(
-          `/search?q=${encodeURIComponent(query)}`,
-          baseUrl
-        );
-        const html = await fetchHtml(searchUrl, providerContext, signal);
-        const pageData = extractInertiaPage(html, providerContext.cheerio);
-        const htmlCdnUrl = resolveCdnUrl(pageData?.props, baseUrl, cdnUrl);
-        const titles = pageData?.props?.titles || [];
+        const pageData = await fetchPayload({
+          url: searchUrl,
+          providerContext,
+          signal,
+          preferHtml: true,
+        });
+        const htmlCdnUrl = resolveCdnUrl(pageData, baseUrl, cdnUrl);
+        const titles = extractTitlesFromPayload(pageData);
         return mapTitlesToPosts(titles, baseUrl, htmlCdnUrl);
       }
       return [];
     } catch (err) {
-      if (page > 1) {
-        console.error("streamingunity search api error", err);
-        return [];
-      }
+      console.error("streamingunity search route error", err);
       try {
         const searchUrl = buildLocaleUrl(
           `/search?q=${encodeURIComponent(query)}`,
           baseUrl
         );
-        const html = await fetchHtml(searchUrl, providerContext, signal);
-        const pageData = extractInertiaPage(html, providerContext.cheerio);
-        const cdnUrl = resolveCdnUrl(pageData?.props, baseUrl, DEFAULT_CDN_URL);
-        const titles = pageData?.props?.titles || [];
+        const pageData = await fetchPayload({
+          url: searchUrl,
+          providerContext,
+          signal,
+          preferHtml: true,
+        });
+        const cdnUrl = resolveCdnUrl(pageData, baseUrl, DEFAULT_CDN_URL);
+        const titles = extractTitlesFromPayload(pageData);
         return mapTitlesToPosts(titles, baseUrl, cdnUrl);
       } catch (htmlErr) {
         console.error("streamingunity search html fallback error", htmlErr);
