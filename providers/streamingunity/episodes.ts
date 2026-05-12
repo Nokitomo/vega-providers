@@ -89,6 +89,10 @@ export const getEpisodes = async function ({
 }): Promise<EpisodeLink[]> {
   try {
     const baseUrl = await resolveBaseUrl(providerContext);
+    if (!baseUrl) {
+      console.error("streamingunity episodes error: missing base url");
+      return [];
+    }
     const seasonUrl = resolveUrl(url, baseUrl);
     if (!seasonUrl) return [];
 

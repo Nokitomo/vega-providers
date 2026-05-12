@@ -130,6 +130,10 @@ export const getStream = async function ({
     if (signal?.aborted) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
+    if (!baseUrl) {
+      console.error("streamingunity stream error: missing base url");
+      return [];
+    }
     const { titleId, episodeId } = parseLink(link);
     if (!titleId) return [];
 

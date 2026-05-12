@@ -1,8 +1,5 @@
 import { PASTEBIN_PROVIDERS, PASTEBIN_URL } from "./baseUrlRegistry";
 
-// 1 hour
-const expireTime = 60 * 60 * 1000;
-
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -31,24 +28,15 @@ async function getPastebinBaseUrl(
         continue;
       }
     }
-    return normalizeBaseUrl(config.fallback);
+    return config.fallback ? normalizeBaseUrl(config.fallback) : null;
   } catch (_) {
-    return normalizeBaseUrl(config.fallback);
+    return config.fallback ? normalizeBaseUrl(config.fallback) : null;
   }
 }
 
 export const getBaseUrl = async (providerValue: string) => {
   try {
     let baseUrl = "";
-    const cacheKey = "CacheBaseUrl" + providerValue;
-    const timeKey = "baseUrlTime" + providerValue;
-
-    // const cachedUrl = cacheStorageService.getString(cacheKey);
-    // const cachedTime = cacheStorageService.getObject<number>(timeKey);
-
-    // if (cachedUrl && cachedTime && Date.now() - cachedTime < expireTime) {
-    //   baseUrl = cachedUrl;
-    // } else {
     const pastebinUrl = await getPastebinBaseUrl(providerValue);
     if (pastebinUrl) {
       baseUrl = pastebinUrl;
@@ -59,9 +47,6 @@ export const getBaseUrl = async (providerValue: string) => {
     );
     const baseUrlData = await baseUrlRes.json();
     baseUrl = baseUrlData[providerValue].url;
-    // cacheStorageService.setString(cacheKey, baseUrl);
-    // cacheStorageService.setObject(timeKey, Date.now());
-    // }
     return baseUrl;
   } catch (error) {
     console.error(`Error fetching baseUrl: ${providerValue}`, error);

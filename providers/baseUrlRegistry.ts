@@ -2,7 +2,7 @@ export const PASTEBIN_URL = "https://pastebin.com/raw/KgQ4jTy6";
 
 export type PastebinProviderConfig = {
   match: RegExp;
-  fallback: string;
+  fallback?: string;
 };
 
 export const PASTEBIN_PROVIDERS: Record<string, PastebinProviderConfig> = {
@@ -12,7 +12,6 @@ export const PASTEBIN_PROVIDERS: Record<string, PastebinProviderConfig> = {
   },
   streamingunity: {
     match: /(?:^|\.)streamingunity\./i,
-    fallback: "https://streamingunity.biz",
   },
   guardaserietv: {
     match: /(?:^|\.)guardaserietv\./i,

@@ -558,6 +558,17 @@ export const getMeta = async function ({
   try {
     const { cheerio } = providerContext;
     const baseUrl = await resolveBaseUrl(providerContext);
+    if (!baseUrl) {
+      console.error("streamingunity meta error: missing base url");
+      return {
+        title: "",
+        synopsis: "",
+        image: "",
+        imdbId: "",
+        type: "movie",
+        linkList: [],
+      };
+    }
     const titleId = extractTitleId(link);
     if (!titleId) {
       throw new Error("Invalid title id");

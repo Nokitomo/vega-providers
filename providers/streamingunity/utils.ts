@@ -1,7 +1,7 @@
 import { ProviderContext } from "../types";
 
-export const DEFAULT_BASE_URL = "https://streamingunity.biz";
-export const DEFAULT_CDN_URL = "https://cdn.streamingunity.biz";
+export const DEFAULT_BASE_URL = "";
+export const DEFAULT_CDN_URL = "";
 export const DEFAULT_LOCALE = "it";
 export const REQUEST_TIMEOUT = 15000;
 
@@ -23,7 +23,7 @@ export const resolveBaseUrl = async (
       return normalizeBaseUrl(resolved);
     }
   } catch (_) {
-    // ignore and fall back to default
+    // ignore and fall back to empty base url
   }
   return DEFAULT_BASE_URL;
 };

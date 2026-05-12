@@ -509,6 +509,10 @@ export const getPosts = async function ({
     if (signal?.aborted) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
+    if (!baseUrl) {
+      console.error("streamingunity posts error: missing base url");
+      return [];
+    }
     const parsed = parseFilter(filter);
     const archiveFilters = normalizeArchiveFilters(parsed.params);
     const browseGenre = resolveBrowseGenre(parsed.params);
@@ -576,6 +580,10 @@ export const getSearchPosts = async function ({
     if (!query) return [];
 
     const baseUrl = await resolveBaseUrl(providerContext);
+    if (!baseUrl) {
+      console.error("streamingunity search error: missing base url");
+      return [];
+    }
     const offset = buildOffset(page);
 
     const fetchSearchApi = async (
