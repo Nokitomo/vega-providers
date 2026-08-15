@@ -50,6 +50,7 @@ export interface Info {
   logo?: string;
   background?: string;
   poster?: string;
+  trailers?: string[];
   synopsis: string;
   imdbId: string;
   year?: string | number;

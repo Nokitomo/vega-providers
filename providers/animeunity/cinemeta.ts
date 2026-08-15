@@ -16,14 +16,21 @@ type MappingIndex = {
   byMalId: Map<number, string[]>;
 };
 
-type CinemetaTitleCacheEntry = {
-  expiresAt: number;
+type CinemetaMetadata = {
   title?: string;
+  logo?: string;
+  poster?: string;
+  background?: string;
+};
+
+type CinemetaMetadataCacheEntry = {
+  expiresAt: number;
+  metadata: CinemetaMetadata;
 };
 
 let mappingIndexCache: MappingIndex | null = null;
 let mappingIndexPromise: Promise<MappingIndex | null> | null = null;
-const cinemetaTitleCache = new Map<string, CinemetaTitleCacheEntry>();
+const cinemetaMetadataCache = new Map<string, CinemetaMetadataCacheEntry>();
 
 function toPositiveInt(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
@@ -197,7 +204,26 @@ function normalizeCinemetaType(isMovie: boolean): "movie" | "series" {
   return isMovie ? "movie" : "series";
 }
 
-async function fetchCinemetaTitle({
+const normalizeHttpsUrl = (value: unknown): string | undefined => {
+  const text = typeof value === "string" ? value.trim() : "";
+  return /^https:\/\//i.test(text) && text.length <= 2048 ? text : undefined;
+};
+
+export const parseCinemetaMetadata = (payload: any): CinemetaMetadata => {
+  const meta = payload?.meta || {};
+  const rawTitle = meta?.name;
+  return {
+    title:
+      typeof rawTitle === "string" && rawTitle.trim()
+        ? rawTitle.trim()
+        : undefined,
+    logo: normalizeHttpsUrl(meta?.logo),
+    poster: normalizeHttpsUrl(meta?.poster),
+    background: normalizeHttpsUrl(meta?.background),
+  };
+};
+
+async function fetchCinemetaMetadata({
   axios,
   imdbId,
   isMovie,
@@ -205,12 +231,12 @@ async function fetchCinemetaTitle({
   axios: ProviderContext["axios"];
   imdbId: string;
   isMovie: boolean;
-}): Promise<string | undefined> {
+}): Promise<CinemetaMetadata> {
   const type = normalizeCinemetaType(isMovie);
   const cacheKey = `${type}:${imdbId}`;
-  const cached = cinemetaTitleCache.get(cacheKey);
+  const cached = cinemetaMetadataCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.title;
+    return cached.metadata;
   }
 
   try {
@@ -218,20 +244,21 @@ async function fetchCinemetaTitle({
       timeout: CINEMETA_TIMEOUT_MS,
       headers: { Accept: "application/json" },
     });
-    const title = response?.data?.meta?.name;
-    const resolvedTitle =
-      typeof title === "string" && title.trim() ? title.trim() : undefined;
-    cinemetaTitleCache.set(cacheKey, {
-      expiresAt: Date.now() + (resolvedTitle ? CINEMETA_SUCCESS_TTL_MS : CINEMETA_MISS_TTL_MS),
-      title: resolvedTitle,
+    const metadata = parseCinemetaMetadata(response?.data);
+    const successful = Object.values(metadata).some(Boolean);
+    cinemetaMetadataCache.set(cacheKey, {
+      expiresAt:
+        Date.now() +
+        (successful ? CINEMETA_SUCCESS_TTL_MS : CINEMETA_MISS_TTL_MS),
+      metadata,
     });
-    return resolvedTitle;
+    return metadata;
   } catch (_) {
-    cinemetaTitleCache.set(cacheKey, {
+    cinemetaMetadataCache.set(cacheKey, {
       expiresAt: Date.now() + CINEMETA_MISS_TTL_MS,
-      title: undefined,
+      metadata: {},
     });
-    return undefined;
+    return {};
   }
 }
 
@@ -245,13 +272,19 @@ export async function resolveAnimeUnityCinemetaMetadata({
   anilistId?: number;
   malId?: number;
   isMovie: boolean;
-}): Promise<{ imdbId?: string; cinemetaTitle?: string }> {
+}): Promise<{
+  imdbId?: string;
+  cinemetaTitle?: string;
+  logo?: string;
+  poster?: string;
+  background?: string;
+}> {
   const imdbId = await resolveImdbIdFromMappings({ axios, anilistId, malId });
   if (!imdbId) {
     return {};
   }
 
-  const cinemetaTitle = await fetchCinemetaTitle({
+  const metadata = await fetchCinemetaMetadata({
     axios,
     imdbId,
     isMovie,
@@ -259,6 +292,9 @@ export async function resolveAnimeUnityCinemetaMetadata({
 
   return {
     imdbId,
-    cinemetaTitle,
+    cinemetaTitle: metadata.title,
+    logo: metadata.logo,
+    poster: metadata.poster,
+    background: metadata.background,
   };
 }

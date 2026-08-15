@@ -14,6 +14,7 @@
     "test:animeunity:variants": "node tests/animeunity-variants.js",
     "test:animeunity:episode-ranges": "node tests/animeunity-episode-ranges.js",
     "test:animeunity:catalog-filters": "node tests/animeunity-catalog-filters.js",
+    "test:animeunity:artwork-trailers": "node tests/animeunity-artwork-trailers.js",
     "test:animeunity:shonenx:smoke": "node tests/animeunity-shonenx-smoke.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",

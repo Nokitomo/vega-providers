@@ -8,6 +8,8 @@ import {
 import { normalizeImageUrl } from "./utils";
 import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
+import { resolveAniZipArtwork } from "./artwork";
+import { resolveAnimeUnityTrailer } from "./trailers";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -89,7 +91,7 @@ export const getMeta = async function ({
       animeFromHtml
     );
     const providerIds = metaPayload.extra?.ids || {};
-    const [related, externalMeta] = await Promise.all([
+    const [related, externalMeta, aniZipArtwork, trailer] = await Promise.all([
       resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
       resolveAnimeUnityCinemetaMetadata({
         axios,
@@ -97,20 +99,39 @@ export const getMeta = async function ({
         malId: providerIds.malId,
         isMovie: metaPayload.isMovie,
       }),
+      resolveAniZipArtwork({
+        axios,
+        anilistId: providerIds.anilistId,
+        malId: providerIds.malId,
+      }),
+      resolveAnimeUnityTrailer({
+        axios,
+        anilistId: providerIds.anilistId,
+        malId: providerIds.malId,
+      }),
     ]);
-    const background = metaPayload.background;
+    const poster =
+      metaPayload.poster || externalMeta.poster || aniZipArtwork.poster || "";
+    const background =
+      metaPayload.background ||
+      externalMeta.background ||
+      aniZipArtwork.background ||
+      poster;
     const title = externalMeta.cinemetaTitle || metaPayload.title;
     const titleKey = externalMeta.cinemetaTitle
       ? undefined
       : metaPayload.titleKey;
-    const imdbId = externalMeta.imdbId || "";
+    const imdbId = externalMeta.imdbId || aniZipArtwork.imdbId || "";
 
     return {
       titleKey,
       title,
       synopsis: metaPayload.synopsis,
-      image: background || metaPayload.poster,
-      poster: metaPayload.poster,
+      image: background || poster,
+      poster: poster || undefined,
+      logo: externalMeta.logo || aniZipArtwork.logo,
+      background: background || undefined,
+      trailers: trailer ? [trailer] : undefined,
       imdbId,
       type: metaPayload.isMovie ? "movie" : "series",
       tags: metaPayload.tags,
