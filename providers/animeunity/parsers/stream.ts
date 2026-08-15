@@ -1,4 +1,5 @@
 import { Stream } from "../../types";
+import { deduplicateStreams } from "../../streamDedup";
 
 const ORIGIN_PATTERN = /^(https?:\/\/[^\/?#]+)/i;
 
@@ -376,19 +377,15 @@ export function extractVixCloudStreams(
       };
     });
 
-  const output = parsedStreams
-    .filter((stream): stream is Stream => !!stream)
-    .filter((stream, index, list) => {
-      return list.findIndex((item) => item.link === stream.link) === index;
-    });
+  const output = deduplicateStreams(
+    parsedStreams.filter((stream): stream is Stream => !!stream)
+  );
   if (output.length > 0) {
     return output;
   }
 
   if (fallbackStreams.length > 0) {
-    return fallbackStreams.filter((stream, index, list) => {
-      return list.findIndex((item) => item.link === stream.link) === index;
-    });
+    return deduplicateStreams(fallbackStreams);
   }
 
   if (masterUrl) {

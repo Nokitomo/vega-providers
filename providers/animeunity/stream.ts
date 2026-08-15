@@ -7,6 +7,7 @@ import {
   normalizeUrl,
 } from "./parsers/stream";
 import { DEFAULT_BASE_HOST, STREAM_HEADERS, TIMEOUTS } from "./config";
+import { deduplicateStreams } from "../streamDedup";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -80,10 +81,7 @@ export const getStream = async function ({
           headers: streamHeaders,
         };
         if (streams.length > 0) {
-          if (!streams.find((stream) => stream.link === downloadUrl)) {
-            return [...streams, downloadStream];
-          }
-          return streams;
+          return deduplicateStreams([...streams, downloadStream]);
         }
         return [downloadStream];
       }
@@ -102,14 +100,14 @@ export const getStream = async function ({
       embedUrl,
       STREAM_HEADERS["User-Agent"]
     );
-    return [
+    return deduplicateStreams([
       {
         server: "AnimeUnity",
         link: url,
         type,
         headers: streamHeaders,
       },
-    ];
+    ]);
   } catch (err) {
     console.error("animeunity stream error", err);
     return [];

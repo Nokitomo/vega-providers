@@ -9,6 +9,7 @@ import {
 } from "./utils";
 import { extractVixCloudStreams } from "../animeunity/parsers/stream";
 import { resolveVixsrcStream } from "../vixsrcExtractor";
+import { deduplicateStreams } from "../streamDedup";
 import {
   buildStreamingUnityVixsrcUrl,
   parseStreamingUnityPlaybackLink,
@@ -164,10 +165,12 @@ const getVixCloudStreams = async ({
     iframeReferer
   );
   const userAgent = getUserAgent(providerContext.commonHeaders);
-  return extractVixCloudStreams(vixHtml, iframeSrc, userAgent).map((stream) => ({
-    ...stream,
-    server: normalizeServerName(stream.server || ""),
-  }));
+  return deduplicateStreams(
+    extractVixCloudStreams(vixHtml, iframeSrc, userAgent).map((stream) => ({
+      ...stream,
+      server: normalizeServerName(stream.server || ""),
+    }))
+  );
 };
 
 export const getStream = async function ({
@@ -215,7 +218,7 @@ export const getStream = async function ({
       requestReferer: baseUrl,
       timeoutMs: REQUEST_TIMEOUT,
     });
-    return vixsrcStream ? [vixsrcStream] : [];
+    return vixsrcStream ? deduplicateStreams([vixsrcStream]) : [];
   } catch (err) {
     console.error("streamingunity stream error", err);
     return [];
