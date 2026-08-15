@@ -12,6 +12,7 @@
     "test:provider": "node test-provider.js",
     "test:animeunity:vega:smoke": "node tests/animeunity-vega-smoke.js",
     "test:animeunity:variants": "node tests/animeunity-variants.js",
+    "test:animeunity:episode-ranges": "node tests/animeunity-episode-ranges.js",
     "test:animeunity:shonenx:smoke": "node tests/animeunity-shonenx-smoke.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",

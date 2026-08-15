@@ -1,7 +1,7 @@
 import { Info, Link, ProviderContext } from "../../types";
 import { buildAnimeLink, decodeHtmlAttribute, normalizeImageUrl } from "../utils";
+import { buildEpisodeRangeLinks } from "../episodeRanges";
 
-const EPISODE_RANGE_KEY = "Episodes {{start}}-{{end}}";
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
 type AvailabilityPrecision = NonNullable<Link["availabilityPrecision"]>;
 
@@ -67,29 +67,6 @@ export function extractAnimeId(link: string): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function buildEpisodeRanges(
-  totalCount: number,
-  rangeSize = 120
-): { title: string; titleKey: string; titleParams: { start: number; end: number }; start: number; end: number }[] {
-  if (!totalCount || totalCount <= 0) {
-    return [];
-  }
-  const ranges: { title: string; titleKey: string; titleParams: { start: number; end: number }; start: number; end: number }[] = [];
-  let start = 1;
-  while (start <= totalCount) {
-    const end = Math.min(start + rangeSize - 1, totalCount);
-    ranges.push({
-      title: `Episodes ${start}-${end}`,
-      titleKey: EPISODE_RANGE_KEY,
-      titleParams: { start, end },
-      start,
-      end,
-    });
-    start = end + 1;
-  }
-  return ranges;
 }
 
 function uniqueTags(tags: string[]): string[] {
@@ -362,18 +339,10 @@ export function buildMetaFromInfo(
   const isUpcomingContent =
     normalizedEpisodesCount === 0 &&
     (isUpcomingStatus(status) || availability.isFuture);
-  const ranges = buildEpisodeRanges(
-    normalizedEpisodesCount
-  );
+  const ranges = buildEpisodeRangeLinks(animeId, normalizedEpisodesCount);
   let linkList: Link[] = [];
   if (ranges.length > 0) {
-    linkList = ranges.map((range) => ({
-      title: range.title,
-      titleKey: range.titleKey,
-      titleParams: range.titleParams,
-      availabilityStatus: "available",
-      episodesLink: `${animeId}|${range.start}|${range.end}`,
-    }));
+    linkList = ranges;
   } else if (isUpcomingContent) {
     linkList = [
       {
