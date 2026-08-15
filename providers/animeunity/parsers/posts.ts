@@ -1,5 +1,10 @@
 import { Post, ProviderContext } from "../../types";
 import { buildAnimeLink, decodeHtmlAttribute, normalizeImageUrl } from "../utils";
+import {
+  AnimeVariantEntry,
+  deduplicateAnimeVariantPosts,
+  isDubbedAnimeVariant,
+} from "../variants";
 
 const CALENDAR_DAY_MAP: Record<string, string> = {
   lunedi: "Monday",
@@ -56,7 +61,15 @@ export function toPost(
   if (!title || !image || !link) {
     return null;
   }
-  return { title, image, link, ...extra };
+  const dubbed = isDubbedAnimeVariant(anime);
+  return {
+    title,
+    image,
+    link,
+    dubStatus: dubbed ? "dubbed" : "subbed",
+    dubStatusKey: dubbed ? "Dubbed" : "Subbed",
+    ...extra,
+  };
 }
 
 function extractEpisodeNumber(value: unknown): number | null {
@@ -227,7 +240,7 @@ export function parseLatestPostsFromHtml(
   if (!raw) return [];
   const data = JSON.parse(raw);
   const items = data?.data || [];
-  const posts: Post[] = [];
+  const entries: AnimeVariantEntry[] = [];
   items.forEach((item: any) => {
     const episodeNumber = extractLatestEpisodeNumber(item);
     const episodeLabelInfo = buildEpisodeLabelInfo(episodeNumber);
@@ -239,10 +252,10 @@ export function parseLatestPostsFromHtml(
       episodeId,
     });
     if (post) {
-      posts.push(post);
+      entries.push({ anime: item?.anime ?? item, post });
     }
   });
-  return posts;
+  return deduplicateAnimeVariantPosts(entries);
 }
 
 export function parseTopPostsFromHtml(
@@ -283,13 +296,14 @@ export function parseTopPostsFromHtml(
     }
   }
   const items = Array.isArray(data?.data) ? data.data : [];
-  const posts: Post[] = [];
+  const entries: AnimeVariantEntry[] = [];
   items.forEach((item: any) => {
     const post = toPost(item, baseHost);
     if (post) {
-      posts.push(post);
+      entries.push({ anime: item, post });
     }
   });
+  const posts = deduplicateAnimeVariantPosts(entries);
   if (posts.length === 0) {
     try {
       console.log("[animeunity][top] empty posts", {
@@ -309,7 +323,7 @@ export function parseCalendarPostsFromHtml(
   baseHost: string
 ): Post[] {
   const $ = cheerio.load(html);
-  const posts: Post[] = [];
+  const entries: AnimeVariantEntry[] = [];
   $("calendario-item").each((_, element) => {
     const raw = $(element).attr("a") || "";
     if (!raw) return;
@@ -330,22 +344,22 @@ export function parseCalendarPostsFromHtml(
         episodeLabelParams: episodeLabelInfo?.labelParams,
       });
       if (post) {
-        posts.push(post);
+        entries.push({ anime: data, post });
       }
     } catch (_) {
       return;
     }
   });
-  return posts;
+  return deduplicateAnimeVariantPosts(entries);
 }
 
 export function parseArchiveRecords(records: any[], baseHost: string): Post[] {
-  const posts: Post[] = [];
+  const entries: AnimeVariantEntry[] = [];
   records.forEach((item: any) => {
     const post = toPost(item, baseHost);
     if (post) {
-      posts.push(post);
+      entries.push({ anime: item, post });
     }
   });
-  return posts;
+  return deduplicateAnimeVariantPosts(entries);
 }

@@ -21,6 +21,10 @@ import {
   normalizeTopStatus,
   resolveArchiveGenreId,
 } from "./filters";
+import {
+  AnimeVariantEntry,
+  deduplicateAnimeVariantPosts,
+} from "./variants";
 
 const PAGE_SIZE = 30;
 
@@ -703,7 +707,7 @@ export const getSearchPosts = async function ({
   if (!normalized) {
     return [];
   }
-  const posts: Post[] = [];
+  const entries: AnimeVariantEntry[] = [];
   const seen = new Set<string>();
 
   if (page <= 1) {
@@ -724,7 +728,7 @@ export const getSearchPosts = async function ({
       records.forEach((item: any) => {
         const post = toPost(item, baseHost);
         if (post && !seen.has(post.link)) {
-          posts.push(post);
+          entries.push({ anime: item, post });
           seen.add(post.link);
         }
       });
@@ -758,7 +762,7 @@ export const getSearchPosts = async function ({
     records.forEach((item: any) => {
       const post = toPost(item, baseHost);
       if (post && !seen.has(post.link)) {
-        posts.push(post);
+        entries.push({ anime: item, post });
         seen.add(post.link);
       }
     });
@@ -766,5 +770,5 @@ export const getSearchPosts = async function ({
     // ignore
   }
 
-  return posts;
+  return deduplicateAnimeVariantPosts(entries);
 };

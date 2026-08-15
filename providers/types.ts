@@ -20,6 +20,8 @@ export interface Post {
   episodeLabelKey?: string;
   episodeLabelParams?: I18nParams;
   episodeId?: string | number;
+  dubStatus?: "subbed" | "dubbed" | "both";
+  dubStatusKey?: "Subbed" | "Dubbed" | "Subbed and dubbed";
 }
 
 export type TextTracks = {
