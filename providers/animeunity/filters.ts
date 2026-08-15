@@ -8,6 +8,8 @@ type ArchiveFilterOption = {
 type ArchiveGenre = {
   id: number;
   name: string;
+  title: string;
+  titleKey: string;
 };
 
 const POPULARITA = "Popolarit\u00e0";
@@ -105,7 +107,7 @@ export const ARCHIVE_SEASON_OPTIONS: ArchiveFilterOption[] = [
 export const ARCHIVE_YEAR_MIN = 1966;
 export const ARCHIVE_YEAR_MAX_OFFSET = 1;
 
-export const ARCHIVE_GENRES: ArchiveGenre[] = [
+const RAW_ARCHIVE_GENRES: Array<{ id: number; name: string }> = [
   { id: 51, name: "Action" },
   { id: 21, name: "Adventure" },
   { id: 43, name: "Avant Garde" },
@@ -153,6 +155,14 @@ export const ARCHIVE_GENRES: ArchiveGenre[] = [
   { id: 48, name: "Thriller" },
   { id: 20, name: "Vampire" },
 ];
+
+export const ARCHIVE_GENRES: ArchiveGenre[] = RAW_ARCHIVE_GENRES.map(
+  (genre) => ({
+    ...genre,
+    title: genre.name,
+    titleKey: genre.name,
+  })
+);
 
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
 

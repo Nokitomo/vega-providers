@@ -46,6 +46,18 @@ export const catalog = [
     staleTimeMs: 30 * 60 * 1000,
   },
   {
+    title: "Top Rated",
+    titleKey: "Top Rated",
+    filter: "top?order=rating",
+    staleTimeMs: 30 * 60 * 1000,
+  },
+  {
+    title: "Random",
+    titleKey: "Random",
+    filter: "archive?random=true",
+    staleTimeMs: 0,
+  },
+  {
     title: "TV",
     titleKey: "TV",
     filter: "archive?type=tv&order=rating",
@@ -87,7 +99,8 @@ const buildArchiveYears = (): number[] => {
 };
 
 export const genres = ARCHIVE_GENRES.map((genre) => ({
-  title: genre.name,
+  title: genre.title,
+  titleKey: genre.titleKey,
   filter: `archive?genres=${genre.id}`,
 }));
 
@@ -110,6 +123,13 @@ export const archiveFilters = {
     type: "boolean",
     title: "Dubbed",
     titleKey: "Dubbed",
+    value: "true",
+  },
+  random: {
+    key: "random",
+    type: "boolean",
+    title: "Random",
+    titleKey: "Random",
     value: "true",
   },
 };
