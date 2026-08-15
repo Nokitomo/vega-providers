@@ -9,6 +9,7 @@ import {
   resolveBaseUrl,
   resolveUrl,
 } from "./utils";
+import { buildStreamingUnityPlaybackLink } from "./playback";
 
 const fetchHtml = async (
   url: string,
@@ -44,7 +45,9 @@ const parseSeasonNumberFromUrl = (url: string): number | undefined => {
 const mapEpisodes = (
   episodes: any[],
   titleId: string,
-  seasonNumber?: number
+  seasonNumber: number | undefined,
+  imdbId: string,
+  tmdbId: string
 ): EpisodeLink[] => {
   if (!Array.isArray(episodes) || episodes.length === 0 || !titleId) {
     return [];
@@ -74,7 +77,16 @@ const mapEpisodes = (
           ? parsedEpisodeNumber
           : undefined,
         seasonNumber,
-        link: `${titleId}::${episodeId}`,
+        link: buildStreamingUnityPlaybackLink(titleId, {
+          episodeId,
+          mediaType: "series",
+          imdbId,
+          tmdbId,
+          seasonNumber,
+          episodeNumber: Number.isFinite(parsedEpisodeNumber)
+            ? parsedEpisodeNumber
+            : undefined,
+        }),
       } as EpisodeLink;
     })
     .filter((episode): episode is EpisodeLink => !!episode && !!episode.link);
@@ -98,9 +110,8 @@ export const getEpisodes = async function ({
 
     const html = await fetchHtml(seasonUrl, providerContext);
     const page = extractInertiaPage(html, providerContext.cheerio);
-    const titleId = String(
-      page?.props?.title?.id || extractTitleId(seasonUrl) || ""
-    ).trim();
+    const title = page?.props?.title;
+    const titleId = String(title?.id || extractTitleId(seasonUrl) || "").trim();
     if (!titleId) return [];
 
     const loadedSeason = page?.props?.loadedSeason;
@@ -111,7 +122,13 @@ export const getEpisodes = async function ({
       ? loadedSeason.episodes
       : [];
 
-    return mapEpisodes(episodes, titleId, seasonNumber);
+    return mapEpisodes(
+      episodes,
+      titleId,
+      seasonNumber,
+      String(title?.imdb_id || "").trim(),
+      String(title?.tmdb_id || "").trim()
+    );
   } catch (err) {
     console.error("streamingunity episodes error", err);
     return [];

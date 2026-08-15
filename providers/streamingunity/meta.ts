@@ -18,6 +18,7 @@ import {
   buildTitleUrl,
   extractTitleId,
 } from "./utils";
+import { buildStreamingUnityPlaybackLink } from "./playback";
 
 const pickLogoImage = (
   images: any[] | undefined,
@@ -670,7 +671,11 @@ export const getMeta = async function ({
           {
             title: "Play",
             titleKey: "Play",
-            link: titleUrl,
+            link: buildStreamingUnityPlaybackLink(titleUrl, {
+              mediaType: "movie",
+              imdbId: String(title?.imdb_id || "").trim(),
+              tmdbId: String(title?.tmdb_id || "").trim(),
+            }),
             type: "movie",
           },
         ];

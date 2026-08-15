@@ -18,6 +18,7 @@
     "test:animeunity:shonenx:smoke": "node tests/animeunity-shonenx-smoke.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",
+    "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",
     "test:ui": "npm run test:interactive",
     "build": "node build-simple.js && node build-shonenx.js",
     "build:vega": "node build-simple.js",

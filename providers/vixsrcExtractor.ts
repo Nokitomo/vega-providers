@@ -41,6 +41,26 @@ const appendQueryParams = (
   }
 };
 
+export const buildVixsrcApiUrl = (pageUrl: string): string => {
+  try {
+    const url = new URL(pageUrl);
+    if (!/^\/(?:movie|tv)\//i.test(url.pathname)) return "";
+    url.pathname = `/api${url.pathname}`;
+    return url.toString();
+  } catch (_) {
+    return "";
+  }
+};
+
+export const extractVixsrcEmbedUrl = (
+  data: unknown,
+  baseUrl: string
+): string => {
+  if (!data || typeof data !== "object") return "";
+  const src = String((data as { src?: unknown }).src || "").trim();
+  return src ? resolveMediaUrl(src, baseUrl) : "";
+};
+
 export const extractVixsrcData = (
   html: string,
   pageUrl: string
@@ -93,19 +113,49 @@ export const resolveVixsrcStream = async ({
   timeoutMs?: number;
 }): Promise<Stream | null> => {
   const { axios, commonHeaders } = providerContext;
+  const requestHeaders = {
+    ...commonHeaders,
+    Referer: requestReferer || url,
+  };
   const response = await axios.get(url, {
-    headers: { ...commonHeaders, Referer: requestReferer || url },
+    headers: requestHeaders,
     timeout: timeoutMs,
     signal,
   });
-  const parsed = extractVixsrcData(String(response?.data || ""), url);
+  let mediaPageUrl = url;
+  let parsed = extractVixsrcData(String(response?.data || ""), mediaPageUrl);
+
+  if (!parsed.streamUrl && !parsed.fallbackUrl) {
+    const apiUrl = buildVixsrcApiUrl(url);
+    if (apiUrl) {
+      const apiResponse = await axios.get(apiUrl, {
+        headers: { ...commonHeaders, Referer: url },
+        timeout: timeoutMs,
+        signal,
+      });
+      const embedUrl = extractVixsrcEmbedUrl(apiResponse?.data, url);
+      if (embedUrl) {
+        const embedResponse = await axios.get(embedUrl, {
+          headers: { ...commonHeaders, Referer: url },
+          timeout: timeoutMs,
+          signal,
+        });
+        mediaPageUrl = embedUrl;
+        parsed = extractVixsrcData(
+          String(embedResponse?.data || ""),
+          mediaPageUrl
+        );
+      }
+    }
+  }
+
   const streamUrl = parsed.streamUrl || parsed.fallbackUrl;
   if (!streamUrl) return null;
 
-  const origin = new URL(url).origin;
+  const origin = new URL(mediaPageUrl).origin;
   const userAgent = commonHeaders["User-Agent"] || commonHeaders["user-agent"];
   const headers: Record<string, string> = {
-    Referer: url,
+    Referer: mediaPageUrl,
     Origin: origin,
     Accept: "*/*",
   };

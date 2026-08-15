@@ -4,13 +4,16 @@ import {
   buildLocaleUrl,
   decodeHtmlEntities,
   extractInertiaPage,
-  extractTitleId,
   resolveBaseUrl,
   resolveUrl,
 } from "./utils";
+import { extractVixCloudStreams } from "../animeunity/parsers/stream";
+import { resolveVixsrcStream } from "../vixsrcExtractor";
 import {
-  extractVixCloudStreams,
-} from "../animeunity/parsers/stream";
+  buildStreamingUnityVixsrcUrl,
+  parseStreamingUnityPlaybackLink,
+  StreamingUnityPlayback,
+} from "./playback";
 
 const SERVER_PREFIX = "StreamingUnity";
 
@@ -37,13 +40,6 @@ const fetchHtml = async (
     signal,
   });
   return typeof res.data === "string" ? res.data : String(res.data ?? "");
-};
-
-const parseLink = (link: string): { titleId: string; episodeId?: string } => {
-  const [base, episodePart] = String(link || "").split("::", 2);
-  const titleId = extractTitleId(base);
-  const episodeId = episodePart ? episodePart.trim() : undefined;
-  return { titleId, episodeId };
 };
 
 const buildWatchUrl = (baseUrl: string, titleId: string): string =>
@@ -109,11 +105,69 @@ const extractIframeSrc = (
 };
 
 const normalizeServerName = (value: string): string => {
-  if (!value) return SERVER_PREFIX;
+  const vixCloudPrefix = `${SERVER_PREFIX} VixCloud`;
+  if (!value) return vixCloudPrefix;
   if (value.startsWith("AnimeUnity")) {
-    return value.replace(/^AnimeUnity/, SERVER_PREFIX);
+    return value.replace(/^AnimeUnity/, vixCloudPrefix);
   }
-  return `${SERVER_PREFIX} ${value}`.trim();
+  return `${vixCloudPrefix} ${value}`.trim();
+};
+
+const getVixCloudStreams = async ({
+  playback,
+  baseUrl,
+  providerContext,
+  signal,
+}: {
+  playback: StreamingUnityPlayback;
+  baseUrl: string;
+  providerContext: ProviderContext;
+  signal: AbortSignal;
+}): Promise<Stream[]> => {
+  const { titleId, episodeId } = playback;
+  const watchUrl = buildWatchUrl(baseUrl, titleId);
+  let iframeSrc = "";
+  let iframeReferer = watchUrl;
+
+  if (episodeId) {
+    const iframeUrl = buildEpisodeIframeUrl(baseUrl, titleId, episodeId);
+    const iframeHtml = await fetchHtml(
+      iframeUrl,
+      providerContext,
+      signal,
+      watchUrl
+    );
+    iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
+    iframeReferer = iframeUrl;
+  }
+
+  if (!iframeSrc) {
+    const watchHtml = await fetchHtml(watchUrl, providerContext, signal, baseUrl);
+    const embedUrl = extractEmbedUrl(watchHtml, baseUrl, providerContext.cheerio);
+    if (!embedUrl) return [];
+
+    const iframeHtml = await fetchHtml(
+      embedUrl,
+      providerContext,
+      signal,
+      watchUrl
+    );
+    iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
+    if (!iframeSrc) return [];
+    iframeReferer = embedUrl;
+  }
+
+  const vixHtml = await fetchHtml(
+    iframeSrc,
+    providerContext,
+    signal,
+    iframeReferer
+  );
+  const userAgent = getUserAgent(providerContext.commonHeaders);
+  return extractVixCloudStreams(vixHtml, iframeSrc, userAgent).map((stream) => ({
+    ...stream,
+    server: normalizeServerName(stream.server || ""),
+  }));
 };
 
 export const getStream = async function ({
@@ -134,53 +188,34 @@ export const getStream = async function ({
       console.error("streamingunity stream error: missing base url");
       return [];
     }
-    const { titleId, episodeId } = parseLink(link);
-    if (!titleId) return [];
+    const playback = parseStreamingUnityPlaybackLink(link);
+    if (!playback.titleId) return [];
 
-    const watchUrl = buildWatchUrl(baseUrl, titleId);
-    let iframeSrc = "";
-    let iframeReferer = watchUrl;
-
-    if (episodeId) {
-      const iframeUrl = buildEpisodeIframeUrl(baseUrl, titleId, episodeId);
-      const iframeHtml = await fetchHtml(
-        iframeUrl,
+    try {
+      const vixCloudStreams = await getVixCloudStreams({
+        playback,
+        baseUrl,
         providerContext,
         signal,
-        watchUrl
-      );
-      iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
-      iframeReferer = iframeUrl;
+      });
+      if (vixCloudStreams.length > 0) return vixCloudStreams;
+    } catch (err) {
+      console.warn("streamingunity VixCloud stream error", err);
     }
 
-    if (!iframeSrc) {
-      const watchHtml = await fetchHtml(watchUrl, providerContext, signal, baseUrl);
-      const embedUrl = extractEmbedUrl(watchHtml, baseUrl, providerContext.cheerio);
-      if (!embedUrl) return [];
+    if (signal?.aborted) return [];
+    const vixsrcUrl = buildStreamingUnityVixsrcUrl(playback);
+    if (!vixsrcUrl) return [];
 
-      const iframeHtml = await fetchHtml(
-        embedUrl,
-        providerContext,
-        signal,
-        watchUrl
-      );
-      iframeSrc = extractIframeSrc(iframeHtml, baseUrl, providerContext.cheerio);
-      if (!iframeSrc) return [];
-      iframeReferer = embedUrl;
-    }
-
-    const vixHtml = await fetchHtml(
-      iframeSrc,
+    const vixsrcStream = await resolveVixsrcStream({
+      url: vixsrcUrl,
+      server: `${SERVER_PREFIX} VixSrc Server 1`,
       providerContext,
       signal,
-      iframeReferer
-    );
-    const userAgent = getUserAgent(providerContext.commonHeaders);
-    const streams = extractVixCloudStreams(vixHtml, iframeSrc, userAgent);
-    return streams.map((stream) => ({
-      ...stream,
-      server: normalizeServerName(stream.server || ""),
-    }));
+      requestReferer: baseUrl,
+      timeoutMs: REQUEST_TIMEOUT,
+    });
+    return vixsrcStream ? [vixsrcStream] : [];
   } catch (err) {
     console.error("streamingunity stream error", err);
     return [];
