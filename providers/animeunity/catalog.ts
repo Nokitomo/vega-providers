@@ -48,7 +48,7 @@ export const catalog = [
   {
     title: "Top Rated",
     titleKey: "Top Rated",
-    filter: "top?order=rating",
+    filter: "archive?order=rating",
     staleTimeMs: 30 * 60 * 1000,
   },
   {

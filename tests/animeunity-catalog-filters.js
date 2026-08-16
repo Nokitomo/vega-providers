@@ -9,7 +9,8 @@ assert(catalogByFilter.has("latest"));
 assert(catalogByFilter.has("calendar"));
 assert(catalogByFilter.has("top?status=ongoing"));
 assert(catalogByFilter.has("top?status=upcoming"));
-assert(catalogByFilter.has("top?order=rating"));
+assert(catalogByFilter.has("archive?order=rating"));
+assert(!catalogByFilter.has("top?order=rating"));
 assert(catalogByFilter.has("archive?random=true"));
 assert.strictEqual(catalogByFilter.get("archive?random=true").titleKey, "Random");
 
