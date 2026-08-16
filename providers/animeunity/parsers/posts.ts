@@ -48,6 +48,16 @@ function pickTitle(anime: any): string {
   );
 }
 
+function pickRating(anime: any): string | undefined {
+  const value = anime?.score ?? anime?.rating;
+  if (value == null) return undefined;
+  const normalized = String(value).trim().replace(",", ".");
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return normalized;
+}
+
 export function toPost(
   anime: any,
   baseHost: string,
@@ -66,6 +76,7 @@ export function toPost(
     title,
     image,
     link,
+    rating: pickRating(anime),
     dubStatus: dubbed ? "dubbed" : "subbed",
     dubStatusKey: dubbed ? "Dubbed" : "Subbed",
     ...extra,

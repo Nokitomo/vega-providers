@@ -20,6 +20,7 @@ export interface Post {
   episodeLabelKey?: string;
   episodeLabelParams?: I18nParams;
   episodeId?: string | number;
+  rating?: string;
   dubStatus?: "subbed" | "dubbed" | "both";
   dubStatusKey?: "Subbed" | "Dubbed" | "Subbed and dubbed";
   variants?: PostVariant[];

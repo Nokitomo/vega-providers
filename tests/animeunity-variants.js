@@ -5,6 +5,7 @@ const {
   normalizeAnimeVariantTitle,
   stripAnimeDubSuffix,
 } = require("../dist/animeunity/variants.js");
+const { toPost } = require("../dist/animeunity/parsers/posts.js");
 
 const makePost = (id, title, episode) => ({
   title,
@@ -20,6 +21,19 @@ assert.strictEqual(stripAnimeDubSuffix("Naruto (ITA)"), "Naruto");
 assert.strictEqual(normalizeAnimeVariantTitle("Pokémon (ITA)"), "pokemon");
 assert.strictEqual(buildAnimeVariantKey({ anilist_id: 20 }), "anilist:20");
 assert.strictEqual(buildAnimeVariantKey({ mal_id: 21 }), "mal:21");
+assert.strictEqual(
+  toPost(
+    {
+      id: 10,
+      slug: "rated-anime",
+      title: "Rated Anime",
+      imageurl: "https://img.test/rated.jpg",
+      score: "8,7",
+    },
+    "https://animeunity.test"
+  ).rating,
+  "8.7"
+);
 
 const posts = deduplicateAnimeVariantPosts([
   {
