@@ -22,6 +22,19 @@ export interface Post {
   episodeId?: string | number;
   dubStatus?: "subbed" | "dubbed" | "both";
   dubStatusKey?: "Subbed" | "Dubbed" | "Subbed and dubbed";
+  variants?: PostVariant[];
+}
+
+export interface PostVariant {
+  status: "subbed" | "dubbed";
+  statusKey: "Subbed" | "Dubbed";
+  title: string;
+  link: string;
+  image: string;
+  episodeLabel?: string;
+  episodeLabelKey?: string;
+  episodeLabelParams?: I18nParams;
+  episodeId?: string | number;
 }
 
 export type TextTracks = {

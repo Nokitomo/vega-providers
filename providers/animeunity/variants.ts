@@ -1,4 +1,4 @@
-import { Post } from "../types";
+import { Post, PostVariant } from "../types";
 
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
 const DUB_SUFFIX_REGEX = /\s*[\[(]\s*ita\s*[\])]\s*$/i;
@@ -99,6 +99,34 @@ const toDubStatus = (
   return { dubStatus: "subbed", dubStatusKey: "Subbed" };
 };
 
+const toPostVariant = (entry: AnimeVariantEntry): PostVariant => {
+  const dubbed = isDubbedAnimeVariant(entry.anime);
+  return {
+    status: dubbed ? "dubbed" : "subbed",
+    statusKey: dubbed ? "Dubbed" : "Subbed",
+    title: stripAnimeDubSuffix(entry.post.title) || entry.post.title,
+    link: entry.post.link,
+    image: entry.post.image,
+    episodeLabel: entry.post.episodeLabel,
+    episodeLabelKey: entry.post.episodeLabelKey,
+    episodeLabelParams: entry.post.episodeLabelParams,
+    episodeId: entry.post.episodeId,
+  };
+};
+
+const buildPostVariants = (entries: AnimeVariantEntry[]): PostVariant[] => {
+  const preferredByStatus = new Map<"subbed" | "dubbed", AnimeVariantEntry>();
+  entries.forEach((entry) => {
+    const status = isDubbedAnimeVariant(entry.anime) ? "dubbed" : "subbed";
+    const current = preferredByStatus.get(status);
+    preferredByStatus.set(status, current ? preferEntry(current, entry) : entry);
+  });
+  return (["subbed", "dubbed"] as const)
+    .map((status) => preferredByStatus.get(status))
+    .filter((entry): entry is AnimeVariantEntry => Boolean(entry))
+    .map(toPostVariant);
+};
+
 export const deduplicateAnimeVariantPosts = (
   entries: AnimeVariantEntry[]
 ): Post[] => {
@@ -117,11 +145,6 @@ export const deduplicateAnimeVariantPosts = (
   return order.map((key) => {
     const variants = groups.get(key)!;
     const preferred = variants.reduce(preferEntry);
-    const latest = variants.reduce((current, candidate) =>
-      getEpisodeLabelNumber(candidate.post) > getEpisodeLabelNumber(current.post)
-        ? candidate
-        : current
-    );
     const availability = {
       subbed: variants.some((entry) => !isDubbedAnimeVariant(entry.anime)),
       dubbed: variants.some((entry) => isDubbedAnimeVariant(entry.anime)),
@@ -130,11 +153,7 @@ export const deduplicateAnimeVariantPosts = (
     return {
       ...preferred.post,
       title: cleanTitle || preferred.post.title,
-      episodeLabel: latest.post.episodeLabel || preferred.post.episodeLabel,
-      episodeLabelKey: latest.post.episodeLabelKey || preferred.post.episodeLabelKey,
-      episodeLabelParams:
-        latest.post.episodeLabelParams || preferred.post.episodeLabelParams,
-      episodeId: latest.post.episodeId ?? preferred.post.episodeId,
+      variants: buildPostVariants(variants),
       ...toDubStatus(availability),
     };
   });

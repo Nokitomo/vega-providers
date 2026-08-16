@@ -41,7 +41,30 @@ assert.strictEqual(posts[0].title, "Naruto");
 assert.strictEqual(posts[0].link, "https://animeunity.test/anime/1");
 assert.strictEqual(posts[0].dubStatus, "both");
 assert.strictEqual(posts[0].dubStatusKey, "Subbed and dubbed");
-assert.strictEqual(posts[0].episodeLabel, "Ep. 100");
+assert.strictEqual(posts[0].episodeLabel, "Ep. 90");
+assert.deepStrictEqual(
+  posts[0].variants.map(({ status, statusKey, link, episodeLabel }) => ({
+    status,
+    statusKey,
+    link,
+    episodeLabel,
+  })),
+  [
+    {
+      status: "subbed",
+      statusKey: "Subbed",
+      link: "https://animeunity.test/anime/1",
+      episodeLabel: "Ep. 90",
+    },
+    {
+      status: "dubbed",
+      statusKey: "Dubbed",
+      link: "https://animeunity.test/anime/2",
+      episodeLabel: "Ep. 100",
+    },
+  ]
+);
 assert.strictEqual(posts[1].dubStatus, "subbed");
+assert.strictEqual(posts[1].variants.length, 1);
 
 console.log("animeunity variants: OK");
