@@ -350,5 +350,13 @@
     "icon": "",
     "type": "italy",
     "disabled": false
+  },
+  {
+    "display_name": "StreamCenter",
+    "value": "streamcenter",
+    "version": "1.0.0",
+    "icon": "",
+    "type": "italy",
+    "disabled": false
   }
 ]

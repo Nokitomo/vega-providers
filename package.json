@@ -19,6 +19,8 @@
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",
     "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",
+    "test:streamcenter:routing": "node tests/streamcenter-routing.js",
+    "test:streamcenter:vega:smoke": "node tests/streamcenter-vega-smoke.js",
     "test:stream:dedup": "node tests/stream-dedup.js",
     "test:ui": "npm run test:interactive",
     "build": "node build-simple.js && node build-shonenx.js",
