@@ -18,6 +18,7 @@ import {
   buildTitleUrl,
   extractTitleId,
 } from "./utils";
+import { extractVixCloudStreams } from "../animeunity/parsers/stream";
 import { buildStreamingUnityPlaybackLink } from "./playback";
 
 const pickLogoImage = (
@@ -115,6 +116,7 @@ type AvailabilityInfo = {
   date?: string;
   precision?: AvailabilityPrecision;
   isFuture: boolean;
+  isPast: boolean;
 };
 
 const UPCOMING_STATUS_TOKENS = [
@@ -147,21 +149,27 @@ const hasStatusToken = (value: unknown, tokens: string[]): boolean => {
   return tokens.some((token) => normalized.includes(token));
 };
 
+const isEnabledFlag = (value: unknown): boolean => {
+  if (value === true || value === 1) return true;
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+};
+
 const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
   if (value === null || value === undefined) {
-    return { hasDate: false, isFuture: false };
+    return { hasDate: false, isFuture: false, isPast: false };
   }
 
   const text = String(value).trim();
   if (!text) {
-    return { hasDate: false, isFuture: false };
+    return { hasDate: false, isFuture: false, isPast: false };
   }
 
-  const utcNow = new Date();
-  const todayUtc = Date.UTC(
-    utcNow.getUTCFullYear(),
-    utcNow.getUTCMonth(),
-    utcNow.getUTCDate()
+  const localNow = new Date();
+  const todayLocal = Date.UTC(
+    localNow.getFullYear(),
+    localNow.getMonth(),
+    localNow.getDate()
   );
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
@@ -172,7 +180,8 @@ const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
         hasDate: true,
         date: text,
         precision: "day",
-        isFuture: time > todayUtc,
+        isFuture: time > todayLocal,
+        isPast: time < todayLocal,
       };
     }
   }
@@ -185,7 +194,8 @@ const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
         hasDate: true,
         date: String(year),
         precision: "year",
-        isFuture: year > utcNow.getUTCFullYear(),
+        isFuture: year > localNow.getFullYear(),
+        isPast: year < localNow.getFullYear(),
       };
     }
   }
@@ -195,11 +205,12 @@ const parseAvailabilityDate = (value: unknown): AvailabilityInfo => {
     date: text,
     precision: "unknown",
     isFuture: false,
+    isPast: false,
   };
 };
 
 const VIXCLOUD_PLAYABLE_PATTERN =
-  /https?:\/\/[^"'\s]*vixcloud\.co\/(?:embed|playlist)\/\d+[^"'\s]*/i;
+  /https?:\/\/[^"'\s]*vixcloud\.co\/(?:embed|playlist)(?:\/\d+|\/?\?)[^"'\s]*/i;
 const ABSOLUTE_IFRAME_PATTERN =
   /https?:\/\/[^"'\s]+\/it\/iframe\/\d+[^"'\s]*/i;
 const RELATIVE_IFRAME_PATTERN = /\/it\/iframe\/\d+[^"'\s]*/i;
@@ -210,18 +221,26 @@ const shouldProbeInconsistentUpcoming = (availability: AvailabilityInfo): boolea
 const fetchHtml = async (
   url: string,
   providerContext: ProviderContext,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  referer?: string
 ): Promise<string> => {
   const { axios, commonHeaders } = providerContext;
   const res = await axios.get(url, {
     headers: {
       ...commonHeaders,
-      Referer: url,
+      Referer: referer || url,
     },
     timeout: REQUEST_TIMEOUT,
     signal,
   });
   return typeof res.data === "string" ? res.data : String(res.data ?? "");
+};
+
+const getUserAgent = (headers: Record<string, string>): string => {
+  const candidate = headers["User-Agent"] || headers["user-agent"];
+  return typeof candidate === "string" && candidate.trim()
+    ? candidate
+    : "Mozilla/5.0";
 };
 
 const buildTitlePath = (titleId: string, slug: string): string => {
@@ -303,9 +322,31 @@ const probeMovieAvailability = async ({
       return false;
     }
 
-    const iframeHtml = await fetchHtml(iframeUrl, providerContext);
+    const iframeHtml = await fetchHtml(
+      iframeUrl,
+      providerContext,
+      undefined,
+      watchUrl
+    );
     const playableUrl = extractPlayableVixcloudUrl(iframeHtml, cheerio);
-    return Boolean(playableUrl);
+    if (!playableUrl) {
+      return false;
+    }
+
+    const playableHtml = await fetchHtml(
+      playableUrl,
+      providerContext,
+      undefined,
+      iframeUrl
+    );
+    if (/^#EXTM3U/m.test(playableHtml)) {
+      return true;
+    }
+    return extractVixCloudStreams(
+      playableHtml,
+      playableUrl,
+      getUserAgent(providerContext.commonHeaders)
+    ).length > 0;
   } catch (err) {
     console.warn("streamingunity movie availability probe failed", err);
     return false;
@@ -493,7 +534,7 @@ const buildSeriesLinks = async ({
     };
 
     if (shouldKeepSeasonUpcoming) {
-      if (seasonAvailability.hasDate) {
+      if (seasonAvailability.hasDate && !seasonAvailability.isPast) {
         seasonLink.availabilityDate = seasonAvailability.date;
         seasonLink.availabilityPrecision = seasonAvailability.precision;
       }
@@ -640,13 +681,17 @@ export const getMeta = async function ({
       const titleUrl = buildTitleUrl(titleId, slug, baseUrl);
       const movieAvailability = parseAvailabilityDate(releaseDate);
       const movieStatus = title?.status;
+      const isExplicitlyComingSoon = isEnabledFlag(title?.coming_soon);
       const isMovieUpcoming =
+        isExplicitlyComingSoon ||
         hasStatusToken(movieStatus, UPCOMING_STATUS_TOKENS) ||
         (!hasStatusToken(movieStatus, RELEASED_STATUS_TOKENS) &&
           movieAvailability.hasDate &&
           movieAvailability.isFuture);
       const shouldProbeMovieAvailability =
-        isMovieUpcoming && shouldProbeInconsistentUpcoming(movieAvailability);
+        isMovieUpcoming &&
+        !isExplicitlyComingSoon &&
+        shouldProbeInconsistentUpcoming(movieAvailability);
       const hasPlayableMovie = shouldProbeMovieAvailability
         ? await probeMovieAvailability({
             baseUrl,
@@ -663,9 +708,11 @@ export const getMeta = async function ({
         availabilityStatus: shouldKeepMovieUpcoming ? "upcoming" : "available",
       };
 
-      if (shouldKeepMovieUpcoming && movieAvailability.hasDate) {
-        movieLink.availabilityDate = movieAvailability.date;
-        movieLink.availabilityPrecision = movieAvailability.precision;
+      if (shouldKeepMovieUpcoming) {
+        if (movieAvailability.hasDate && !movieAvailability.isPast) {
+          movieLink.availabilityDate = movieAvailability.date;
+          movieLink.availabilityPrecision = movieAvailability.precision;
+        }
       } else {
         movieLink.directLinks = [
           {

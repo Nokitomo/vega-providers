@@ -1,8 +1,8 @@
 import { Info, ProviderContext } from "../types";
 import { getMeta as getAnimeMeta } from "../animeunity/meta";
 import { getMeta as getStreamingMeta } from "../streamingunity/meta";
-import { MetaRouteData, wrapInfo } from "./content";
-import { decodeRoute } from "./routing";
+import { wrapInfo } from "./content";
+import { resolveMetaRoute } from "./routing";
 
 const emptyInfo = (): Info => ({
   title: "",
@@ -22,7 +22,7 @@ export const getMeta = function ({
   provider: string;
   providerContext: ProviderContext;
 }): Promise<Info> {
-  const route = decodeRoute<MetaRouteData>(link, "meta");
+  const route = resolveMetaRoute(link);
   if (!route?.data?.url) return Promise.resolve(emptyInfo());
 
   const infoPromise =

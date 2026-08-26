@@ -17,12 +17,22 @@ export type EpisodesRouteData = AnimeIdentity & {
   url: string;
 };
 
+const toWebMetaLink = (
+  link: string,
+  source: StreamCenterSource
+): string => {
+  const normalized = String(link || "").trim();
+  return /^https?:\/\//i.test(normalized)
+    ? normalized
+    : encodeRoute<MetaRouteData>("meta", source, { url: normalized });
+};
+
 export const wrapPost = (post: Post, source: StreamCenterSource): Post => ({
   ...post,
-  link: encodeRoute<MetaRouteData>("meta", source, { url: post.link }),
+  link: toWebMetaLink(post.link, source),
   variants: post.variants?.map((variant) => ({
     ...variant,
-    link: encodeRoute<MetaRouteData>("meta", source, { url: variant.link }),
+    link: toWebMetaLink(variant.link, source),
   })),
 });
 
@@ -44,7 +54,7 @@ export const wrapInfo = (
     ...info,
     related: info.related?.map((item) => ({
       ...item,
-      link: encodeRoute<MetaRouteData>("meta", source, { url: item.link }),
+      link: toWebMetaLink(item.link, source),
     })),
     linkList: (info.linkList || []).map((group) => ({
       ...group,

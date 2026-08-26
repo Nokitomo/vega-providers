@@ -3,6 +3,8 @@ const cheerio = require("cheerio");
 const fs = require("fs");
 
 const catalogModule = require("../dist/streamcenter/catalog.js");
+const streamingCatalogModule = require("../dist/streamingunity/catalog.js");
+const contentModule = require("../dist/streamcenter/content.js");
 const routing = require("../dist/streamcenter/routing.js");
 const animeWorld = require("../dist/streamcenter/animeFallback/animeWorld.js");
 const animeSaturn = require("../dist/streamcenter/animeFallback/animeSaturn.js");
@@ -48,6 +50,61 @@ assert.deepStrictEqual(routing.decodeRoute(route, "meta"), {
   data: { url: "https://example.test/anime/42" },
 });
 assert.strictEqual(routing.decodeRoute(route, "stream"), null);
+assert.deepStrictEqual(
+  routing.resolveMetaRoute("https://www.animeunity.so/anime/42-example"),
+  {
+    kind: "meta",
+    source: "animeunity",
+    data: { url: "https://www.animeunity.so/anime/42-example" },
+  },
+);
+assert.deepStrictEqual(
+  routing.resolveMetaRoute("https://streamingunity.vip/it/titles/42-example"),
+  {
+    kind: "meta",
+    source: "streamingunity",
+    data: { url: "https://streamingunity.vip/it/titles/42-example" },
+  },
+);
+assert.deepStrictEqual(routing.resolveMetaRoute(route), {
+  kind: "meta",
+  source: "animeunity",
+  data: { url: "https://example.test/anime/42" },
+});
+assert.strictEqual(routing.resolveMetaRoute("https://example.test/title/42"), null);
+const wrappedPost = contentModule.wrapPost(
+  {
+    title: "Example",
+    link: "https://www.animeunity.so/anime/42-example",
+    image: "https://cdn.example/poster.jpg",
+    variants: [
+      {
+        status: "dubbed",
+        statusKey: "Dubbed",
+        title: "Example (ITA)",
+        link: "https://www.animeunity.so/anime/43-example-ita",
+        image: "https://cdn.example/poster-ita.jpg",
+      },
+    ],
+  },
+  "animeunity",
+);
+assert.strictEqual(
+  wrappedPost.link,
+  "https://www.animeunity.so/anime/42-example",
+);
+assert.strictEqual(
+  wrappedPost.variants[0].link,
+  "https://www.animeunity.so/anime/43-example-ita",
+);
+const streamingUpcoming = streamingCatalogModule.catalog.find(
+  (item) => item.filter === "browse/upcoming",
+);
+const streamCenterUpcoming = catalogModule.catalog.find((item) =>
+  String(item.filter).includes("browse%2Fupcoming"),
+);
+assert.strictEqual(streamingUpcoming.staleTimeMs, 60 * 60 * 1000);
+assert.strictEqual(streamCenterUpcoming.staleTimeMs, 60 * 60 * 1000);
 assert(catalogModule.catalog.length >= 10, "catalog must expose curated rows");
 assert(catalogModule.genres.length > 20, "genres must include both providers");
 assert(catalogModule.archiveFilters.title, "unified archive filters must exist");

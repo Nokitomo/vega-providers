@@ -30,7 +30,7 @@ const runPipeline = async (query, source, signal) => {
     providerContext,
   });
   const post = posts.find(
-    (item) => routing.decodeRoute(item.link, "meta")?.source === source,
+    (item) => routing.resolveMetaRoute(item.link)?.source === source,
   );
   assert(post, `${source} search result must exist`);
 

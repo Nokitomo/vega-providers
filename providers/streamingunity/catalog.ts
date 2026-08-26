@@ -11,6 +11,7 @@ import {
 } from "./filters";
 
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const ONE_HOUR_MS = 60 * 60 * 1000;
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
 
@@ -37,7 +38,7 @@ export const catalog = [
     title: "In arrivo",
     titleKey: "StreamingUnity In Arrivo",
     filter: "browse/upcoming",
-    staleTimeMs: TWENTY_FOUR_HOURS_MS,
+    staleTimeMs: ONE_HOUR_MS,
   },
   {
     title: "Korean drama",

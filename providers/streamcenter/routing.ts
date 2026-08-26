@@ -53,6 +53,32 @@ export const decodeRoute = <T = unknown>(
   }
 };
 
+export const resolveMetaRoute = (
+  value: string
+): StreamCenterRoute<{ url: string }> | null => {
+  const legacyRoute = decodeRoute<{ url: string }>(value, "meta");
+  if (legacyRoute?.data?.url) return legacyRoute;
+
+  const raw = String(value || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return null;
+
+  try {
+    const hostname = new URL(raw).hostname.toLowerCase();
+    const source: StreamCenterSource | null = /(?:^|\.)animeunity\./i.test(
+      hostname
+    )
+      ? "animeunity"
+      : /(?:^|\.)streamingunity\./i.test(hostname)
+        ? "streamingunity"
+        : null;
+    return source
+      ? { kind: "meta", source, data: { url: raw } }
+      : null;
+  } catch (_) {
+    return null;
+  }
+};
+
 export const encodeFilterRoute = (
   source: StreamCenterSource,
   filter: string
