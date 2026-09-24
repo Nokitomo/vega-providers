@@ -4,6 +4,10 @@ import {
   buildEpisodeFetchRanges,
   parseEpisodeRangeRequest,
 } from "./episodeRanges";
+import {
+  resolveAniBridgeEpisodeMappings,
+  resolveAnimeMappings,
+} from "./mappings";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -51,6 +55,15 @@ export const getEpisodes = async function ({
     });
     const totalCount = infoRes.data?.episodes_count || 0;
     if (!totalCount) return [];
+    const anilistId = Number(infoRes.data?.anilist_id) || undefined;
+    const malId = Number(infoRes.data?.mal_id) || undefined;
+    const mappingResolution = await resolveAnimeMappings({
+      providerContext,
+      anilistId,
+      malId,
+      isMovie: false,
+      includeLegacyImdb: false,
+    });
 
     const episodes: EpisodeLink[] = [];
     const seenEpisodeIds = new Set<string>();
@@ -75,12 +88,25 @@ export const getEpisodes = async function ({
           seenEpisodeIds.add(link);
           const hasNumber = !!number;
           const parsedEpisodeNumber = parseEpisodeNumber(number);
+          const mappedEpisode =
+            parsedEpisodeNumber != null
+              ? resolveAniBridgeEpisodeMappings(
+                  mappingResolution,
+                  parsedEpisodeNumber
+                )
+              : undefined;
           const title = hasNumber ? `Episode ${number}` : "Episode";
           episodes.push({
             title,
             titleKey: hasNumber ? "Episode {{number}}" : "Episode",
             titleParams: hasNumber ? { number } : undefined,
             episodeNumber: parsedEpisodeNumber,
+            sourceEpisodeNumber: parsedEpisodeNumber,
+            seasonNumber: mappedEpisode?.seasonNumber,
+            externalMappings:
+              mappedEpisode && mappedEpisode.mappings.length > 0
+                ? mappedEpisode.mappings
+                : undefined,
             link,
           });
         });

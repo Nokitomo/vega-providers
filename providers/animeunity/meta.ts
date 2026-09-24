@@ -10,6 +10,7 @@ import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAniZipArtwork } from "./artwork";
 import { resolveAnimeUnityTrailer } from "./trailers";
+import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -91,25 +92,33 @@ export const getMeta = async function ({
       animeFromHtml
     );
     const providerIds = metaPayload.extra?.ids || {};
-    const [related, externalMeta, aniZipArtwork, trailer] = await Promise.all([
-      resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
-      resolveAnimeUnityCinemetaMetadata({
-        axios,
-        anilistId: providerIds.anilistId,
-        malId: providerIds.malId,
-        isMovie: metaPayload.isMovie,
-      }),
-      resolveAniZipArtwork({
-        axios,
-        anilistId: providerIds.anilistId,
-        malId: providerIds.malId,
-      }),
-      resolveAnimeUnityTrailer({
-        axios,
-        anilistId: providerIds.anilistId,
-        malId: providerIds.malId,
-      }),
-    ]);
+    const [related, mappingResolution, aniZipArtwork, trailer] =
+      await Promise.all([
+        resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
+        resolveAnimeMappings({
+          providerContext,
+          anilistId: providerIds.anilistId,
+          malId: providerIds.malId,
+          isMovie: metaPayload.isMovie,
+        }),
+        resolveAniZipArtwork({
+          axios,
+          anilistId: providerIds.anilistId,
+          malId: providerIds.malId,
+        }),
+        resolveAnimeUnityTrailer({
+          axios,
+          anilistId: providerIds.anilistId,
+          malId: providerIds.malId,
+        }),
+      ]);
+    const imdbId = mappingResolution.imdbId || aniZipArtwork.imdbId || "";
+    const externalMeta = await resolveAnimeUnityCinemetaMetadata({
+      providerContext,
+      imdbId,
+      isMovie: metaPayload.isMovie,
+    });
+    const aniBridgeExtra = buildAniBridgeExtra(mappingResolution);
     const poster =
       metaPayload.poster || externalMeta.poster || aniZipArtwork.poster || "";
     const background =
@@ -121,7 +130,6 @@ export const getMeta = async function ({
     const titleKey = externalMeta.cinemetaTitle
       ? undefined
       : metaPayload.titleKey;
-    const imdbId = externalMeta.imdbId || aniZipArtwork.imdbId || "";
 
     return {
       titleKey,
@@ -140,7 +148,14 @@ export const getMeta = async function ({
       rating: metaPayload.rating,
       studio: metaPayload.studio || "",
       episodesCount: metaPayload.episodesCount,
-      extra: metaPayload.extra,
+      extra: {
+        ...metaPayload.extra,
+        ids: {
+          ...metaPayload.extra?.ids,
+          ...aniBridgeExtra.ids,
+        },
+        mappings: aniBridgeExtra.mappings,
+      },
       related,
       linkList: metaPayload.linkList,
     };

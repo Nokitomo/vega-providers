@@ -83,10 +83,27 @@ export interface Info {
     ids?: {
       malId?: number;
       anilistId?: number;
+      malIds?: number[];
+      anilistIds?: number[];
+      anidbIds?: number[];
+      imdbMovieIds?: string[];
+      imdbShowIds?: string[];
+      tmdbMovieIds?: number[];
+      tmdbShowIds?: number[];
+      tvdbMovieIds?: number[];
+      tvdbShowIds?: number[];
       crunchyId?: number | string;
       disneyId?: number | string;
       netflixId?: number | string;
       primeId?: number | string;
+    };
+    mappings?: {
+      source: "anibridge-v3";
+      schemaVersion: string;
+      generatedOn?: string;
+      sourceDescriptors: string[];
+      imdbSource?: "anibridge-v3" | "plexanibridge-v2";
+      targets: ExternalIdMapping[];
     };
     stats?: {
       scoreRaw?: string;
@@ -125,8 +142,34 @@ export interface EpisodeLink {
   titleKey?: string;
   titleParams?: I18nParams;
   episodeNumber?: number;
+  sourceEpisodeNumber?: number;
   seasonNumber?: number;
+  externalMappings?: ExternalEpisodeMapping[];
   link: string;
+}
+
+export interface ExternalIdMapping {
+  provider:
+    | "anidb"
+    | "anilist"
+    | "imdb_movie"
+    | "imdb_show"
+    | "mal"
+    | "tmdb_movie"
+    | "tmdb_show"
+    | "tvdb_movie"
+    | "tvdb_show";
+  id: string;
+  scope?: string;
+  ranges?: Record<string, string>;
+}
+
+export interface ExternalEpisodeMapping {
+  provider: ExternalIdMapping["provider"];
+  id: string;
+  scope?: string;
+  seasonNumber?: number;
+  episodeNumbers: number[];
 }
 
 export interface Link {
