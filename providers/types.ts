@@ -144,6 +144,8 @@ export interface EpisodeLink {
   episodeNumber?: number;
   sourceEpisodeNumber?: number;
   seasonNumber?: number;
+  synopsis?: string;
+  thumbnail?: string;
   externalMappings?: ExternalEpisodeMapping[];
   link: string;
 }
@@ -170,6 +172,158 @@ export interface ExternalEpisodeMapping {
   scope?: string;
   seasonNumber?: number;
   episodeNumbers: number[];
+}
+
+export interface TmdbLocalizedText {
+  value: string;
+  language: string;
+}
+
+export interface TmdbImageMetadata {
+  id?: string;
+  type: "logo" | "poster" | "backdrop" | "still";
+  url: string;
+  previewUrl?: string;
+  language: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  primary?: boolean;
+  addedBy?: string;
+}
+
+export interface TmdbPersonCredit {
+  id?: number;
+  name: string;
+  role?: string;
+  department?: string;
+  jobs?: string[];
+  episodeCount?: number;
+  profile?: string;
+}
+
+export interface TmdbVideoMetadata {
+  id?: string;
+  key: string;
+  site: string;
+  name: string;
+  language: string;
+  type?: string;
+  details?: string;
+  url?: string;
+  thumbnail?: string;
+  channel?: string;
+  restrictedRegions: string[];
+}
+
+export interface TmdbWatchProviderMetadata {
+  name: string;
+  category?: string;
+  monetizationType?: string;
+  quality?: string;
+  logo?: string;
+  url?: string;
+  region: string;
+}
+
+export interface TmdbEpisodeGroupMetadata {
+  id: string;
+  name: string;
+  type?: string;
+  groupCount?: number;
+  episodeCount?: number;
+  overview?: string;
+  sourceUrl: string;
+}
+
+export interface TmdbNetworkMetadata {
+  id?: number;
+  name?: string;
+  logo?: string;
+  url?: string;
+}
+
+export interface TmdbEpisodeMetadata {
+  id?: string;
+  seasonNumber: number;
+  episodeNumber: number;
+  title?: TmdbLocalizedText;
+  overview?: TmdbLocalizedText;
+  airDateText?: TmdbLocalizedText;
+  runtimeMinutes?: number;
+  rating?: number;
+  thumbnail?: string;
+  stills: TmdbImageMetadata[];
+  directors?: TmdbPersonCredit[];
+  writers?: TmdbPersonCredit[];
+  guestStars?: TmdbPersonCredit[];
+  sourceUrl: string;
+}
+
+export interface TmdbSeasonMetadata {
+  seasonNumber: number;
+  name?: TmdbLocalizedText;
+  overview?: TmdbLocalizedText;
+  year?: number;
+  episodeCount?: number;
+  poster?: string;
+  posters: TmdbImageMetadata[];
+  backgrounds: TmdbImageMetadata[];
+  episodes?: TmdbEpisodeMetadata[];
+  sourceUrl: string;
+}
+
+export interface TmdbTranslationMetadata {
+  language: string;
+  title?: string;
+  overview?: string;
+  tagline?: string;
+}
+
+export interface TmdbMediaMetadata {
+  source: "tmdb-web";
+  id: number;
+  type: "movie" | "tv";
+  sourceUrl: string;
+  fetchedAt: string;
+  originalLanguage?: string;
+  title?: TmdbLocalizedText;
+  originalTitle?: string;
+  overview?: TmdbLocalizedText;
+  tagline?: TmdbLocalizedText;
+  startDate?: string;
+  endDate?: string;
+  releaseDate?: string;
+  certification?: string;
+  status?: string;
+  mediaType?: string;
+  rating?: number;
+  ratingCount?: number;
+  contentScore?: number;
+  numberOfEpisodes?: number;
+  numberOfSeasons?: number;
+  genres: string[];
+  countries: string[];
+  facts: Record<string, string>;
+  keywords: string[];
+  networks: TmdbNetworkMetadata[];
+  socialLinks: Record<string, string>;
+  cast: TmdbPersonCredit[];
+  crew: TmdbPersonCredit[];
+  videos: TmdbVideoMetadata[];
+  watchProviders: TmdbWatchProviderMetadata[];
+  episodeGroups: TmdbEpisodeGroupMetadata[];
+  translations: TmdbTranslationMetadata[];
+  images: {
+    logos: TmdbImageMetadata[];
+    posters: TmdbImageMetadata[];
+    backdrops: TmdbImageMetadata[];
+  };
+  logo?: string;
+  poster?: string;
+  background?: string;
+  seasons: TmdbSeasonMetadata[];
+  schema: Record<string, unknown>;
 }
 
 export interface Link {

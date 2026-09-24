@@ -92,6 +92,24 @@ The app can localize provider-provided labels when you include optional i18n fie
 - `Link` / `EpisodeLink` / `directLinks`: `titleKey`, `titleParams`
 - `Info`: `titleKey`/`titleParams` for fallback titles, `tagKeys` map `{ [rawTag]: i18nKey }` to translate tags in the app
 
+## AnimeUnity TMDB metadata
+
+AnimeUnity resolves AniBridge TMDB IDs through the reusable modules in
+`providers/animeunity/tmdb/`. The scraper uses public TMDB pages and does not
+embed an API token. Text and artwork follow the same preference order:
+Italian, English, original language, then TMDB's no-language (`xx`) assets.
+
+The normal AnimeUnity flow only projects the TMDB fields consumed by Vega:
+title logo, poster, backdrop, and localized episode title, synopsis, and
+thumbnail. TMDB is the first choice for those fields and the existing provider
+and external sources remain fallbacks. The large raw TMDB object is not added
+to `Info.extra` or `EpisodeLink`.
+
+The reusable resolver still supports complete title metadata on demand by
+calling `resolveTmdbMediaMetadata` with `includeExtended: true`. Season artwork
+and episode lists are loaded only when that season is requested, and all TMDB
+requests share the provider runtime cache.
+
 ## `providerContext`?
 
 `providerContext` is an object passed to each function, providing shared utilities and dependencies, such as:

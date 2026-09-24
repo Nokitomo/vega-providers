@@ -8,6 +8,7 @@ import {
   resolveAniBridgeEpisodeMappings,
   resolveAnimeMappings,
 } from "./mappings";
+import { resolveTmdbSeasonMetadata } from "./tmdb";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -115,7 +116,64 @@ export const getEpisodes = async function ({
       }
     }
 
-    return episodes;
+    const tmdbSeasonTargets = new Map<
+      string,
+      { mediaId: number; seasonNumber: number }
+    >();
+    episodes.forEach((episode) => {
+      episode.externalMappings?.forEach((mapping) => {
+        if (
+          mapping.provider !== "tmdb_show" ||
+          mapping.seasonNumber == null
+        ) {
+          return;
+        }
+        const mediaId = Number.parseInt(mapping.id, 10);
+        if (!Number.isFinite(mediaId) || mediaId <= 0) return;
+        const key = `${mediaId}:${mapping.seasonNumber}`;
+        tmdbSeasonTargets.set(key, {
+          mediaId,
+          seasonNumber: mapping.seasonNumber,
+        });
+      });
+    });
+
+    const tmdbSeasons = new Map<string, Awaited<ReturnType<typeof resolveTmdbSeasonMetadata>>>();
+    await Promise.all(
+      Array.from(tmdbSeasonTargets.entries()).map(async ([key, target]) => {
+        const season = await resolveTmdbSeasonMetadata({
+          providerContext,
+          ...target,
+        });
+        tmdbSeasons.set(key, season);
+      })
+    );
+
+    return episodes.map((episode) => {
+      const tmdbMapping = episode.externalMappings?.find(
+        (mapping) =>
+          mapping.provider === "tmdb_show" &&
+          mapping.seasonNumber != null &&
+          mapping.episodeNumbers.length > 0
+      );
+      if (!tmdbMapping || tmdbMapping.seasonNumber == null) return episode;
+      const season = tmdbSeasons.get(
+        `${tmdbMapping.id}:${tmdbMapping.seasonNumber}`
+      );
+      const tmdbEpisode = season?.episodes?.find((candidate) =>
+        tmdbMapping.episodeNumbers.includes(candidate.episodeNumber)
+      );
+      if (!tmdbEpisode) return episode;
+
+      return {
+        ...episode,
+        title: tmdbEpisode.title?.value || episode.title,
+        titleKey: tmdbEpisode.title?.value ? undefined : episode.titleKey,
+        titleParams: tmdbEpisode.title?.value ? undefined : episode.titleParams,
+        synopsis: tmdbEpisode.overview?.value,
+        thumbnail: tmdbEpisode.thumbnail,
+      };
+    });
   } catch (err) {
     console.error("animeunity episodes error", err);
     return [];

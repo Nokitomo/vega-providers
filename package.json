@@ -16,6 +16,7 @@
     "test:animeunity:catalog-filters": "node tests/animeunity-catalog-filters.js",
     "test:animeunity:artwork-trailers": "node tests/animeunity-artwork-trailers.js",
     "test:animeunity:anibridge": "node tests/animeunity-anibridge.js",
+    "test:animeunity:tmdb": "node tests/animeunity-tmdb.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",
     "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",

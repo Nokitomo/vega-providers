@@ -11,6 +11,7 @@ import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAniZipArtwork } from "./artwork";
 import { resolveAnimeUnityTrailer } from "./trailers";
 import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
+import { resolveAnimeTmdbMetadata, selectTmdbPreferredArtwork } from "./tmdb";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -113,19 +114,28 @@ export const getMeta = async function ({
         }),
       ]);
     const imdbId = mappingResolution.imdbId || aniZipArtwork.imdbId || "";
-    const externalMeta = await resolveAnimeUnityCinemetaMetadata({
-      providerContext,
-      imdbId,
-      isMovie: metaPayload.isMovie,
-    });
+    const [externalMeta, tmdbMetadata] = await Promise.all([
+      resolveAnimeUnityCinemetaMetadata({
+        providerContext,
+        imdbId,
+        isMovie: metaPayload.isMovie,
+      }),
+      resolveAnimeTmdbMetadata({
+        providerContext,
+        mappingResolution,
+        isMovie: metaPayload.isMovie,
+      }),
+    ]);
     const aniBridgeExtra = buildAniBridgeExtra(mappingResolution);
-    const poster =
-      metaPayload.poster || externalMeta.poster || aniZipArtwork.poster || "";
-    const background =
-      metaPayload.background ||
-      externalMeta.background ||
-      aniZipArtwork.background ||
-      poster;
+    const artwork = selectTmdbPreferredArtwork({
+      tmdb: tmdbMetadata,
+      provider: {
+        poster: metaPayload.poster,
+        background: metaPayload.background,
+      },
+      cinemeta: externalMeta,
+      aniZip: aniZipArtwork,
+    });
     const title = externalMeta.cinemetaTitle || metaPayload.title;
     const titleKey = externalMeta.cinemetaTitle
       ? undefined
@@ -135,10 +145,10 @@ export const getMeta = async function ({
       titleKey,
       title,
       synopsis: metaPayload.synopsis,
-      image: background || poster,
-      poster: poster || undefined,
-      logo: externalMeta.logo || aniZipArtwork.logo,
-      background: background || undefined,
+      image: artwork.background || artwork.poster,
+      poster: artwork.poster || undefined,
+      logo: artwork.logo || undefined,
+      background: artwork.background || undefined,
       trailers: trailer ? [trailer] : undefined,
       imdbId,
       type: metaPayload.isMovie ? "movie" : "series",

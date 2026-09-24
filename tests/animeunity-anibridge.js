@@ -45,12 +45,12 @@ const fixture = {
   "anilist:20": {
     "mal:20": {},
     "tmdb_show:46260:s1": { "1-52": "1-52" },
-    "tmdb_show:46260:s2": { "53-104": "1-52" },
+    "tmdb_show:46260:s2": { "53-104": "53-104" },
     "tvdb_show:78857:s2": { "53-104": "1-52" },
   },
   "mal:20": {
     "anilist:20": {},
-    "tmdb_show:46260:s2": { "53-104": "1-52" },
+    "tmdb_show:46260:s2": { "53-104": "53-104" },
   },
   "anilist:5": {
     "imdb_movie:tt0275277": {},
@@ -145,7 +145,7 @@ const createContext = (handler) => ({
       id: "46260",
       scope: "s2",
       seasonNumber: 2,
-      episodeNumbers: [1],
+      episodeNumbers: [53],
     }
   );
 
@@ -174,7 +174,7 @@ const createContext = (handler) => ({
   assert.strictEqual(episodes[0].episodeNumber, 53);
   assert.strictEqual(episodes[0].sourceEpisodeNumber, 53);
   assert.strictEqual(episodes[0].seasonNumber, 2);
-  assert.deepStrictEqual(episodes[0].externalMappings[0].episodeNumbers, [1]);
+  assert.deepStrictEqual(episodes[0].externalMappings[0].episodeNumbers, [53]);
   assert.strictEqual(episodeCalls.includes(PLEXANIBRIDGE_MAPPINGS_URL), false);
 
   const vegaCalls = [];
