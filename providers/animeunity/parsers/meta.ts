@@ -209,11 +209,13 @@ function parseAvailabilityDate(value: unknown): {
 
 export type RelatedItem = {
   id?: number | string;
+  slug?: string;
   title: string;
   link: string;
   image?: string;
   type?: string;
   year?: string;
+  raw?: any;
 };
 
 export function mapRelatedBase(
@@ -229,11 +231,13 @@ export function mapRelatedBase(
       if (!title || !id) return null;
       return {
         id,
+        slug,
         title,
         link: buildAnimeLink(baseHost, id, slug),
         image: normalizeImageUrl(item?.imageurl),
         type: item?.type || item?.relation || item?.rel,
         year: pickYear(item),
+        raw: item,
       };
     })
     .filter(Boolean) as RelatedItem[];

@@ -55,6 +55,10 @@ export const wrapInfo = (
     related: info.related?.map((item) => ({
       ...item,
       link: toWebMetaLink(item.link, source),
+      variants: item.variants?.map((variant) => ({
+        ...variant,
+        link: toWebMetaLink(variant.link, source),
+      })),
     })),
     linkList: (info.linkList || []).map((group) => ({
       ...group,

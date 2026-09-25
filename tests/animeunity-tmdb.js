@@ -194,7 +194,7 @@ assert.deepStrictEqual(
   {
     logo: "https://tmdb.test/logo.png",
     poster: "https://tmdb.test/poster.jpg",
-    background: "https://provider.test/background.jpg",
+    background: "https://tmdb.test/background.jpg",
   }
 );
 assert.deepStrictEqual(

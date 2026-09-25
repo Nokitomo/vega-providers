@@ -22,10 +22,10 @@ export function selectTmdbPreferredArtwork({
     aniZip?.poster ||
     "";
   const background =
-    provider?.background ||
     tmdb?.background ||
     cinemeta?.background ||
     aniZip?.background ||
+    provider?.background ||
     poster;
   return {
     logo: tmdb?.logo || cinemeta?.logo || aniZip?.logo || provider?.logo || "",

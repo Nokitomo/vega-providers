@@ -5,16 +5,30 @@ import {
   parseAnimeFromHtml,
   RelatedItem,
 } from "./parsers/meta";
-import { normalizeImageUrl } from "./utils";
+import { buildAnimeLink, normalizeImageUrl } from "./utils";
 import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 import { AnimeUnityArtwork, resolveAniZipArtwork } from "./artwork";
 import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAnimeUnityTrailer } from "./trailers";
 import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
 import { resolveAnimeTmdbMetadata, selectTmdbPreferredArtwork } from "./tmdb";
+import { deduplicateAnimeVariantPosts } from "./variants";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const output: R[] = [];
+  for (let index = 0; index < items.length; index += limit) {
+    const batch = items.slice(index, index + limit);
+    output.push(...(await Promise.all(batch.map(mapper))));
+  }
+  return output;
 }
 
 async function resolveRelatedImages(
@@ -22,9 +36,10 @@ async function resolveRelatedImages(
   axios: ProviderContext["axios"],
   baseHost: string
 ): Promise<Info["related"]> {
-  const resolved = await Promise.all(
-    items.map(async (item) => {
-      if (item.image) return item;
+  const resolvedItems = await mapWithConcurrency(
+    items,
+    6,
+    async (item) => {
       if (!item.id) return item;
       try {
         const detailRes = await axios.get(`${baseHost}/info_api/${item.id}/`, {
@@ -35,23 +50,57 @@ async function resolveRelatedImages(
         const image = normalizeImageUrl(
           detail?.imageurl || detail?.cover || detail?.imageurl_cover
         );
+        const slug = detail?.slug || item.slug;
         return {
           ...item,
+          slug,
+          title: item.title || detail?.title_eng || detail?.title || detail?.title_it || "",
+          link: buildAnimeLink(baseHost, item.id, slug),
           image: image || item.image,
+          raw: {
+            ...(item.raw || {}),
+            ...detail,
+            id: detail?.id || item.id,
+          },
         };
       } catch (_) {
         return item;
       }
-    })
+    }
   );
 
-  return resolved.map((item) => ({
-    title: item.title,
-    link: item.link,
-    image: item.image || "",
-    type: item.type,
-    year: item.year,
+  const entries = resolvedItems.map((item) => ({
+    anime: {
+      ...(item.raw || {}),
+      id: item.raw?.id || item.id,
+      slug: item.raw?.slug || item.slug,
+      title_eng: item.raw?.title_eng || item.title,
+      title: item.raw?.title || item.title,
+      imageurl: item.raw?.imageurl || item.image,
+    },
+    post: {
+      title: item.title,
+      link: item.link,
+      image: item.image || "",
+      provider: "animeunity",
+    },
   }));
+  const grouped = deduplicateAnimeVariantPosts(entries);
+  const byLink = new Map(resolvedItems.map((item) => [item.link, item]));
+
+  return grouped.map((post) => {
+    const item = byLink.get(post.link);
+    return {
+      title: post.title,
+      link: post.link,
+      image: post.image || item?.image || "",
+      type: item?.type,
+      year: item?.year,
+      dubStatus: post.dubStatus,
+      dubStatusKey: post.dubStatusKey,
+      variants: post.variants,
+    };
+  });
 }
 
 export const getMeta = async function ({
@@ -122,8 +171,8 @@ export const getMeta = async function ({
     const tmdbFields: Array<"logo" | "poster" | "background"> = [
       "logo",
       "poster",
+      "background",
     ];
-    if (!providerArtwork.background) tmdbFields.push("background");
     const tmdbMetadata = await resolveAnimeTmdbMetadata({
       providerContext,
       mappingResolution,
@@ -136,10 +185,7 @@ export const getMeta = async function ({
     const needsCinemeta =
       !tmdbMetadata?.logo ||
       !(tmdbMetadata?.poster || providerArtwork.poster) ||
-      !(
-        providerArtwork.background ||
-        tmdbMetadata?.background
-      );
+      !tmdbMetadata?.background;
     if (needsCinemeta && !imdbId) {
       aniZipArtwork = await resolveAniZipArtwork({
         providerContext,
@@ -167,7 +213,6 @@ export const getMeta = async function ({
         cinemetaMetadata.poster
       ) ||
       !(
-        providerArtwork.background ||
         tmdbMetadata?.background ||
         cinemetaMetadata.background
       );
@@ -189,7 +234,7 @@ export const getMeta = async function ({
     const title = metaPayload.title;
     const titleKey = metaPayload.titleKey;
 
-    const artworkSources = {
+    const artworkSources: NonNullable<Info["extra"]>["artworkSources"] = {
       logo: tmdbMetadata?.logo
         ? "tmdb" as const
         : cinemetaMetadata.logo
@@ -204,13 +249,15 @@ export const getMeta = async function ({
           : cinemetaMetadata.poster
             ? "cinemeta" as const
           : "anizip" as const,
-      background: providerArtwork.background
-        ? "provider" as const
-        : tmdbMetadata?.background
-          ? "tmdb" as const
-          : cinemetaMetadata.background
-            ? "cinemeta" as const
-          : "anizip" as const,
+      background: tmdbMetadata?.background
+        ? "tmdb" as const
+        : cinemetaMetadata.background
+          ? "cinemeta" as const
+        : aniZipArtwork.background
+          ? "anizip" as const
+        : providerArtwork.background
+          ? "provider" as const
+        : undefined,
     };
 
     return {

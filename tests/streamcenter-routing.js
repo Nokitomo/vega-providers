@@ -97,6 +97,37 @@ assert.strictEqual(
   wrappedPost.variants[0].link,
   "https://www.animeunity.so/anime/43-example-ita",
 );
+const wrappedInfo = contentModule.wrapInfo(
+  {
+    title: "Example",
+    image: "",
+    synopsis: "",
+    imdbId: "",
+    type: "series",
+    related: [
+      {
+        title: "Related",
+        link: "123",
+        variants: [
+          {
+            status: "dubbed",
+            statusKey: "Dubbed",
+            title: "Related (ITA)",
+            link: "124",
+            image: "",
+          },
+        ],
+      },
+    ],
+    linkList: [],
+  },
+  "animeunity",
+);
+assert(routing.resolveMetaRoute(wrappedInfo.related[0].link)?.data.url === "123");
+assert(
+  routing.resolveMetaRoute(wrappedInfo.related[0].variants[0].link)?.data.url ===
+    "124",
+);
 const streamingUpcoming = streamingCatalogModule.catalog.find(
   (item) => item.filter === "browse/upcoming",
 );
