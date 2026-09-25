@@ -26,7 +26,7 @@ import {
 } from "./types";
 
 const ARTWORK_SOFT_TTL_MS = 24 * 60 * 60 * 1000;
-const CACHE_SCHEMA = "v2";
+const CACHE_SCHEMA = "v3";
 
 const ROUTES: Record<
   TmdbArtworkField,
@@ -66,6 +66,7 @@ function pickFields(
     source: metadata.source,
     sourceUrl: metadata.sourceUrl,
     originalLanguage: metadata.originalLanguage,
+    seasonNumber: metadata.seasonNumber,
     logo: fields.includes("logo")
       ? normalizeTmdbImageUrl(metadata.logo, imageSize)
       : undefined,

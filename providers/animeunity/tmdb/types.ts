@@ -22,6 +22,7 @@ export type TmdbArtworkMetadata = {
   source: "tmdb-web";
   sourceUrl: string;
   originalLanguage?: string;
+  seasonNumber?: number;
   logo?: string;
   poster?: string;
   background?: string;

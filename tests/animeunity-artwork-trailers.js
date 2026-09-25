@@ -1,6 +1,7 @@
 const assert = require("assert");
 const { parseAniZipArtwork } = require("../dist/animeunity/artwork.js");
 const { parseCinemetaMetadata } = require("../dist/animeunity/cinemeta.js");
+const { buildMetaFromInfo } = require("../dist/animeunity/parsers/meta.js");
 const {
   normalizeAnimeTrailerUrl,
   resolveAnimeUnityTrailer,
@@ -22,6 +23,23 @@ assert.deepStrictEqual(
     poster: "https://img.test/poster.jpg",
     background: "https://img.test/background.jpg",
   }
+);
+
+const providerImages = buildMetaFromInfo(
+  {
+    title: "Only a poster",
+    cover: "https://img.test/poster-only.jpg",
+    episodes_count: 1,
+  },
+  "https://anime.test",
+  1,
+  null
+);
+assert.strictEqual(providerImages.poster, "https://img.test/poster-only.jpg");
+assert.strictEqual(
+  providerImages.background,
+  "",
+  "a portrait cover must not masquerade as a provider background"
 );
 
 assert.deepStrictEqual(

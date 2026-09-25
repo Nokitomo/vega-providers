@@ -1,6 +1,8 @@
 import { ProviderContext } from "../../types";
 import { AnimeMappingResolution } from "../mappings";
+import { parseSeasonScope } from "../mappings";
 import { resolveTmdbArtworkMetadata } from "./artworkResolver";
+import { resolveTmdbSeasonPoster } from "./seasonArtworkResolver";
 import {
   TmdbArtworkField,
   TmdbArtworkMetadata,
@@ -36,6 +38,30 @@ export function selectPrimaryTmdbId(
   return id ? { id, type: isMovie ? "movie" : "tv" } : null;
 }
 
+export function selectPrimaryTmdbTarget(
+  resolution: AnimeMappingResolution,
+  isMovie: boolean
+): { id: number; type: TmdbMediaType; seasonNumber?: number } | null {
+  const selected = selectPrimaryTmdbId(resolution, isMovie);
+  if (!selected || selected.type === "movie") return selected;
+
+  const matchingTargets = resolution.targets.filter(
+    (target) => target.provider === "tmdb_show" && target.id === String(selected.id)
+  );
+  const seasons = matchingTargets.map((target) => parseSeasonScope(target.scope));
+  const scopedSeasons = Array.from(
+    new Set(seasons.filter((season): season is number => season != null))
+  );
+  const isUnambiguous =
+    matchingTargets.length > 0 &&
+    seasons.every((season) => season != null) &&
+    scopedSeasons.length === 1;
+
+  return isUnambiguous
+    ? { ...selected, seasonNumber: scopedSeasons[0] }
+    : selected;
+}
+
 export async function resolveAnimeTmdbMetadata({
   providerContext,
   mappingResolution,
@@ -49,8 +75,64 @@ export async function resolveAnimeTmdbMetadata({
   fields?: TmdbArtworkField[];
   imageSize?: TmdbImageSize;
 }): Promise<TmdbArtworkMetadata | null> {
-  const target = selectPrimaryTmdbId(mappingResolution, isMovie);
-  return target
-    ? resolveTmdbArtworkMetadata({ providerContext, ...target, fields, imageSize })
+  const target = selectPrimaryTmdbTarget(mappingResolution, isMovie);
+  if (!target) return null;
+
+  const requestedFields = Array.from(
+    new Set(fields || (["logo", "poster", "background"] as TmdbArtworkField[]))
+  );
+  if (target.type !== "tv" || target.seasonNumber == null) {
+    return resolveTmdbArtworkMetadata({
+      providerContext,
+      id: target.id,
+      type: target.type,
+      fields: requestedFields,
+      imageSize,
+    });
+  }
+
+  const generalFields = requestedFields.filter((field) => field !== "poster");
+  const [seasonArtwork, generalArtwork] = await Promise.all([
+    requestedFields.includes("poster")
+      ? resolveTmdbSeasonPoster({
+          providerContext,
+          mediaId: target.id,
+          seasonNumber: target.seasonNumber,
+          imageSize,
+        })
+      : null,
+    generalFields.length > 0
+      ? resolveTmdbArtworkMetadata({
+          providerContext,
+          id: target.id,
+          type: target.type,
+          fields: generalFields,
+          imageSize,
+        })
+      : null,
+  ]);
+
+  let poster = seasonArtwork?.poster;
+  let generalPoster: TmdbArtworkMetadata | null = null;
+  if (requestedFields.includes("poster") && !poster) {
+    generalPoster = await resolveTmdbArtworkMetadata({
+      providerContext,
+      id: target.id,
+      type: target.type,
+      fields: ["poster"],
+      imageSize,
+    });
+    poster = generalPoster?.poster;
+  }
+
+  const base = generalArtwork || seasonArtwork || generalPoster;
+  return base
+    ? {
+        ...base,
+        seasonNumber: target.seasonNumber,
+        logo: generalArtwork?.logo,
+        poster,
+        background: generalArtwork?.background,
+      }
     : null;
 }

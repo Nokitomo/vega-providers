@@ -22,8 +22,8 @@ export function selectTmdbPreferredArtwork({
     aniZip?.poster ||
     "";
   const background =
-    tmdb?.background ||
     provider?.background ||
+    tmdb?.background ||
     cinemeta?.background ||
     aniZip?.background ||
     poster;

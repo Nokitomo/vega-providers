@@ -8,6 +8,7 @@ import {
 import { normalizeImageUrl } from "./utils";
 import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 import { AnimeUnityArtwork, resolveAniZipArtwork } from "./artwork";
+import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAnimeUnityTrailer } from "./trailers";
 import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
 import { resolveAnimeTmdbMetadata, selectTmdbPreferredArtwork } from "./tmdb";
@@ -114,32 +115,75 @@ export const getMeta = async function ({
               malId: providerIds.malId,
             }),
           ]);
-    const tmdbMetadata = await resolveAnimeTmdbMetadata({
-      providerContext,
-      mappingResolution,
-      isMovie: metaPayload.isMovie,
-    });
     const providerArtwork = {
       poster: metaPayload.poster,
       background: metaPayload.background,
     };
-    const needsAniZip =
+    const tmdbFields: Array<"logo" | "poster" | "background"> = [
+      "logo",
+      "poster",
+    ];
+    if (!providerArtwork.background) tmdbFields.push("background");
+    const tmdbMetadata = await resolveAnimeTmdbMetadata({
+      providerContext,
+      mappingResolution,
+      isMovie: metaPayload.isMovie,
+      fields: tmdbFields,
+    });
+
+    let aniZipArtwork: AnimeUnityArtwork = {};
+    let imdbId = mappingResolution.imdbId || "";
+    const needsCinemeta =
       !tmdbMetadata?.logo ||
       !(tmdbMetadata?.poster || providerArtwork.poster) ||
-      !(tmdbMetadata?.background || providerArtwork.background);
-    const aniZipArtwork: AnimeUnityArtwork = needsAniZip
-      ? await resolveAniZipArtwork({
-          axios,
-          anilistId: providerIds.anilistId,
-          malId: providerIds.malId,
+      !(
+        providerArtwork.background ||
+        tmdbMetadata?.background
+      );
+    if (needsCinemeta && !imdbId) {
+      aniZipArtwork = await resolveAniZipArtwork({
+        providerContext,
+        anilistId: providerIds.anilistId,
+        malId: providerIds.malId,
+      });
+      imdbId = aniZipArtwork.imdbId || "";
+    }
+
+    const cinemetaMetadata = needsCinemeta
+      ? await resolveAnimeUnityCinemetaMetadata({
+          providerContext,
+          imdbId,
+          isMovie: metaPayload.isMovie,
         })
       : {};
-    const imdbId = mappingResolution.imdbId || aniZipArtwork.imdbId || "";
+    const needsAniZip =
+      !(
+        tmdbMetadata?.logo ||
+        cinemetaMetadata.logo
+      ) ||
+      !(
+        tmdbMetadata?.poster ||
+        providerArtwork.poster ||
+        cinemetaMetadata.poster
+      ) ||
+      !(
+        providerArtwork.background ||
+        tmdbMetadata?.background ||
+        cinemetaMetadata.background
+      );
+    if (needsAniZip && !Object.values(aniZipArtwork).some(Boolean)) {
+      aniZipArtwork = await resolveAniZipArtwork({
+        providerContext,
+        anilistId: providerIds.anilistId,
+        malId: providerIds.malId,
+      });
+      imdbId = imdbId || aniZipArtwork.imdbId || "";
+    }
     const aniBridgeExtra = buildAniBridgeExtra(mappingResolution);
     const artwork = selectTmdbPreferredArtwork({
       tmdb: tmdbMetadata,
       provider: providerArtwork,
-      cinemeta: null,
+      cinemeta: cinemetaMetadata,
       aniZip: aniZipArtwork,
     });
     const title = metaPayload.title;
@@ -148,6 +192,8 @@ export const getMeta = async function ({
     const artworkSources = {
       logo: tmdbMetadata?.logo
         ? "tmdb" as const
+        : cinemetaMetadata.logo
+          ? "cinemeta" as const
         : aniZipArtwork.logo
           ? "anizip" as const
           : "provider" as const,
@@ -155,11 +201,15 @@ export const getMeta = async function ({
         ? "tmdb" as const
         : providerArtwork.poster
           ? "provider" as const
+          : cinemetaMetadata.poster
+            ? "cinemeta" as const
           : "anizip" as const,
-      background: tmdbMetadata?.background
-        ? "tmdb" as const
-        : providerArtwork.background
-          ? "provider" as const
+      background: providerArtwork.background
+        ? "provider" as const
+        : tmdbMetadata?.background
+          ? "tmdb" as const
+          : cinemetaMetadata.background
+            ? "cinemeta" as const
           : "anizip" as const,
     };
 

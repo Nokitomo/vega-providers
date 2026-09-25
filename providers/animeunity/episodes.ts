@@ -9,6 +9,7 @@ import {
   resolveAnimeMappings,
 } from "./mappings";
 import { resolveTmdbEpisodeSeasonMetadata } from "./tmdb";
+import { resolveAniZipEpisodeFallbacks } from "./anizip";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -160,29 +161,86 @@ export const getEpisodes = async function ({
       })
     );
 
-    return episodes.map((episode) => {
+    const tmdbResolved = episodes.map((episode) => {
       const tmdbMapping = episode.externalMappings?.find(
         (mapping) =>
           mapping.provider === "tmdb_show" &&
           mapping.seasonNumber != null &&
           mapping.episodeNumbers.length > 0
       );
-      if (!tmdbMapping || tmdbMapping.seasonNumber == null) return episode;
+      if (!tmdbMapping || tmdbMapping.seasonNumber == null) {
+        return { episode, tmdbEpisode: undefined };
+      }
       const season = tmdbSeasons.get(
         `${tmdbMapping.id}:${tmdbMapping.seasonNumber}`
       );
       const tmdbEpisode = season?.episodes?.find((candidate) =>
         tmdbMapping.episodeNumbers.includes(candidate.episodeNumber)
       );
-      if (!tmdbEpisode) return episode;
+      if (!tmdbEpisode) return { episode, tmdbEpisode: undefined };
 
       return {
+        episode: {
+          ...episode,
+          title: tmdbEpisode.title?.value || episode.title,
+          titleKey: tmdbEpisode.title?.value ? undefined : episode.titleKey,
+          titleParams: tmdbEpisode.title?.value
+            ? undefined
+            : episode.titleParams,
+          synopsis: tmdbEpisode.overview?.value || episode.synopsis,
+          thumbnail: tmdbEpisode.thumbnail || episode.thumbnail,
+        },
+        tmdbEpisode,
+      };
+    });
+
+    const missingIndexes = tmdbResolved
+      .map(({ tmdbEpisode }, index) =>
+        !tmdbEpisode?.title?.value ||
+        !tmdbEpisode?.overview?.value ||
+        !tmdbEpisode?.thumbnail
+          ? index
+          : -1
+      )
+      .filter((index) => index >= 0);
+    if (missingIndexes.length === 0) {
+      return tmdbResolved.map(({ episode }) => episode);
+    }
+
+    const aniZipFallbacks = await resolveAniZipEpisodeFallbacks({
+      providerContext,
+      anilistId,
+      malId,
+      sourceRevision: String(totalCount),
+      requests: missingIndexes.map((index) => {
+        const episode = tmdbResolved[index].episode;
+        return {
+          sourceEpisodeNumber: episode.sourceEpisodeNumber,
+          seasonNumber: episode.seasonNumber,
+          externalMappings: episode.externalMappings,
+        };
+      }),
+    });
+    const fallbackByIndex = new Map(
+      missingIndexes.map((episodeIndex, fallbackIndex) => [
+        episodeIndex,
+        aniZipFallbacks[fallbackIndex],
+      ])
+    );
+
+    return tmdbResolved.map(({ episode, tmdbEpisode }, index) => {
+      const fallback = fallbackByIndex.get(index);
+      if (!fallback) return episode;
+      const fallbackTitle = !tmdbEpisode?.title?.value
+        ? fallback.title
+        : undefined;
+      return {
         ...episode,
-        title: tmdbEpisode.title?.value || episode.title,
-        titleKey: tmdbEpisode.title?.value ? undefined : episode.titleKey,
-        titleParams: tmdbEpisode.title?.value ? undefined : episode.titleParams,
-        synopsis: tmdbEpisode.overview?.value,
-        thumbnail: tmdbEpisode.thumbnail,
+        title: fallbackTitle || episode.title,
+        titleKey: fallbackTitle ? undefined : episode.titleKey,
+        titleParams: fallbackTitle ? undefined : episode.titleParams,
+        synopsis: episode.synopsis || fallback.synopsis,
+        thumbnail: episode.thumbnail || fallback.thumbnail,
       };
     });
   } catch (err) {

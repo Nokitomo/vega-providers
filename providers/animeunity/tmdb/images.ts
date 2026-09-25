@@ -89,11 +89,9 @@ export function mergeTmdbImages(
     const rightIndex = priority.indexOf(right.language);
     const leftPriority = leftIndex >= 0 ? leftIndex : priority.length;
     const rightPriority = rightIndex >= 0 ? rightIndex : priority.length;
-    return (
-      leftPriority - rightPriority ||
-      Number(!!right.primary) - Number(!!left.primary) ||
-      (right.width || 0) * (right.height || 0) -
-        (left.width || 0) * (left.height || 0)
-    );
+    // TMDB already exposes gallery entries in popularity order. The stable sort
+    // only groups languages and deliberately preserves that order inside each
+    // language instead of re-ranking by resolution or the primary flag.
+    return leftPriority - rightPriority;
   });
 }

@@ -1,10 +1,12 @@
 import { ProviderContext } from "../types";
+import { readExternalCache, writeExternalCache } from "./externalCache";
 import { getProviderRuntimeCache } from "./mappings/runtimeCache";
 
 const CINEMETA_BASE_URL = "https://v3-cinemeta.strem.io/meta";
 const CINEMETA_TIMEOUT_MS = 10000;
-const CINEMETA_SUCCESS_TTL_MS = 12 * 60 * 60 * 1000;
+const CINEMETA_SUCCESS_TTL_MS = 24 * 60 * 60 * 1000;
 const CINEMETA_MISS_TTL_MS = 60 * 60 * 1000;
+const CACHE_SCHEMA = "v2";
 
 type CinemetaMetadata = {
   title?: string;
@@ -14,8 +16,8 @@ type CinemetaMetadata = {
 };
 
 type CinemetaMetadataCacheEntry = {
-  expiresAt: number;
   metadata: CinemetaMetadata;
+  successful: boolean;
 };
 
 const normalizeHttpsUrl = (value: unknown): string | undefined => {
@@ -54,39 +56,47 @@ export async function resolveAnimeUnityCinemetaMetadata({
   if (!imdbId || !/^tt\d+$/.test(imdbId)) return {};
 
   const type = isMovie ? "movie" : "series";
-  const cacheKey = `animeunity:cinemeta:${type}:${imdbId}`;
-  const cache = getProviderRuntimeCache(providerContext);
-  const cached = cache.get(cacheKey) as CinemetaMetadataCacheEntry | undefined;
-  if (cached && cached.expiresAt > Date.now()) {
+  const cacheKey = `animeunity:cinemeta:${CACHE_SCHEMA}:${type}:${imdbId}`;
+  const cached = readExternalCache<CinemetaMetadataCacheEntry>(
+    providerContext,
+    cacheKey
+  );
+  const softTtl = cached?.value.successful
+    ? CINEMETA_SUCCESS_TTL_MS
+    : CINEMETA_MISS_TTL_MS;
+  if (cached && cached.ageMs <= softTtl) {
     return {
-      cinemetaTitle: cached.metadata.title,
-      logo: cached.metadata.logo,
-      poster: cached.metadata.poster,
-      background: cached.metadata.background,
+      cinemetaTitle: cached.value.metadata.title,
+      logo: cached.value.metadata.logo,
+      poster: cached.value.metadata.poster,
+      background: cached.value.metadata.background,
     };
   }
 
-  let metadata: CinemetaMetadata = {};
-  try {
-    const response = await providerContext.axios.get(
-      `${CINEMETA_BASE_URL}/${type}/${imdbId}.json`,
-      {
+  const runtimeCache = getProviderRuntimeCache(providerContext);
+  const pendingKey = `${cacheKey}:pending`;
+  const existing = runtimeCache.get(pendingKey) as
+    | Promise<CinemetaMetadata>
+    | undefined;
+  const request =
+    existing ||
+    providerContext.axios
+      .get(`${CINEMETA_BASE_URL}/${type}/${imdbId}.json`, {
         timeout: CINEMETA_TIMEOUT_MS,
         headers: { Accept: "application/json" },
-      }
-    );
-    metadata = parseCinemetaMetadata(response?.data);
-  } catch (_) {
-    metadata = {};
-  }
-
-  const successful = Object.values(metadata).some(Boolean);
-  cache.set(cacheKey, {
-    expiresAt:
-      Date.now() +
-      (successful ? CINEMETA_SUCCESS_TTL_MS : CINEMETA_MISS_TTL_MS),
-    metadata,
-  } as CinemetaMetadataCacheEntry);
+      })
+      .then((response) => {
+        const metadata = parseCinemetaMetadata(response?.data);
+        writeExternalCache(providerContext, cacheKey, {
+          metadata,
+          successful: Object.values(metadata).some(Boolean),
+        } as CinemetaMetadataCacheEntry);
+        return metadata;
+      })
+      .catch(() => cached?.value.metadata || {})
+      .finally(() => runtimeCache.delete(pendingKey));
+  if (!existing) runtimeCache.set(pendingKey, request);
+  const metadata = await request;
 
   return {
     cinemetaTitle: metadata.title,

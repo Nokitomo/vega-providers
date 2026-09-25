@@ -302,10 +302,7 @@ export function buildMetaFromInfo(
     info?.imageurl || info?.cover || htmlAnime?.imageurl || htmlAnime?.cover
   );
   const background = normalizeImageUrl(
-    info?.imageurl_cover ||
-      info?.cover ||
-      htmlAnime?.imageurl_cover ||
-      htmlAnime?.cover
+    info?.imageurl_cover || htmlAnime?.imageurl_cover
   );
 
   const type = info?.type ?? htmlAnime?.type;

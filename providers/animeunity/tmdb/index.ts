@@ -4,6 +4,7 @@ export {
   resolveTmdbSeasonMetadata,
 } from "./client";
 export { resolveTmdbArtworkMetadata } from "./artworkResolver";
+export { resolveTmdbSeasonPoster } from "./seasonArtworkResolver";
 export { resolveTmdbEpisodeSeasonMetadata } from "./episodeResolver";
 export { parseTmdbDetailsPage } from "./details";
 export { parseTmdbExpandedEpisode } from "./episodeDetails";
@@ -35,6 +36,7 @@ export {
 export {
   resolveAnimeTmdbMetadata,
   selectPrimaryTmdbId,
+  selectPrimaryTmdbTarget,
 } from "./resolver";
 export type {
   TmdbArtworkField,

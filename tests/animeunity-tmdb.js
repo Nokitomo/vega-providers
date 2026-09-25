@@ -23,6 +23,8 @@ const {
   resolveTmdbArtworkMetadata,
   resolveTmdbMediaMetadata,
   resolveTmdbSeasonMetadata,
+  resolveAnimeTmdbMetadata,
+  selectPrimaryTmdbTarget,
 } = require("../dist/animeunity/tmdb/index.js");
 
 const imageUrl = (name) => `https://image.tmdb.org/t/p/original/${name}`;
@@ -192,8 +194,31 @@ assert.deepStrictEqual(
   {
     logo: "https://tmdb.test/logo.png",
     poster: "https://tmdb.test/poster.jpg",
-    background: "https://tmdb.test/background.jpg",
+    background: "https://provider.test/background.jpg",
   }
+);
+assert.deepStrictEqual(
+  selectTmdbPreferredArtwork({
+    tmdb: {
+      poster: "https://tmdb.test/poster.jpg",
+      background: "https://tmdb.test/background.jpg",
+    },
+    cinemeta: {
+      logo: "https://cinemeta.test/logo.png",
+      background: "https://cinemeta.test/background.jpg",
+    },
+    aniZip: {
+      logo: "https://anizip.test/logo.png",
+      background: "https://anizip.test/fanart.jpg",
+    },
+    provider: { logo: "https://provider.test/logo.png" },
+  }),
+  {
+    logo: "https://cinemeta.test/logo.png",
+    poster: "https://tmdb.test/poster.jpg",
+    background: "https://tmdb.test/background.jpg",
+  },
+  "Cinemeta must precede AniZip/provider logos while TMDB backgrounds precede Cinemeta"
 );
 assert.deepStrictEqual(
   selectTmdbPreferredArtwork({
@@ -238,6 +263,72 @@ const sortedImages = mergeTmdbImages(
   ["it-IT", "en-US"]
 );
 assert.strictEqual(sortedImages[0].language, "it");
+assert.deepStrictEqual(
+  mergeTmdbImages(
+    [
+      [
+        {
+          type: "logo",
+          url: imageUrl("popular-small.png"),
+          language: "en",
+          width: 500,
+          height: 200,
+        },
+        {
+          type: "logo",
+          url: imageUrl("less-popular-large.png"),
+          language: "en",
+          width: 4000,
+          height: 2000,
+          primary: true,
+        },
+      ],
+    ],
+    ["en-US"]
+  ).map((image) => image.url),
+  [imageUrl("popular-small.png"), imageUrl("less-popular-large.png")],
+  "TMDB gallery popularity order must win over resolution and primary flags"
+);
+
+const scopedResolution = {
+  targets: [
+    {
+      provider: "tmdb_show",
+      id: "46260",
+      scope: "s2",
+      raw: "tmdb_show:46260:s2",
+      ranges: { "1-52": "1-52" },
+    },
+  ],
+  ids: {
+    anidbIds: [], anilistIds: [], imdbMovieIds: [], imdbShowIds: [], malIds: [],
+    tmdbMovieIds: [], tmdbShowIds: [46260], tvdbMovieIds: [], tvdbShowIds: [],
+  },
+  sourceDescriptors: [],
+};
+assert.deepStrictEqual(selectPrimaryTmdbTarget(scopedResolution, false), {
+  id: 46260,
+  type: "tv",
+  seasonNumber: 2,
+});
+assert.strictEqual(
+  selectPrimaryTmdbTarget(
+    {
+      ...scopedResolution,
+      targets: [
+        ...scopedResolution.targets,
+        {
+          ...scopedResolution.targets[0],
+          scope: "s1",
+          raw: "tmdb_show:46260:s1",
+        },
+      ],
+    },
+    false
+  ).seasonNumber,
+  undefined,
+  "ambiguous season scopes must fall back to general TMDB artwork"
+);
 
 const parsedSeasons = parseTmdbSeasonsPage(
   seasonsFixture("it-IT"),
@@ -473,6 +564,54 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
     targetedCalls.some((url) => url.includes("season/2/images/posters")),
     false,
     "episode lookup must not request seasonal poster galleries"
+  );
+
+  const seasonArtworkCalls = [];
+  const seasonArtworkContext = {
+    cheerio,
+    cache: {
+      getString: (key) => persistent.get(`season:${key}`),
+      setString: (key, value) => persistent.set(`season:${key}`, value),
+      delete: (key) => persistent.delete(`season:${key}`),
+    },
+    axios: {
+      get: async (url) => {
+        seasonArtworkCalls.push(url);
+        const parsed = new URL(url);
+        const locale = parsed.searchParams.get("language") || "it-IT";
+        if (parsed.pathname === "/tv/46260") {
+          return {
+            data: detailsFixture({
+              locale,
+              title: "Naruto",
+              overview: "",
+              tagline: "",
+            }),
+          };
+        }
+        if (parsed.pathname === "/tv/46260/season/2/images/posters") {
+          return { data: galleryFixture("season-2-poster", locale) };
+        }
+        throw new Error(`Unexpected season artwork URL: ${url}`);
+      },
+    },
+  };
+  const seasonalArtwork = await resolveAnimeTmdbMetadata({
+    providerContext: seasonArtworkContext,
+    mappingResolution: scopedResolution,
+    isMovie: false,
+    fields: ["poster"],
+    imageSize: "w300",
+  });
+  assert.strictEqual(
+    seasonalArtwork.poster,
+    "https://image.tmdb.org/t/p/w300/season-2-poster-it-it.png"
+  );
+  assert.strictEqual(seasonalArtwork.seasonNumber, 2);
+  assert.strictEqual(
+    seasonArtworkCalls.some((url) => url.includes("/tv/46260/images/posters")),
+    false,
+    "a seasonal poster must avoid the general poster gallery"
   );
 
   console.log("animeunity tmdb: OK");

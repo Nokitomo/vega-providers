@@ -96,14 +96,23 @@ The app can localize provider-provided labels when you include optional i18n fie
 
 AnimeUnity resolves AniBridge TMDB IDs through the reusable modules in
 `providers/animeunity/tmdb/`. The scraper uses public TMDB pages and does not
-embed an API token. Text and artwork follow the same preference order:
-Italian, English, original language, then TMDB's no-language (`xx`) assets.
+embed an API token. TMDB artwork follows Italian, English, original language,
+then TMDB's no-language (`xx`) assets. Inside the selected language the scraper
+preserves TMDB's gallery popularity order without re-ranking by resolution.
 
 The normal AnimeUnity flow only projects the TMDB fields consumed by Vega:
 title logo, poster, backdrop, and localized episode title, synopsis, and
-thumbnail. TMDB is the first choice for those fields and the existing provider
-and external sources remain fallbacks. The large raw TMDB object is not added
-to `Info.extra` or `EpisodeLink`.
+thumbnail. Posters use an unambiguous AniBridge season scope when available,
+then fall back to general TMDB artwork. Episode fields are resolved independently:
+TMDB is primary and AniZip supplies only missing titles (`it`, then `en`),
+English `overview` text, and TheTVDB thumbnails. AniZip `summary` is ignored.
+The large raw TMDB/AniZip objects are not added to `Info.extra` or `EpisodeLink`.
+
+Artwork fallback requests are conditional. Logos use TMDB, Cinemeta, AniZip,
+then the provider. Backgrounds are composed with the app as provider, AniList
+banner, TMDB, Cinemeta, AniZip Fanart, then AniZip Banner. External metadata
+uses persistent cache entries with bounded refresh windows, and AniZip episode
+data is refreshed early when the provider episode count changes.
 
 The reusable resolver still supports complete title metadata on demand by
 calling `resolveTmdbMediaMetadata` with `includeExtended: true`. Season artwork
