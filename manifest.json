@@ -242,7 +242,7 @@
   {
     "display_name": "AnimeUnity",
     "value": "animeunity",
-    "version": "1.3.10",
+    "version": "1.3.11",
     "icon": "",
     "type": "italy",
     "disabled": false
@@ -354,7 +354,7 @@
   {
     "display_name": "StreamCenter",
     "value": "streamcenter",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "icon": "",
     "type": "italy",
     "disabled": false
