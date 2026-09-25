@@ -5,6 +5,14 @@ function normalizeHttpsUrl(value: unknown): string | undefined {
   return /^https:\/\//i.test(text) && text.length <= 2048 ? text : undefined;
 }
 
+function isTvdbIconUrl(value?: string): boolean {
+  try {
+    return /(?:^|\/)icons(?:\/|$)/i.test(new URL(value || "").pathname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeText(value: unknown): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   return text || undefined;
@@ -33,9 +41,9 @@ export function parseAniZipArtwork(payload: any): AniZipArtwork {
 
   return {
     logo:
-      findImage("Clearlogo") ||
-      findImage("Clear Logo") ||
-      findImage("Logo"),
+      [findImage("Clearlogo"), findImage("Clear Logo"), findImage("Logo")].find(
+        (url) => !!url && !isTvdbIconUrl(url)
+      ),
     poster: findImage("Poster"),
     fanart: findImage("Fanart"),
     banner: findImage("Banner"),

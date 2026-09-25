@@ -8,7 +8,7 @@ const ANIZIP_URL = "https://api.ani.zip/mappings";
 const REQUEST_TIMEOUT_MS = 5000;
 const SUCCESS_SOFT_TTL_MS = 24 * 60 * 60 * 1000;
 const MISS_SOFT_TTL_MS = 60 * 60 * 1000;
-const CACHE_SCHEMA = "v1";
+const CACHE_SCHEMA = "v2";
 
 type AniZipCacheValue = {
   metadata: AniZipMetadata;

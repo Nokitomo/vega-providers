@@ -36,12 +36,32 @@ const parsed = parseAniZipMetadata(aniZipPayload);
 assert.strictEqual(parsed.imdbId, "tt1234567");
 assert.strictEqual(parsed.artwork.fanart, "https://img.test/fanart.jpg");
 assert.strictEqual(parsed.artwork.banner, "https://img.test/banner.jpg");
+assert.strictEqual(parsed.artwork.logo, "https://img.test/logo.png");
 assert.strictEqual(parsed.episodes[0].titleIt, "Titolo italiano");
 assert.strictEqual(parsed.episodes[0].overview, "English overview");
 assert.strictEqual(
   Object.prototype.hasOwnProperty.call(parsed.episodes[0], "summary"),
   false,
   "AniZip summary must never enter normalized metadata"
+);
+
+const iconOnlyPayload = {
+  images: [
+    {
+      coverType: "Clearlogo",
+      url: "https://artworks.thetvdb.com/banners/v4/series/463051/icons/680e1e4070eb5.png",
+    },
+    {
+      coverType: "Poster",
+      url: "https://artworks.thetvdb.com/banners/v4/series/463051/posters/680e1e60858db.jpg",
+    },
+  ],
+};
+const iconOnly = parseAniZipMetadata(iconOnlyPayload);
+assert.strictEqual(
+  iconOnly.artwork.logo,
+  undefined,
+  "TVDB icon artwork must not be treated as a clear logo"
 );
 
 const createCache = () => {
