@@ -121,17 +121,19 @@ export function parseTmdbSeasonEpisodesPage(
           card.find(".episode_number").text()
       );
       if (episodeNumber == null) return null;
-      const thumbnail = normalizeTmdbImageUrl(card.find("img.backdrop").attr("src"));
+      const rawThumbnail = card.find("img.backdrop").attr("src");
+      const thumbnail = normalizeTmdbImageUrl(rawThumbnail, "w300");
+      const originalStill = normalizeTmdbImageUrl(rawThumbnail);
       const runtimeMinutes = parseIntValue(card.find("span.runtime").text());
       const ratingPercent = parseIntValue(card.find(".rating").first().text());
       const internalId =
         String(episodeLink.attr("data-episode-id") || card.attr("data-object-id") || "")
           .trim() || undefined;
-      const stills: TmdbImageMetadata[] = thumbnail
+      const stills: TmdbImageMetadata[] = originalStill
         ? [
             {
               type: "still",
-              url: thumbnail,
+              url: originalStill,
               previewUrl: thumbnail,
               language: "xx",
             },

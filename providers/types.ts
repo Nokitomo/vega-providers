@@ -117,6 +117,11 @@ export interface Info {
       dub?: number | boolean;
       alwaysHome?: boolean;
     };
+    artworkSources?: {
+      logo?: "tmdb" | "provider" | "anizip";
+      poster?: "tmdb" | "provider" | "anizip";
+      background?: "tmdb" | "provider" | "anizip";
+    };
     meta?: {
       day?: string;
       season?: string;
@@ -423,6 +428,11 @@ export type ProviderContext = {
   getBaseUrl: (providerValue: string) => Promise<string>;
   commonHeaders: Record<string, string>;
   cheerio: typeof cheerio;
+  cache?: {
+    getString: (key: string) => string | undefined;
+    setString: (key: string, value: string) => void;
+    delete?: (key: string) => void;
+  };
   extractors: {
     hubcloudExtracter: (link: string, signal: AbortSignal) => Promise<Stream[]>;
     gofileExtracter: (id: string) => Promise<{

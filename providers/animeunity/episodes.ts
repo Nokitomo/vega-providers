@@ -8,7 +8,7 @@ import {
   resolveAniBridgeEpisodeMappings,
   resolveAnimeMappings,
 } from "./mappings";
-import { resolveTmdbSeasonMetadata } from "./tmdb";
+import { resolveTmdbEpisodeSeasonMetadata } from "./tmdb";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -118,7 +118,7 @@ export const getEpisodes = async function ({
 
     const tmdbSeasonTargets = new Map<
       string,
-      { mediaId: number; seasonNumber: number }
+      { mediaId: number; seasonNumber: number; episodeNumbers: Set<number> }
     >();
     episodes.forEach((episode) => {
       episode.externalMappings?.forEach((mapping) => {
@@ -131,19 +131,30 @@ export const getEpisodes = async function ({
         const mediaId = Number.parseInt(mapping.id, 10);
         if (!Number.isFinite(mediaId) || mediaId <= 0) return;
         const key = `${mediaId}:${mapping.seasonNumber}`;
-        tmdbSeasonTargets.set(key, {
+        const target = tmdbSeasonTargets.get(key) || {
           mediaId,
           seasonNumber: mapping.seasonNumber,
-        });
+          episodeNumbers: new Set<number>(),
+        };
+        mapping.episodeNumbers.forEach((number) =>
+          target.episodeNumbers.add(number)
+        );
+        tmdbSeasonTargets.set(key, target);
       });
     });
 
-    const tmdbSeasons = new Map<string, Awaited<ReturnType<typeof resolveTmdbSeasonMetadata>>>();
+    const tmdbSeasons = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveTmdbEpisodeSeasonMetadata>>
+    >();
     await Promise.all(
       Array.from(tmdbSeasonTargets.entries()).map(async ([key, target]) => {
-        const season = await resolveTmdbSeasonMetadata({
+        const season = await resolveTmdbEpisodeSeasonMetadata({
           providerContext,
-          ...target,
+          mediaId: target.mediaId,
+          seasonNumber: target.seasonNumber,
+          episodeNumbers: Array.from(target.episodeNumbers),
+          sourceRevision: String(totalCount),
         });
         tmdbSeasons.set(key, season);
       })

@@ -19,6 +19,8 @@ const {
   resolveOriginalLocale,
   selectTmdbPreferredArtwork,
   resolveTmdbEpisodeExtendedMetadata,
+  resolveTmdbEpisodeSeasonMetadata,
+  resolveTmdbArtworkMetadata,
   resolveTmdbMediaMetadata,
   resolveTmdbSeasonMetadata,
 } = require("../dist/animeunity/tmdb/index.js");
@@ -161,6 +163,13 @@ assert.deepStrictEqual(
 assert.strictEqual(
   normalizeTmdbImageUrl("https://media.themoviedb.org/t/p/w500/test.jpg"),
   imageUrl("test.jpg")
+);
+assert.strictEqual(
+  normalizeTmdbImageUrl(
+    "https://media.themoviedb.org/t/p/original/test.jpg",
+    "w300"
+  ),
+  "https://image.tmdb.org/t/p/w300/test.jpg"
 );
 assert.strictEqual(normalizeTmdbImageUrl("javascript:alert(1)"), undefined);
 
@@ -384,6 +393,76 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   });
   assert.strictEqual(episode.directors[0].name, "Director One");
   assert.strictEqual(episode.stills.length, 2);
+
+  const targetedCalls = [];
+  const persistent = new Map();
+  const targetedContext = {
+    cheerio,
+    cache: {
+      getString: (key) => persistent.get(key),
+      setString: (key, value) => persistent.set(key, value),
+      delete: (key) => persistent.delete(key),
+    },
+    axios: {
+      get: async (url) => {
+        targetedCalls.push(url);
+        const parsed = new URL(url);
+        const locale = parsed.searchParams.get("language") || "it-IT";
+        const route = parsed.pathname;
+        if (/\/season\/2$/.test(route)) return { data: episodeFixture(locale) };
+        const imageType = route.match(/\/images\/(logos|posters|backdrops)$/)?.[1];
+        if (imageType) return { data: galleryFixture(imageType, locale) };
+        if (route === "/tv/46260") {
+          return {
+            data: detailsFixture({
+              locale,
+              title: "Naruto",
+              overview: "Un giovane ninja.",
+              tagline: "",
+            }),
+          };
+        }
+        throw new Error(`Unexpected targeted TMDB URL: ${url}`);
+      },
+    },
+  };
+
+  const artwork = await resolveTmdbArtworkMetadata({
+    providerContext: targetedContext,
+    id: 46260,
+    type: "tv",
+  });
+  assert.strictEqual(artwork.logo, imageUrl("logos-it-it.png"));
+  assert.strictEqual(
+    targetedCalls.some((url) => url.includes("language=en-US")),
+    false,
+    "artwork lookup must stop after all Italian fields are resolved"
+  );
+  const callsAfterArtwork = targetedCalls.length;
+  await resolveTmdbArtworkMetadata({
+    providerContext: targetedContext,
+    id: 46260,
+    type: "tv",
+  });
+  assert.strictEqual(targetedCalls.length, callsAfterArtwork);
+
+  const targetedSeason = await resolveTmdbEpisodeSeasonMetadata({
+    providerContext: targetedContext,
+    mediaId: 46260,
+    seasonNumber: 2,
+    episodeNumbers: [1],
+    sourceRevision: "220",
+  });
+  assert.strictEqual(targetedSeason.episodes[0].title.language, "it-IT");
+  assert.strictEqual(
+    targetedSeason.episodes[0].thumbnail,
+    "https://image.tmdb.org/t/p/w300/episode-53.jpg"
+  );
+  assert.strictEqual(
+    targetedCalls.some((url) => url.includes("season/2/images/posters")),
+    false,
+    "episode lookup must not request seasonal poster galleries"
+  );
 
   console.log("animeunity tmdb: OK");
 })().catch((error) => {

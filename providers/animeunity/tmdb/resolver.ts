@@ -1,7 +1,11 @@
 import { ProviderContext } from "../../types";
 import { AnimeMappingResolution } from "../mappings";
-import { resolveTmdbMediaMetadata } from "./client";
-import { TmdbMediaMetadata, TmdbMediaType } from "./types";
+import { resolveTmdbArtworkMetadata } from "./artworkResolver";
+import {
+  TmdbArtworkField,
+  TmdbArtworkMetadata,
+  TmdbMediaType,
+} from "./types";
 
 function selectPrimaryShowId(
   resolution: AnimeMappingResolution
@@ -35,13 +39,15 @@ export async function resolveAnimeTmdbMetadata({
   providerContext,
   mappingResolution,
   isMovie,
+  fields,
 }: {
   providerContext: ProviderContext;
   mappingResolution: AnimeMappingResolution;
   isMovie: boolean;
-}): Promise<TmdbMediaMetadata | null> {
+  fields?: TmdbArtworkField[];
+}): Promise<TmdbArtworkMetadata | null> {
   const target = selectPrimaryTmdbId(mappingResolution, isMovie);
   return target
-    ? resolveTmdbMediaMetadata({ providerContext, ...target })
+    ? resolveTmdbArtworkMetadata({ providerContext, ...target, fields })
     : null;
 }

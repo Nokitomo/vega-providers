@@ -3,6 +3,8 @@ export {
   resolveTmdbMediaMetadata,
   resolveTmdbSeasonMetadata,
 } from "./client";
+export { resolveTmdbArtworkMetadata } from "./artworkResolver";
+export { resolveTmdbEpisodeSeasonMetadata } from "./episodeResolver";
 export { parseTmdbDetailsPage } from "./details";
 export { parseTmdbExpandedEpisode } from "./episodeDetails";
 export {
@@ -35,6 +37,8 @@ export {
   selectPrimaryTmdbId,
 } from "./resolver";
 export type {
+  TmdbArtworkField,
+  TmdbArtworkMetadata,
   TmdbEpisodeMetadata,
   TmdbEpisodeGroupMetadata,
   TmdbImageMetadata,

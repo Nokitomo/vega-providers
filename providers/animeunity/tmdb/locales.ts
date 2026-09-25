@@ -2,18 +2,30 @@ import { TmdbLocalizedText } from "./types";
 
 const ORIGINAL_LANGUAGE_LOCALES: Record<string, string> = {
   arabic: "ar-SA",
+  arabo: "ar-SA",
   chinese: "zh-CN",
+  cinese: "zh-CN",
   english: "en-US",
+  inglese: "en-US",
   french: "fr-FR",
+  francese: "fr-FR",
   german: "de-DE",
+  tedesco: "de-DE",
   hindi: "hi-IN",
   italian: "it-IT",
+  italiano: "it-IT",
   japanese: "ja-JP",
+  giapponese: "ja-JP",
   korean: "ko-KR",
+  coreano: "ko-KR",
   portuguese: "pt-BR",
+  portoghese: "pt-BR",
   russian: "ru-RU",
+  russo: "ru-RU",
   spanish: "es-ES",
+  spagnolo: "es-ES",
   thai: "th-TH",
+  thailandese: "th-TH",
 };
 
 export const TMDB_PRIMARY_LOCALE = "it-IT";

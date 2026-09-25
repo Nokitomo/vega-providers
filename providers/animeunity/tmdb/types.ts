@@ -13,6 +13,19 @@ import {
 
 export type TmdbMediaType = "movie" | "tv";
 
+export type TmdbArtworkField = "logo" | "poster" | "background";
+
+export type TmdbArtworkMetadata = {
+  id: number;
+  type: TmdbMediaType;
+  source: "tmdb-web";
+  sourceUrl: string;
+  originalLanguage?: string;
+  logo?: string;
+  poster?: string;
+  background?: string;
+};
+
 export type TmdbPageMetadata = {
   locale: string;
   title?: string;

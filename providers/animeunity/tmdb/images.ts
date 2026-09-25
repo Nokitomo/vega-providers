@@ -2,7 +2,10 @@ import { TmdbImageMetadata } from "./types";
 
 const TMDB_IMAGE_PATH_PATTERN = /\/([A-Za-z0-9_-]+\.(?:avif|jpe?g|png|svg|webp))(?:\?.*)?$/i;
 
-export function normalizeTmdbImageUrl(value: unknown): string | undefined {
+export function normalizeTmdbImageUrl(
+  value: unknown,
+  size: "original" | "w300" | "w780" = "original"
+): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   if (
     !/^https:\/\/(?:image\.tmdb\.org|media\.themoviedb\.org)\//i.test(text)
@@ -11,7 +14,7 @@ export function normalizeTmdbImageUrl(value: unknown): string | undefined {
   }
   const match = text.match(TMDB_IMAGE_PATH_PATTERN);
   return match?.[1]
-    ? `https://image.tmdb.org/t/p/original/${match[1]}`
+    ? `https://image.tmdb.org/t/p/${size}/${match[1]}`
     : undefined;
 }
 
