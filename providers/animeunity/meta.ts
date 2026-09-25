@@ -55,9 +55,11 @@ async function resolveRelatedImages(
 
 export const getMeta = async function ({
   link,
+  purpose = "full",
   providerContext,
 }: {
   link: string;
+  purpose?: "full" | "hero";
   providerContext: ProviderContext;
 }): Promise<Info> {
   try {
@@ -76,14 +78,16 @@ export const getMeta = async function ({
     });
     const info = infoRes.data || {};
     let animeFromHtml: any = null;
-    try {
-      const htmlRes = await axios.get(
-        `${baseHost}/anime/${animeId}-${info?.slug || ""}`,
-        { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
-      );
-      animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
-    } catch (_) {
-      // ignore html fallback errors
+    if (purpose !== "hero") {
+      try {
+        const htmlRes = await axios.get(
+          `${baseHost}/anime/${animeId}-${info?.slug || ""}`,
+          { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
+        );
+        animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
+      } catch (_) {
+        // ignore html fallback errors
+      }
     }
     const metaPayload = buildMetaFromInfo(
       info,
@@ -92,21 +96,24 @@ export const getMeta = async function ({
       animeFromHtml
     );
     const providerIds = metaPayload.extra?.ids || {};
+    const mappingPromise = resolveAnimeMappings({
+      providerContext,
+      anilistId: providerIds.anilistId,
+      malId: providerIds.malId,
+      isMovie: metaPayload.isMovie,
+    });
     const [related, mappingResolution, trailer] =
-      await Promise.all([
-        resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
-        resolveAnimeMappings({
-          providerContext,
-          anilistId: providerIds.anilistId,
-          malId: providerIds.malId,
-          isMovie: metaPayload.isMovie,
-        }),
-        resolveAnimeUnityTrailer({
-          axios,
-          anilistId: providerIds.anilistId,
-          malId: providerIds.malId,
-        }),
-      ]);
+      purpose === "hero"
+        ? [[], await mappingPromise, undefined]
+        : await Promise.all([
+            resolveRelatedImages(metaPayload.relatedBase, axios, baseHost),
+            mappingPromise,
+            resolveAnimeUnityTrailer({
+              axios,
+              anilistId: providerIds.anilistId,
+              malId: providerIds.malId,
+            }),
+          ]);
     const tmdbMetadata = await resolveAnimeTmdbMetadata({
       providerContext,
       mappingResolution,
@@ -201,44 +208,66 @@ export const getMeta = async function ({
 export const getArtwork = async function ({
   link,
   fields = ["poster"],
+  hints,
+  imageSize = "original",
   providerContext,
 }: {
   link: string;
   fields?: Array<"logo" | "poster" | "background">;
+  hints?: { anilistId?: number; malId?: number; isMovie?: boolean };
+  imageSize?: "original" | "w300" | "w780";
   providerContext: ProviderContext;
-}): Promise<{ logo?: string; poster?: string; background?: string }> {
+}): Promise<{
+  logo?: string;
+  poster?: string;
+  background?: string;
+  resolved?: boolean;
+}> {
   try {
     const { axios } = providerContext;
-    const resolved =
-      (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
-    const baseHost = normalizeBaseUrl(resolved);
     const animeId = extractAnimeId(link);
-    if (!animeId) return {};
-    const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
-      headers: DEFAULT_HEADERS,
-      timeout: TIMEOUTS.LONG,
-    });
-    const info = infoRes.data || {};
-    const payload = buildMetaFromInfo(info, baseHost, animeId, null);
+    if (!animeId) return { resolved: false };
+    const hintedAnilistId = Number(hints?.anilistId) || undefined;
+    const hintedMalId = Number(hints?.malId) || undefined;
+    let info: any = null;
+    let inferredIsMovie = hints?.isMovie;
+    if (!hintedAnilistId && !hintedMalId) {
+      const resolved =
+        (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST;
+      const baseHost = normalizeBaseUrl(resolved);
+      const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
+        headers: DEFAULT_HEADERS,
+        timeout: TIMEOUTS.LONG,
+      });
+      info = infoRes.data || {};
+      inferredIsMovie = buildMetaFromInfo(info, baseHost, animeId, null).isMovie;
+    }
     const mappingResolution = await resolveAnimeMappings({
       providerContext,
-      anilistId: Number(info?.anilist_id) || undefined,
-      malId: Number(info?.mal_id) || undefined,
-      isMovie: payload.isMovie,
+      anilistId: hintedAnilistId || Number(info?.anilist_id) || undefined,
+      malId: hintedMalId || Number(info?.mal_id) || undefined,
+      isMovie: inferredIsMovie === true,
       includeLegacyImdb: false,
     });
+    const isMovie =
+      typeof inferredIsMovie === "boolean"
+        ? inferredIsMovie
+        : mappingResolution.ids.tmdbShowIds.length === 0 &&
+          mappingResolution.ids.tmdbMovieIds.length > 0;
     const tmdb = await resolveAnimeTmdbMetadata({
       providerContext,
       mappingResolution,
-      isMovie: payload.isMovie,
+      isMovie,
       fields,
+      imageSize,
     });
     return {
       logo: tmdb?.logo,
       poster: tmdb?.poster,
       background: tmdb?.background,
+      resolved: true,
     };
   } catch (_) {
-    return {};
+    return { resolved: false };
   }
 };

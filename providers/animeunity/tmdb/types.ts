@@ -14,6 +14,7 @@ import {
 export type TmdbMediaType = "movie" | "tv";
 
 export type TmdbArtworkField = "logo" | "poster" | "background";
+export type TmdbImageSize = "original" | "w300" | "w780";
 
 export type TmdbArtworkMetadata = {
   id: number;

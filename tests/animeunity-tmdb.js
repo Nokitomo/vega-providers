@@ -433,6 +433,17 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
     type: "tv",
   });
   assert.strictEqual(artwork.logo, imageUrl("logos-it-it.png"));
+  const compactPoster = await resolveTmdbArtworkMetadata({
+    providerContext: targetedContext,
+    id: 46260,
+    type: "tv",
+    fields: ["poster"],
+    imageSize: "w300",
+  });
+  assert.strictEqual(
+    compactPoster.poster,
+    "https://image.tmdb.org/t/p/w300/posters-it-it.png"
+  );
   assert.strictEqual(
     targetedCalls.some((url) => url.includes("language=en-US")),
     false,

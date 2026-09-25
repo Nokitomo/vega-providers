@@ -4,6 +4,7 @@ import { resolveTmdbArtworkMetadata } from "./artworkResolver";
 import {
   TmdbArtworkField,
   TmdbArtworkMetadata,
+  TmdbImageSize,
   TmdbMediaType,
 } from "./types";
 
@@ -40,14 +41,16 @@ export async function resolveAnimeTmdbMetadata({
   mappingResolution,
   isMovie,
   fields,
+  imageSize,
 }: {
   providerContext: ProviderContext;
   mappingResolution: AnimeMappingResolution;
   isMovie: boolean;
   fields?: TmdbArtworkField[];
+  imageSize?: TmdbImageSize;
 }): Promise<TmdbArtworkMetadata | null> {
   const target = selectPrimaryTmdbId(mappingResolution, isMovie);
   return target
-    ? resolveTmdbArtworkMetadata({ providerContext, ...target, fields })
+    ? resolveTmdbArtworkMetadata({ providerContext, ...target, fields, imageSize })
     : null;
 }

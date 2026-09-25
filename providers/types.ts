@@ -24,6 +24,11 @@ export interface Post {
   dubStatus?: "subbed" | "dubbed" | "both";
   dubStatusKey?: "Subbed" | "Dubbed" | "Subbed and dubbed";
   variants?: PostVariant[];
+  artworkHints?: {
+    anilistId?: number;
+    malId?: number;
+    isMovie?: boolean;
+  };
 }
 
 export interface PostVariant {

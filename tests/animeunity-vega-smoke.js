@@ -45,6 +45,40 @@ async function run() {
 
   const firstPost = latestPosts[0];
   assert(firstPost.link, "first post link must exist");
+  assert(
+    firstPost.artworkHints?.anilistId || firstPost.artworkHints?.malId,
+    "latest posts should expose artwork mapping hints"
+  );
+
+  const artworkCalls = [];
+  const artworkContext = {
+    ...providerContext,
+    axios: {
+      get: async (...args) => {
+        artworkCalls.push(String(args[0] || ""));
+        return axios.get(...args);
+      },
+    },
+  };
+  const artwork = await metaModule.getArtwork({
+    link: firstPost.link,
+    hints: firstPost.artworkHints,
+    fields: ["poster"],
+    imageSize: "w300",
+    providerContext: artworkContext,
+  });
+  assert.strictEqual(artwork.resolved, true, "artwork lookup should complete");
+  assert.strictEqual(
+    artworkCalls.some((url) => url.includes("/info_api/")),
+    false,
+    "artwork hints should avoid the per-card AnimeUnity info request"
+  );
+  if (artwork.poster) {
+    assert(
+      artwork.poster.includes("/t/p/w300/"),
+      "home artwork should use the compact TMDB poster"
+    );
+  }
 
   const meta = await metaModule.getMeta({
     link: firstPost.link,

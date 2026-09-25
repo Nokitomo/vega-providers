@@ -58,6 +58,23 @@ function pickRating(anime: any): string | undefined {
   return normalized;
 }
 
+function toPositiveNumber(value: unknown): number | undefined {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function buildArtworkHints(anime: any): Post["artworkHints"] {
+  const anilistId = toPositiveNumber(anime?.anilist_id ?? anime?.anilistId);
+  const malId = toPositiveNumber(anime?.mal_id ?? anime?.malId);
+  const rawType = typeof anime?.type === "string" ? anime.type.trim() : "";
+  if (!anilistId && !malId) return undefined;
+  return {
+    anilistId,
+    malId,
+    isMovie: rawType ? rawType.toLowerCase().includes("movie") : undefined,
+  };
+}
+
 export function toPost(
   anime: any,
   baseHost: string,
@@ -76,6 +93,7 @@ export function toPost(
     title,
     image,
     link,
+    artworkHints: buildArtworkHints(anime),
     rating: pickRating(anime),
     dubStatus: dubbed ? "dubbed" : "subbed",
     dubStatusKey: dubbed ? "Dubbed" : "Subbed",

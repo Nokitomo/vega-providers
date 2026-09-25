@@ -34,6 +34,21 @@ assert.strictEqual(
   ).rating,
   "8.7"
 );
+assert.deepStrictEqual(
+  toPost(
+    {
+      id: 11,
+      slug: "mapped-movie",
+      title: "Mapped Movie",
+      imageurl: "https://img.test/mapped.jpg",
+      anilist_id: 123,
+      mal_id: 456,
+      type: "Movie",
+    },
+    "https://animeunity.test"
+  ).artworkHints,
+  {anilistId: 123, malId: 456, isMovie: true}
+);
 
 const posts = deduplicateAnimeVariantPosts([
   {

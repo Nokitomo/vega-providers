@@ -2,7 +2,11 @@ import { ProviderContext } from "../../types";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
 import { parseTmdbDetailsPage } from "./details";
 import { fetchTmdbHtml, TMDB_BASE_URL } from "./http";
-import { mergeTmdbImages, parseTmdbImageGallery } from "./images";
+import {
+  mergeTmdbImages,
+  normalizeTmdbImageUrl,
+  parseTmdbImageGallery,
+} from "./images";
 import {
   buildLocalePriority,
   languageCodeFromLocale,
@@ -16,6 +20,7 @@ import {
 import {
   TmdbArtworkField,
   TmdbArtworkMetadata,
+  TmdbImageSize,
   TmdbImageMetadata,
   TmdbMediaType,
 } from "./types";
@@ -52,7 +57,8 @@ function selectLocaleImage(
 
 function pickFields(
   metadata: TmdbArtworkMetadata,
-  fields: TmdbArtworkField[]
+  fields: TmdbArtworkField[],
+  imageSize: TmdbImageSize
 ): TmdbArtworkMetadata {
   return {
     id: metadata.id,
@@ -60,10 +66,14 @@ function pickFields(
     source: metadata.source,
     sourceUrl: metadata.sourceUrl,
     originalLanguage: metadata.originalLanguage,
-    logo: fields.includes("logo") ? metadata.logo : undefined,
-    poster: fields.includes("poster") ? metadata.poster : undefined,
+    logo: fields.includes("logo")
+      ? normalizeTmdbImageUrl(metadata.logo, imageSize)
+      : undefined,
+    poster: fields.includes("poster")
+      ? normalizeTmdbImageUrl(metadata.poster, imageSize)
+      : undefined,
     background: fields.includes("background")
-      ? metadata.background
+      ? normalizeTmdbImageUrl(metadata.background, imageSize)
       : undefined,
   };
 }
@@ -73,11 +83,13 @@ export async function resolveTmdbArtworkMetadata({
   id,
   type,
   fields = ["logo", "poster", "background"],
+  imageSize = "original",
 }: {
   providerContext: ProviderContext;
   id: number;
   type: TmdbMediaType;
   fields?: TmdbArtworkField[];
+  imageSize?: TmdbImageSize;
 }): Promise<TmdbArtworkMetadata | null> {
   if (!Number.isFinite(id) || id <= 0 || fields.length === 0) return null;
   const requestedFields = Array.from(new Set(fields));
@@ -92,7 +104,7 @@ export async function resolveTmdbArtworkMetadata({
     cached.ageMs <= ARTWORK_SOFT_TTL_MS &&
     requestedFields.every((field) => cachedResolved.has(field))
   ) {
-    return pickFields(cached.value.metadata, requestedFields);
+    return pickFields(cached.value.metadata, requestedFields, imageSize);
   }
 
   const runtimeCache = getProviderRuntimeCache(providerContext);
@@ -118,7 +130,7 @@ export async function resolveTmdbArtworkMetadata({
         )
       : null;
     if (!details && cached) {
-      return pickFields(cached.value.metadata, requestedFields);
+      return pickFields(cached.value.metadata, requestedFields, imageSize);
     }
     if (!details) return null;
 
@@ -181,10 +193,10 @@ export async function resolveTmdbArtworkMetadata({
       metadata,
       resolvedFields,
     } as ArtworkCacheValue);
-    return pickFields(metadata, requestedFields);
+    return pickFields(metadata, requestedFields, imageSize);
   })()
     .catch(() =>
-      cached ? pickFields(cached.value.metadata, requestedFields) : null
+      cached ? pickFields(cached.value.metadata, requestedFields, imageSize) : null
     )
     .finally(() => runtimeCache.delete(pendingKey));
 

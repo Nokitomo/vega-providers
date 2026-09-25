@@ -42,6 +42,7 @@ export type {
   TmdbEpisodeMetadata,
   TmdbEpisodeGroupMetadata,
   TmdbImageMetadata,
+  TmdbImageSize,
   TmdbLocalizedText,
   TmdbMediaMetadata,
   TmdbMediaType,

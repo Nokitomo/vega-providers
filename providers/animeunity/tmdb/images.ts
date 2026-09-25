@@ -1,10 +1,10 @@
-import { TmdbImageMetadata } from "./types";
+import { TmdbImageMetadata, TmdbImageSize } from "./types";
 
 const TMDB_IMAGE_PATH_PATTERN = /\/([A-Za-z0-9_-]+\.(?:avif|jpe?g|png|svg|webp))(?:\?.*)?$/i;
 
 export function normalizeTmdbImageUrl(
   value: unknown,
-  size: "original" | "w300" | "w780" = "original"
+  size: TmdbImageSize = "original"
 ): string | undefined {
   const text = typeof value === "string" ? value.trim() : "";
   if (
