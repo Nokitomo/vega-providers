@@ -25,6 +25,7 @@ import {
   AnimeVariantEntry,
   deduplicateAnimeVariantPosts,
 } from "./variants";
+import { pickDailyStablePage } from "../utils/stableRandom";
 
 const PAGE_SIZE = 30;
 
@@ -246,6 +247,19 @@ function buildArchiveFilters(params: QueryParams): ArchiveFilters {
     dubbed: parseBooleanParam(params.get("dubbed")),
     season: normalizeArchiveSeason(params.get("season")),
   };
+}
+
+function buildRandomArchiveScope(filters?: ArchiveFilters): string {
+  return JSON.stringify({
+    title: filters?.title || "",
+    type: filters?.type || "",
+    year: filters?.year || "",
+    order: filters?.order || "",
+    status: filters?.status || "",
+    genres: filters?.genres || [],
+    dubbed: filters?.dubbed ?? "",
+    season: filters?.season || "",
+  });
 }
 
 async function resolveBaseUrls(
@@ -613,7 +627,10 @@ async function fetchArchive({
 
   const total = response.total ?? response.records.length;
   const maxPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const randomPage = 1 + Math.floor(Math.random() * maxPage);
+  const randomPage = pickDailyStablePage(
+    maxPage,
+    `animeunity:archive:${buildRandomArchiveScope(filters)}`
+  );
   if (randomPage === 1 || maxPage === 1) {
     return parseArchiveRecords(response.records || [], baseHost);
   }

@@ -52,6 +52,10 @@ export function buildLocalePriority(originalLocale?: string): string[] {
   );
 }
 
+export function buildLogoLocalePriority(): string[] {
+  return [TMDB_PRIMARY_LOCALE, TMDB_ENGLISH_LOCALE, TMDB_NO_LANGUAGE_LOCALE];
+}
+
 export function languageCodeFromLocale(locale: string): string {
   if (locale === TMDB_NO_LANGUAGE_LOCALE) return "xx";
   return locale.split("-")[0]?.toLowerCase() || "xx";

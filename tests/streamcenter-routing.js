@@ -134,8 +134,15 @@ const streamingUpcoming = streamingCatalogModule.catalog.find(
 const streamCenterUpcoming = catalogModule.catalog.find((item) =>
   String(item.filter).includes("browse%2Fupcoming"),
 );
+const streamCenterRandom = catalogModule.catalog.find(
+  (item) => item.filter === "catalog/all?random=true",
+);
 assert.strictEqual(streamingUpcoming.staleTimeMs, 60 * 60 * 1000);
 assert.strictEqual(streamCenterUpcoming.staleTimeMs, 60 * 60 * 1000);
+assert(
+  streamCenterRandom.staleTimeMs > 0,
+  "StreamCenter random row must not refetch on every render",
+);
 assert(catalogModule.catalog.length >= 10, "catalog must expose curated rows");
 assert(catalogModule.genres.length > 20, "genres must include both providers");
 assert(catalogModule.archiveFilters.title, "unified archive filters must exist");

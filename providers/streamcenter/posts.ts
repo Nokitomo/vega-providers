@@ -9,6 +9,7 @@ import {
 } from "../streamingunity/posts";
 import { mergePosts, wrapPost } from "./content";
 import { decodeRoute } from "./routing";
+import { pickDailyStableValue } from "../utils/stableRandom";
 
 type PostsArgs = {
   filter: string;
@@ -41,7 +42,13 @@ const mapStreamingArchiveFilter = (filter: string): string => {
   if (order === "rating") target.set("sort", "score");
   if (order === "popularity") target.set("sort", "views");
   if (order === "a-z" || order === "z-a") target.set("sort", "name");
-  if (source.get("random")) target.set("random", source.get("random") || "true");
+  if (source.get("random") && !target.has("sort")) {
+    const dailySort = pickDailyStableValue(
+      ["score", "views", "name"],
+      `streamcenter:streamingunity:${rawQuery}`
+    );
+    if (dailySort) target.set("sort", dailySort);
+  }
   return `archive${target.toString() ? `?${target.toString()}` : ""}`;
 };
 

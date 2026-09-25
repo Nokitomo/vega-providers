@@ -23,6 +23,7 @@ export {
 } from "./images";
 export {
   buildLocalePriority,
+  buildLogoLocalePriority,
   pickLocalizedText,
   resolveOriginalLocale,
 } from "./locales";

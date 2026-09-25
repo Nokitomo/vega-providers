@@ -8,6 +8,7 @@ import {
   parseTmdbImageGallery,
 } from "./images";
 import {
+  buildLogoLocalePriority,
   buildLocalePriority,
   languageCodeFromLocale,
   resolveOriginalLocale,
@@ -148,12 +149,17 @@ export async function resolveTmdbArtworkMetadata({
       ...cached?.value.metadata,
     };
     const unresolved = new Set<TmdbArtworkField>(requestedFields);
+    const localePriorityByField = (field: TmdbArtworkField): string[] =>
+      field === "logo" ? buildLogoLocalePriority() : locales;
 
     for (const locale of locales) {
       if (unresolved.size === 0) break;
       const activeFields = Array.from(unresolved);
       const results = await Promise.all(
         activeFields.map(async (field) => {
+          if (!localePriorityByField(field).includes(locale)) {
+            return { field, url: undefined };
+          }
           const config = ROUTES[field];
           const html = await fetchTmdbHtml(
             providerContext,

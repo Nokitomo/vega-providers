@@ -13,6 +13,10 @@ assert(catalogByFilter.has("archive?order=rating"));
 assert(!catalogByFilter.has("top?order=rating"));
 assert(catalogByFilter.has("archive?random=true"));
 assert.strictEqual(catalogByFilter.get("archive?random=true").titleKey, "Random");
+assert(
+  catalogByFilter.get("archive?random=true").staleTimeMs > 0,
+  "Random catalog must not refetch on every render"
+);
 
 assert(catalogModule.genres.length > 40);
 assert(

@@ -16,6 +16,7 @@ import {
   parseTmdbImageGallery,
 } from "./images";
 import {
+  buildLogoLocalePriority,
   buildLocalePriority,
   languageCodeFromLocale,
   pickLocalizedText,
@@ -139,10 +140,14 @@ async function loadMediaImages(
   const imageLocales = Array.from(new Set([...locales, TMDB_NO_LANGUAGE_LOCALE]));
   const loadType = async (
     route: "logos" | "posters" | "backdrops",
-    typeName: TmdbImageMetadata["type"]
+    typeName: TmdbImageMetadata["type"],
+    priorityLocales = locales
   ) => {
+    const requestLocales = Array.from(
+      new Set([...priorityLocales, TMDB_NO_LANGUAGE_LOCALE])
+    );
     const groups = await Promise.all(
-      imageLocales.map(async (locale) => {
+      requestLocales.map(async (locale) => {
         const html = await fetchTmdbHtml(
           providerContext,
           `${mediaPath(type, id)}/images/${route}`,
@@ -158,11 +163,11 @@ async function loadMediaImages(
           : [];
       })
     );
-    return mergeTmdbImages(groups, locales);
+    return mergeTmdbImages(groups, priorityLocales);
   };
 
   const [logos, posters, backdrops] = await Promise.all([
-    loadType("logos", "logo"),
+    loadType("logos", "logo", buildLogoLocalePriority()),
     loadType("posters", "poster"),
     loadType("backdrops", "backdrop"),
   ]);

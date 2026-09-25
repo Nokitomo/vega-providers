@@ -1,6 +1,7 @@
 const assert = require("assert");
 const cheerio = require("cheerio");
 const {
+  buildLogoLocalePriority,
   buildLocalePriority,
   mergeTmdbEpisodes,
   mergeTmdbImages,
@@ -149,6 +150,7 @@ assert.deepStrictEqual(buildLocalePriority("ja-JP"), [
   "ja-JP",
   "xx-XX",
 ]);
+assert.deepStrictEqual(buildLogoLocalePriority(), ["it-IT", "en-US", "xx-XX"]);
 assert.deepStrictEqual(
   pickLocalizedText(
     [
@@ -437,6 +439,14 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   assert.strictEqual(media.tagline.language, "ja-JP");
   assert.strictEqual(media.originalLanguage, "ja-JP");
   assert.strictEqual(media.logo, imageUrl("logos-it-it.png"));
+  assert.strictEqual(
+    calls.some(
+      (url) =>
+        /\/images\/logos\?/.test(url) && url.includes("language=ja-JP")
+    ),
+    false,
+    "TMDB logo lookup must not request the original Japanese locale"
+  );
   assert.strictEqual(media.seasons[0].name.value, "Stagione 2");
   assert.deepStrictEqual(media.crew, []);
   assert.deepStrictEqual(media.videos, []);
@@ -547,6 +557,62 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
     type: "tv",
   });
   assert.strictEqual(targetedCalls.length, callsAfterArtwork);
+
+  const neutralLogoCalls = [];
+  const neutralLogoContext = {
+    cheerio,
+    cache: {
+      getString: () => undefined,
+      setString: () => undefined,
+      delete: () => undefined,
+    },
+    axios: {
+      get: async (url) => {
+        neutralLogoCalls.push(url);
+        const parsed = new URL(url);
+        const locale = parsed.searchParams.get("language") || "it-IT";
+        const route = parsed.pathname;
+        if (route === "/tv/999") {
+          return {
+            data: detailsFixture({
+              locale,
+              title: "Logo fallback test",
+              overview: "",
+              tagline: "",
+            }),
+          };
+        }
+        if (route === "/tv/999/images/logos") {
+          assert.notStrictEqual(
+            locale,
+            "ja-JP",
+            "logo fallback must skip Japanese/original TMDB logos"
+          );
+          return {
+            data:
+              locale === "xx-XX"
+                ? galleryFixture("neutral-logo", locale)
+                : "<html><body></body></html>",
+          };
+        }
+        throw new Error(`Unexpected neutral logo URL: ${url}`);
+      },
+    },
+  };
+  const neutralLogoArtwork = await resolveTmdbArtworkMetadata({
+    providerContext: neutralLogoContext,
+    id: 999,
+    type: "tv",
+    fields: ["logo"],
+  });
+  assert.strictEqual(
+    neutralLogoArtwork.logo,
+    imageUrl("neutral-logo-xx-xx.png")
+  );
+  assert.strictEqual(
+    neutralLogoCalls.some((url) => url.includes("language=ja-JP")),
+    false
+  );
 
   const targetedSeason = await resolveTmdbEpisodeSeasonMetadata({
     providerContext: targetedContext,

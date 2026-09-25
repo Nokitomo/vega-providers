@@ -8,6 +8,7 @@ import {
   genres as streamingGenres,
 } from "../streamingunity/catalog";
 import { encodeFilterRoute } from "./routing";
+import { DAILY_RANDOM_STALE_TIME_MS } from "../utils/stableRandom";
 
 const animeRows = new Map(animeCatalog.map((item) => [item.filter, item]));
 const streamingRows = new Map(
@@ -57,7 +58,7 @@ export const catalog = [
   {
     title: "StreamCenter · Scelti per te",
     filter: "catalog/all?random=true",
-    staleTimeMs: 0,
+    staleTimeMs: DAILY_RANDOM_STALE_TIME_MS,
   },
 ];
 

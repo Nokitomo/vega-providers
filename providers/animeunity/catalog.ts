@@ -7,6 +7,7 @@ import {
   ARCHIVE_YEAR_MAX_OFFSET,
   ARCHIVE_YEAR_MIN,
 } from "./filters";
+import { DAILY_RANDOM_STALE_TIME_MS } from "../utils/stableRandom";
 
 export const catalog = [
   {
@@ -55,7 +56,7 @@ export const catalog = [
     title: "Random",
     titleKey: "Random",
     filter: "archive?random=true",
-    staleTimeMs: 0,
+    staleTimeMs: DAILY_RANDOM_STALE_TIME_MS,
   },
   {
     title: "TV",
