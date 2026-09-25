@@ -13,6 +13,7 @@ import { resolveAnimeUnityTrailer } from "./trailers";
 import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
 import { resolveAnimeTmdbMetadata, selectTmdbPreferredArtwork } from "./tmdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
+import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -225,6 +226,11 @@ export const getMeta = async function ({
       imdbId = imdbId || aniZipArtwork.imdbId || "";
     }
     const aniBridgeExtra = buildAniBridgeExtra(mappingResolution);
+    const seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
+      animeId,
+      totalCount: metaPayload.episodesCount,
+      mappingResolution,
+    });
     const artwork = selectTmdbPreferredArtwork({
       tmdb: tmdbMetadata,
       provider: providerArtwork,
@@ -287,7 +293,10 @@ export const getMeta = async function ({
         artworkSources,
       },
       related,
-      linkList: metaPayload.linkList,
+      linkList:
+        seasonMappedLinkList.length > 0
+          ? seasonMappedLinkList
+          : metaPayload.linkList,
     };
   } catch (err) {
     console.error("animeunity meta error", err);

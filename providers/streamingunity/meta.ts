@@ -754,6 +754,14 @@ export const getMeta = async function ({
       episodesCount,
       extra: {
         ids: {
+          tmdbMovieIds:
+            type === "movie" && toNumber(title?.tmdb_id)
+              ? [toNumber(title?.tmdb_id)!]
+              : undefined,
+          tmdbShowIds:
+            type === "series" && toNumber(title?.tmdb_id)
+              ? [toNumber(title?.tmdb_id)!]
+              : undefined,
           netflixId: title?.netflix_id || undefined,
           primeId: title?.prime_id || undefined,
           disneyId: title?.disney_id || undefined,

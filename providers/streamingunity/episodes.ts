@@ -6,10 +6,13 @@ import {
   extractTitleId,
   getTranslationValue,
   normalizeText,
+  pickImageByType,
+  resolveCdnUrl,
   resolveBaseUrl,
   resolveUrl,
 } from "./utils";
 import { buildStreamingUnityPlaybackLink } from "./playback";
+import { resolveTmdbEpisodeSeasonMetadata } from "../animeunity/tmdb";
 
 const fetchHtml = async (
   url: string,
@@ -47,7 +50,8 @@ const mapEpisodes = (
   titleId: string,
   seasonNumber: number | undefined,
   imdbId: string,
-  tmdbId: string
+  tmdbId: string,
+  cdnUrl: string
 ): EpisodeLink[] => {
   if (!Array.isArray(episodes) || episodes.length === 0 || !titleId) {
     return [];
@@ -65,7 +69,20 @@ const mapEpisodes = (
         "name",
         DEFAULT_LOCALE
       );
+      const translatedPlot = getTranslationValue(
+        episode?.translations,
+        "plot",
+        DEFAULT_LOCALE
+      );
       const name = normalizeText(translatedName || episode?.name || "");
+      const synopsis = normalizeText(translatedPlot || episode?.plot || "");
+      const thumbnail =
+        pickImageByType(episode?.images, cdnUrl, [
+          "cover",
+          "background",
+          "still",
+          "poster",
+        ]) || "";
       const title = name || (rawNumber ? `Episode ${rawNumber}` : "Episode");
       const titleKey = !name && rawNumber ? "Episode {{number}}" : undefined;
 
@@ -77,6 +94,8 @@ const mapEpisodes = (
           ? parsedEpisodeNumber
           : undefined,
         seasonNumber,
+        synopsis: synopsis || undefined,
+        thumbnail: thumbnail || undefined,
         link: buildStreamingUnityPlaybackLink(titleId, {
           episodeId,
           mediaType: "series",
@@ -90,6 +109,86 @@ const mapEpisodes = (
       } as EpisodeLink;
     })
     .filter((episode): episode is EpisodeLink => !!episode && !!episode.link);
+};
+
+const hasEpisodeText = (value?: string): boolean =>
+  typeof value === "string" && value.trim().length > 0;
+
+const enrichEpisodesFromTmdb = async ({
+  episodes,
+  tmdbId,
+  seasonNumber,
+  providerContext,
+  sourceRevision,
+}: {
+  episodes: EpisodeLink[];
+  tmdbId: string;
+  seasonNumber?: number;
+  providerContext: ProviderContext;
+  sourceRevision?: string;
+}): Promise<EpisodeLink[]> => {
+  const mediaId = Number.parseInt(tmdbId, 10);
+  if (
+    !Number.isFinite(mediaId) ||
+    mediaId <= 0 ||
+    seasonNumber == null ||
+    seasonNumber < 0 ||
+    episodes.length === 0
+  ) {
+    return episodes;
+  }
+
+  const missing = episodes.filter(
+    (episode) =>
+      episode.episodeNumber != null &&
+      (!hasEpisodeText(episode.title) ||
+        episode.titleKey ||
+        !hasEpisodeText(episode.synopsis) ||
+        !hasEpisodeText(episode.thumbnail))
+  );
+  if (missing.length === 0) return episodes;
+
+  const season = await resolveTmdbEpisodeSeasonMetadata({
+    providerContext,
+    mediaId,
+    seasonNumber,
+    episodeNumbers: missing
+      .map((episode) => episode.episodeNumber)
+      .filter((value): value is number => value != null),
+    sourceRevision,
+  });
+  if (!season?.episodes?.length) return episodes;
+  const tmdbEpisodes = season.episodes;
+
+  return episodes.map((episode) => {
+    if (episode.episodeNumber == null) return episode;
+    const tmdbEpisode = tmdbEpisodes.find(
+      (candidate) => candidate.episodeNumber === episode.episodeNumber
+    );
+    if (!tmdbEpisode) return episode;
+    const tmdbTitle = tmdbEpisode.title?.value;
+    return {
+      ...episode,
+      title:
+        (!hasEpisodeText(episode.title) || episode.titleKey) && tmdbTitle
+          ? tmdbTitle
+          : episode.title,
+      titleKey:
+        (!hasEpisodeText(episode.title) || episode.titleKey) && tmdbTitle
+          ? undefined
+          : episode.titleKey,
+      titleParams:
+        (!hasEpisodeText(episode.title) || episode.titleKey) && tmdbTitle
+          ? undefined
+          : episode.titleParams,
+      synopsis: hasEpisodeText(episode.synopsis)
+        ? episode.synopsis
+        : tmdbEpisode.overview?.value || episode.synopsis,
+      thumbnail: hasEpisodeText(episode.thumbnail)
+        ? episode.thumbnail
+        : tmdbEpisode.thumbnail || episode.thumbnail,
+    };
+  });
 };
 
 export const getEpisodes = async function ({
@@ -113,6 +212,7 @@ export const getEpisodes = async function ({
     const title = page?.props?.title;
     const titleId = String(title?.id || extractTitleId(seasonUrl) || "").trim();
     if (!titleId) return [];
+    const cdnUrl = resolveCdnUrl(page?.props, baseUrl);
 
     const loadedSeason = page?.props?.loadedSeason;
     const seasonNumber =
@@ -122,13 +222,21 @@ export const getEpisodes = async function ({
       ? loadedSeason.episodes
       : [];
 
-    return mapEpisodes(
+    const mapped = mapEpisodes(
       episodes,
       titleId,
       seasonNumber,
       String(title?.imdb_id || "").trim(),
-      String(title?.tmdb_id || "").trim()
+      String(title?.tmdb_id || "").trim(),
+      cdnUrl
     );
+    return enrichEpisodesFromTmdb({
+      episodes: mapped,
+      tmdbId: String(title?.tmdb_id || "").trim(),
+      seasonNumber,
+      providerContext,
+      sourceRevision: String(episodes.length || ""),
+    });
   } catch (err) {
     console.error("streamingunity episodes error", err);
     return [];
