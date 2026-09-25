@@ -11,7 +11,12 @@ import { AnimeUnityArtwork, resolveAniZipArtwork } from "./artwork";
 import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAnimeUnityTrailer } from "./trailers";
 import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
-import { resolveAnimeTmdbMetadata, selectTmdbPreferredArtwork } from "./tmdb";
+import {
+  resolveAnimeTmdbMetadata,
+  resolveTmdbMediaMetadata,
+  selectPrimaryTmdbId,
+  selectTmdbPreferredArtwork,
+} from "./tmdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
 import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
 
@@ -226,11 +231,34 @@ export const getMeta = async function ({
       imdbId = imdbId || aniZipArtwork.imdbId || "";
     }
     const aniBridgeExtra = buildAniBridgeExtra(mappingResolution);
-    const seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
+    let seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
       animeId,
       totalCount: metaPayload.episodesCount,
       mappingResolution,
     });
+    const needsTmdbSeasonLayout =
+      purpose !== "hero" &&
+      !metaPayload.isMovie &&
+      Number(metaPayload.episodesCount || 0) > 0 &&
+      seasonMappedLinkList.length > 1;
+    if (needsTmdbSeasonLayout) {
+      const tmdbTarget = selectPrimaryTmdbId(mappingResolution, false);
+      const tmdbMedia = tmdbTarget?.type === "tv"
+        ? await resolveTmdbMediaMetadata({
+            providerContext,
+            id: tmdbTarget.id,
+            type: "tv",
+          })
+        : null;
+      if (tmdbMedia?.seasons?.length) {
+        seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
+          animeId,
+          totalCount: metaPayload.episodesCount,
+          mappingResolution,
+          tmdbSeasons: tmdbMedia.seasons,
+        });
+      }
+    }
     const artwork = selectTmdbPreferredArtwork({
       tmdb: tmdbMetadata,
       provider: providerArtwork,

@@ -2,7 +2,7 @@ import { Link } from "../types";
 
 export const ANIMEUNITY_EPISODE_RANGE_SIZE = 120;
 export const ANIMEUNITY_SPECIALS_LOOKAHEAD = 30;
-const EPISODE_RANGE_KEY = "Episodes {{start}}-{{end}}";
+export const EPISODE_RANGE_KEY = "Episodes {{start}}-{{end}}";
 
 export type EpisodeRangeRequest = {
   animeId: number;
