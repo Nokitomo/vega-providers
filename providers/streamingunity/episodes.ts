@@ -13,6 +13,7 @@ import {
 } from "./utils";
 import { buildStreamingUnityPlaybackLink } from "./playback";
 import { resolveTmdbEpisodeSeasonMetadata } from "../animeunity/tmdb";
+import { resolveTvdbEpisodeFallbacks } from "../animeunity/tvdb";
 
 const fetchHtml = async (
   url: string,
@@ -114,6 +115,12 @@ const mapEpisodes = (
 const hasEpisodeText = (value?: string): boolean =>
   typeof value === "string" && value.trim().length > 0;
 
+const toNumber = (value: any): number | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+};
+
 const enrichEpisodesFromTmdb = async ({
   episodes,
   tmdbId,
@@ -191,6 +198,74 @@ const enrichEpisodesFromTmdb = async ({
   });
 };
 
+const enrichEpisodesFromTvdb = async ({
+  episodes,
+  tvdbId,
+  seasonNumber,
+  providerContext,
+  sourceRevision,
+}: {
+  episodes: EpisodeLink[];
+  tvdbId?: number;
+  seasonNumber?: number;
+  providerContext: ProviderContext;
+  sourceRevision?: string;
+}): Promise<EpisodeLink[]> => {
+  if (
+    !Number.isFinite(tvdbId) ||
+    !tvdbId ||
+    seasonNumber == null ||
+    seasonNumber < 0 ||
+    episodes.length === 0
+  ) {
+    return episodes;
+  }
+
+  const missing = episodes.filter(
+    (episode) =>
+      episode.episodeNumber != null &&
+      (!hasEpisodeText(episode.title) ||
+        episode.titleKey ||
+        !hasEpisodeText(episode.synopsis) ||
+        !hasEpisodeText(episode.thumbnail))
+  );
+  if (missing.length === 0) return episodes;
+
+  const fallbacks = await resolveTvdbEpisodeFallbacks({
+    providerContext,
+    tvdbShowId: tvdbId,
+    seasonNumber,
+    episodeNumbers: missing
+      .map((episode) => episode.episodeNumber)
+      .filter((value): value is number => value != null),
+    sourceRevision,
+  });
+  if (fallbacks.length === 0) return episodes;
+
+  return episodes.map((episode) => {
+    if (episode.episodeNumber == null) return episode;
+    const fallback = fallbacks.find(
+      (candidate) => candidate.episodeNumber === episode.episodeNumber
+    );
+    if (!fallback) return episode;
+    const shouldReplaceTitle =
+      (!hasEpisodeText(episode.title) || episode.titleKey) &&
+      hasEpisodeText(fallback.title);
+    return {
+      ...episode,
+      title: shouldReplaceTitle ? fallback.title! : episode.title,
+      titleKey: shouldReplaceTitle ? undefined : episode.titleKey,
+      titleParams: shouldReplaceTitle ? undefined : episode.titleParams,
+      synopsis: hasEpisodeText(episode.synopsis)
+        ? episode.synopsis
+        : fallback.synopsis || episode.synopsis,
+      thumbnail: hasEpisodeText(episode.thumbnail)
+        ? episode.thumbnail
+        : fallback.thumbnail || episode.thumbnail,
+    };
+  });
+};
+
 export const getEpisodes = async function ({
   url,
   providerContext,
@@ -230,9 +305,19 @@ export const getEpisodes = async function ({
       String(title?.tmdb_id || "").trim(),
       cdnUrl
     );
-    return enrichEpisodesFromTmdb({
+    const tmdbEnriched = await enrichEpisodesFromTmdb({
       episodes: mapped,
       tmdbId: String(title?.tmdb_id || "").trim(),
+      seasonNumber,
+      providerContext,
+      sourceRevision: String(episodes.length || ""),
+    });
+    return enrichEpisodesFromTvdb({
+      episodes: tmdbEnriched,
+      tvdbId:
+        toNumber(title?.tvdb_id) ||
+        toNumber(title?.thetvdb_id) ||
+        toNumber(title?.tvdb_show_id),
       seasonNumber,
       providerContext,
       sourceRevision: String(episodes.length || ""),

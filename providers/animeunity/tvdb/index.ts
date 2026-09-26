@@ -1,4 +1,6 @@
 export { resolveTvdbArtworkMetadata } from "./artworkResolver";
+export { resolveTvdbEpisodeFallbacks } from "./episodeResolver";
+export { resolveTvdbMediaTextMetadata } from "./mediaResolver";
 export {
   extractMoviePathFromTvdbPage,
   extractSeriesPathFromTvdbPage,

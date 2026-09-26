@@ -346,7 +346,7 @@
   {
     "display_name": "StreamingUnity",
     "value": "streamingunity",
-    "version": "1.0.15",
+    "version": "1.0.16",
     "icon": "",
     "type": "italy",
     "disabled": false
@@ -354,7 +354,7 @@
   {
     "display_name": "StreamCenter",
     "value": "streamcenter",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "icon": "",
     "type": "italy",
     "disabled": false

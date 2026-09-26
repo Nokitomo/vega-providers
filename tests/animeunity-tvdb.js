@@ -7,6 +7,7 @@ const {
   parseTvdbArtworkGrid,
   parseTvdbOriginalLanguage,
   resolveTvdbArtworkMetadata,
+  resolveTvdbMediaTextMetadata,
 } = require("../dist/animeunity/tvdb/index.js");
 
 const seriesPage = `
@@ -21,6 +22,12 @@ const seriesPage = `
   </div>
   <div id="artwork-backgrounds">
     <a class="lightbox" rel="artwork_backgrounds" data-id="background-ja" href="https://artworks.thetvdb.com/banners/v4/series/1/backgrounds/ja.jpg"></a>
+  </div>
+  <div class="change_translation_text" data-language="jpn" data-title="日本語タイトル">
+    <p>日本語の説明</p>
+  </div>
+  <div class="change_translation_text" data-language="eng" data-title="English TVDB title">
+    <p>English TVDB synopsis</p>
   </div>
 </body></html>`;
 
@@ -248,6 +255,15 @@ const providerContext = {
     movieMetadata.background,
     "https://artworks.thetvdb.com/banners/v4/movie/3000/backgrounds/en.jpg",
   );
+
+  const textMetadata = await resolveTvdbMediaTextMetadata({
+    providerContext,
+    tvdbId: 457078,
+    mediaType: "series",
+  });
+  assert(textMetadata);
+  assert.strictEqual(textMetadata.title, "English TVDB title");
+  assert.strictEqual(textMetadata.synopsis, "English TVDB synopsis");
 
   console.log("animeunity tvdb: OK");
 })().catch((error) => {

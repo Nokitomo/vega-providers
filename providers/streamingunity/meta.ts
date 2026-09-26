@@ -20,6 +20,15 @@ import {
 } from "./utils";
 import { extractVixCloudStreams } from "../animeunity/parsers/stream";
 import { buildStreamingUnityPlaybackLink } from "./playback";
+import {
+  resolveTmdbArtworkMetadata,
+  resolveTmdbMediaMetadata,
+} from "../animeunity/tmdb";
+import {
+  resolveTvdbArtworkMetadata,
+  resolveTvdbMediaTextMetadata,
+} from "../animeunity/tvdb";
+import { TmdbArtworkField, TmdbMediaType } from "../animeunity/tmdb/types";
 
 const pickLogoImage = (
   images: any[] | undefined,
@@ -117,6 +126,126 @@ type AvailabilityInfo = {
   precision?: AvailabilityPrecision;
   isFuture: boolean;
   isPast: boolean;
+};
+
+const hasText = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+
+const pickPresent = <T>(primary: T | undefined, fallback: T | undefined) =>
+  primary !== undefined && primary !== null && String(primary).trim() !== ""
+    ? primary
+    : fallback;
+
+const resolveStreamingUnityTvdbId = (
+  title: any,
+  type: "movie" | "series",
+): number | undefined =>
+  type === "movie"
+    ? toNumber(title?.tvdb_movie_id) ||
+      toNumber(title?.thetvdb_id) ||
+      toNumber(title?.tvdb_id)
+    : toNumber(title?.tvdb_show_id) ||
+      toNumber(title?.thetvdb_id) ||
+      toNumber(title?.tvdb_id);
+
+const resolveExternalFallbackArtwork = async ({
+  providerContext,
+  title,
+  type,
+  poster,
+  logo,
+  background,
+}: {
+  providerContext: ProviderContext;
+  title: any;
+  type: "movie" | "series";
+  poster?: string;
+  logo?: string;
+  background?: string;
+}): Promise<{
+  logo?: string;
+  poster?: string;
+  background?: string;
+  sources: {
+    logo?: "provider" | "tmdb" | "tvdb";
+    poster?: "provider" | "tmdb" | "tvdb";
+    background?: "provider" | "tmdb" | "tvdb";
+  };
+}> => {
+  const sources: {
+    logo?: "provider" | "tmdb" | "tvdb";
+    poster?: "provider" | "tmdb" | "tvdb";
+    background?: "provider" | "tmdb" | "tvdb";
+  } = {
+    logo: hasText(logo) ? "provider" : undefined,
+    poster: hasText(poster) ? "provider" : undefined,
+    background: hasText(background) ? "provider" : undefined,
+  };
+  let resolvedLogo = logo;
+  let resolvedPoster = poster;
+  let resolvedBackground = background;
+
+  const missingFields = (): TmdbArtworkField[] => {
+    const fields: TmdbArtworkField[] = [];
+    if (!hasText(resolvedLogo)) fields.push("logo");
+    if (!hasText(resolvedPoster)) fields.push("poster");
+    if (!hasText(resolvedBackground)) fields.push("background");
+    return fields;
+  };
+
+  const tmdbId = toNumber(title?.tmdb_id);
+  const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
+  const tmdbFields = missingFields();
+  if (tmdbId && tmdbFields.length > 0) {
+    const tmdb = await resolveTmdbArtworkMetadata({
+      providerContext,
+      id: tmdbId,
+      type: tmdbType,
+      fields: tmdbFields,
+    });
+    if (!hasText(resolvedLogo) && hasText(tmdb?.logo)) {
+      resolvedLogo = tmdb.logo;
+      sources.logo = "tmdb";
+    }
+    if (!hasText(resolvedPoster) && hasText(tmdb?.poster)) {
+      resolvedPoster = tmdb.poster;
+      sources.poster = "tmdb";
+    }
+    if (!hasText(resolvedBackground) && hasText(tmdb?.background)) {
+      resolvedBackground = tmdb.background;
+      sources.background = "tmdb";
+    }
+  }
+
+  const tvdbId = resolveStreamingUnityTvdbId(title, type);
+  const tvdbFields = missingFields();
+  if (tvdbId && tvdbFields.length > 0) {
+    const tvdb = await resolveTvdbArtworkMetadata({
+      providerContext,
+      tvdbId,
+      mediaType: type === "series" ? "series" : "movie",
+      fields: tvdbFields,
+    });
+    if (!hasText(resolvedLogo) && hasText(tvdb?.logo)) {
+      resolvedLogo = tvdb.logo;
+      sources.logo = "tvdb";
+    }
+    if (!hasText(resolvedPoster) && hasText(tvdb?.poster)) {
+      resolvedPoster = tvdb.poster;
+      sources.poster = "tvdb";
+    }
+    if (!hasText(resolvedBackground) && hasText(tvdb?.background)) {
+      resolvedBackground = tvdb.background;
+      sources.background = "tvdb";
+    }
+  }
+
+  return {
+    logo: resolvedLogo,
+    poster: resolvedPoster,
+    background: resolvedBackground,
+    sources,
+  };
 };
 
 const UPCOMING_STATUS_TOKENS = [
@@ -628,38 +757,101 @@ export const getMeta = async function ({
     const slug = resolveTitleSlug(title, DEFAULT_LOCALE) || slugFromLink;
     const cdnUrl = resolveCdnUrl(page?.props, baseUrl, DEFAULT_CDN_URL);
 
-    const titleName = resolveTitleName(title, DEFAULT_LOCALE);
-    const plot = getTranslationValue(title?.translations, "plot", DEFAULT_LOCALE) ||
+    let titleName = resolveTitleName(title, DEFAULT_LOCALE);
+    let plot = getTranslationValue(title?.translations, "plot", DEFAULT_LOCALE) ||
       String(title?.plot || "");
 
-    const poster = pickImageByType(title?.images, cdnUrl, [
+    let poster = pickImageByType(title?.images, cdnUrl, [
       "poster",
       "cover",
       "cover_mobile",
       "background",
     ]);
-    const logo = pickLogoImage(title?.images, cdnUrl);
-    const background = pickImageByType(title?.images, cdnUrl, [
+    let logo = pickLogoImage(title?.images, cdnUrl);
+    let background = pickImageByType(title?.images, cdnUrl, [
       "background",
       "cover",
       "cover_mobile",
     ]);
 
-    const genres = normalizeGenres(title?.genres || []);
+    let genres = normalizeGenres(title?.genres || []);
     const keywords = normalizeKeywords(title?.keywords || []);
-    const tags = mergeTags(genres, keywords);
+    let tags = mergeTags(genres, keywords);
 
-    const cast = normalizePeople(title?.main_actors || []);
+    let cast = normalizePeople(title?.main_actors || []);
     const directors = normalizePeople(title?.main_directors || []);
 
     const releaseDate = title?.release_date_it || title?.release_date;
     const lastAirDate = title?.last_air_date_it || title?.last_air_date;
 
-    const year = extractYear(releaseDate || lastAirDate);
-    const runtime = normalizeRuntime(title?.runtime);
-    const rating = title?.score != null ? String(title.score) : "";
+    let year = extractYear(releaseDate || lastAirDate);
+    let runtime = normalizeRuntime(title?.runtime);
+    let rating = title?.score != null ? String(title.score) : "";
 
     const type = String(title?.type || "").toLowerCase() === "tv" ? "series" : "movie";
+    const tmdbId = toNumber(title?.tmdb_id);
+    const tvdbId = resolveStreamingUnityTvdbId(title, type);
+    const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
+    const needsTmdbCore =
+      !!tmdbId &&
+      (!hasText(titleName) ||
+        !hasText(plot) ||
+        !hasText(year) ||
+        !hasText(runtime) ||
+        !hasText(rating) ||
+        genres.length === 0 ||
+        cast.length === 0);
+    const tmdbCore = needsTmdbCore
+      ? await resolveTmdbMediaMetadata({
+          providerContext,
+          id: tmdbId!,
+          type: tmdbType,
+        })
+      : null;
+    titleName = pickPresent(titleName, tmdbCore?.title?.value) || "";
+    plot = pickPresent(plot, tmdbCore?.overview?.value) || "";
+    year =
+      pickPresent(
+        year,
+        extractYear(tmdbCore?.releaseDate || tmdbCore?.startDate || tmdbCore?.endDate)
+      ) || "";
+    runtime = pickPresent(runtime, tmdbCore?.facts?.Runtime) || "";
+    rating = pickPresent(
+      rating,
+      tmdbCore?.rating != null ? String(tmdbCore.rating) : undefined
+    ) || "";
+    genres = genres.length > 0 ? genres : tmdbCore?.genres || [];
+    tags = mergeTags(genres, keywords);
+    cast =
+      cast.length > 0
+        ? cast
+        : (tmdbCore?.cast || [])
+            .map((person) => person.name)
+            .filter((name): name is string => hasText(name))
+            .slice(0, 12);
+
+    const needsTvdbText = !!tvdbId && (!hasText(titleName) || !hasText(plot));
+    const tvdbText = needsTvdbText
+      ? await resolveTvdbMediaTextMetadata({
+          providerContext,
+          tvdbId,
+          mediaType: type === "series" ? "series" : "movie",
+        })
+      : null;
+    titleName = pickPresent(titleName, tvdbText?.title) || "";
+    plot = pickPresent(plot, tvdbText?.synopsis) || "";
+
+    const fallbackArtwork = await resolveExternalFallbackArtwork({
+      providerContext,
+      title,
+      type,
+      poster,
+      logo,
+      background,
+    });
+    poster = fallbackArtwork.poster || "";
+    logo = fallbackArtwork.logo || "";
+    background = fallbackArtwork.background || "";
 
     const related = buildRelated(page?.props?.sliders || [], baseUrl, cdnUrl);
 
@@ -755,12 +947,20 @@ export const getMeta = async function ({
       extra: {
         ids: {
           tmdbMovieIds:
-            type === "movie" && toNumber(title?.tmdb_id)
-              ? [toNumber(title?.tmdb_id)!]
+            type === "movie" && tmdbId
+              ? [tmdbId]
               : undefined,
           tmdbShowIds:
-            type === "series" && toNumber(title?.tmdb_id)
-              ? [toNumber(title?.tmdb_id)!]
+            type === "series" && tmdbId
+              ? [tmdbId]
+              : undefined,
+          tvdbMovieIds:
+            type === "movie" && tvdbId
+              ? [tvdbId]
+              : undefined,
+          tvdbShowIds:
+            type === "series" && tvdbId
+              ? [tvdbId]
               : undefined,
           netflixId: title?.netflix_id || undefined,
           primeId: title?.prime_id || undefined,
@@ -776,6 +976,7 @@ export const getMeta = async function ({
         flags: {
           dub: title?.dub_ita || undefined,
         },
+        artworkSources: fallbackArtwork.sources,
         meta: {
           status: title?.status || undefined,
           type: title?.type || undefined,
