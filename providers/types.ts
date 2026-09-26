@@ -123,9 +123,9 @@ export interface Info {
       alwaysHome?: boolean;
     };
     artworkSources?: {
-      logo?: "tmdb" | "cinemeta" | "provider" | "anizip";
-      poster?: "tmdb" | "cinemeta" | "provider" | "anizip";
-      background?: "tmdb" | "cinemeta" | "provider" | "anizip";
+      logo?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
+      poster?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
+      background?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
     };
     meta?: {
       day?: string;

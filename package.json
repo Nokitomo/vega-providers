@@ -17,6 +17,7 @@
     "test:animeunity:artwork-trailers": "node tests/animeunity-artwork-trailers.js",
     "test:animeunity:anibridge": "node tests/animeunity-anibridge.js",
     "test:animeunity:tmdb": "node tests/animeunity-tmdb.js",
+    "test:animeunity:tvdb": "node tests/animeunity-tvdb.js",
     "test:animeunity:anizip": "node tests/animeunity-anizip.js",
     "test:animeunity:season-links": "node tests/animeunity-season-links.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",

@@ -10,13 +10,18 @@ import { DEFAULT_BASE_HOST, DEFAULT_HEADERS, TIMEOUTS } from "./config";
 import { AnimeUnityArtwork, resolveAniZipArtwork } from "./artwork";
 import { resolveAnimeUnityCinemetaMetadata } from "./cinemeta";
 import { resolveAnimeUnityTrailer } from "./trailers";
-import { buildAniBridgeExtra, resolveAnimeMappings } from "./mappings";
+import {
+  buildAniBridgeExtra,
+  parseSeasonScope,
+  resolveAnimeMappings,
+} from "./mappings";
 import {
   resolveAnimeTmdbMetadata,
   resolveTmdbMediaMetadata,
   selectPrimaryTmdbId,
   selectTmdbPreferredArtwork,
 } from "./tmdb";
+import { resolveTvdbArtworkMetadata } from "./tvdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
 import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
 
@@ -24,10 +29,45 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function selectPrimaryTvdbTarget(
+  mappingResolution: Awaited<ReturnType<typeof resolveAnimeMappings>>,
+  isMovie: boolean,
+): { id: number; mediaType: "series" | "movie"; seasonNumber?: number } | null {
+  if (isMovie) {
+    const selectedId = String(mappingResolution.ids.tvdbMovieIds[0] || "");
+    const id = Number.parseInt(selectedId, 10);
+    return Number.isFinite(id) && id > 0 ? { id, mediaType: "movie" } : null;
+  }
+
+  const targets = mappingResolution.targets.filter(
+    (target) => target.provider === "tvdb_show",
+  );
+  const selectedId =
+    targets[0]?.id || String(mappingResolution.ids.tvdbShowIds[0] || "");
+  const id = Number.parseInt(selectedId, 10);
+  if (!Number.isFinite(id) || id <= 0) return null;
+
+  const matchingTargets = targets.filter((target) => target.id === selectedId);
+  const seasons = matchingTargets.map((target) =>
+    parseSeasonScope(target.scope),
+  );
+  const scopedSeasons = Array.from(
+    new Set(seasons.filter((season): season is number => season != null)),
+  );
+  const seasonNumber =
+    matchingTargets.length > 0 &&
+    seasons.every((season) => season != null) &&
+    scopedSeasons.length === 1
+      ? scopedSeasons[0]
+      : undefined;
+
+  return { id, mediaType: "series", seasonNumber };
+}
+
 async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
-  mapper: (item: T) => Promise<R>
+  mapper: (item: T) => Promise<R>,
 ): Promise<R[]> {
   const output: R[] = [];
   for (let index = 0; index < items.length; index += limit) {
@@ -40,40 +80,41 @@ async function mapWithConcurrency<T, R>(
 async function resolveRelatedImages(
   items: RelatedItem[],
   axios: ProviderContext["axios"],
-  baseHost: string
+  baseHost: string,
 ): Promise<Info["related"]> {
-  const resolvedItems = await mapWithConcurrency(
-    items,
-    6,
-    async (item) => {
-      if (!item.id) return item;
-      try {
-        const detailRes = await axios.get(`${baseHost}/info_api/${item.id}/`, {
-          headers: DEFAULT_HEADERS,
-          timeout: TIMEOUTS.RELATED,
-        });
-        const detail = detailRes.data || {};
-        const image = normalizeImageUrl(
-          detail?.imageurl || detail?.cover || detail?.imageurl_cover
-        );
-        const slug = detail?.slug || item.slug;
-        return {
-          ...item,
-          slug,
-          title: item.title || detail?.title_eng || detail?.title || detail?.title_it || "",
-          link: buildAnimeLink(baseHost, item.id, slug),
-          image: image || item.image,
-          raw: {
-            ...(item.raw || {}),
-            ...detail,
-            id: detail?.id || item.id,
-          },
-        };
-      } catch (_) {
-        return item;
-      }
+  const resolvedItems = await mapWithConcurrency(items, 6, async (item) => {
+    if (!item.id) return item;
+    try {
+      const detailRes = await axios.get(`${baseHost}/info_api/${item.id}/`, {
+        headers: DEFAULT_HEADERS,
+        timeout: TIMEOUTS.RELATED,
+      });
+      const detail = detailRes.data || {};
+      const image = normalizeImageUrl(
+        detail?.imageurl || detail?.cover || detail?.imageurl_cover,
+      );
+      const slug = detail?.slug || item.slug;
+      return {
+        ...item,
+        slug,
+        title:
+          item.title ||
+          detail?.title_eng ||
+          detail?.title ||
+          detail?.title_it ||
+          "",
+        link: buildAnimeLink(baseHost, item.id, slug),
+        image: image || item.image,
+        raw: {
+          ...(item.raw || {}),
+          ...detail,
+          id: detail?.id || item.id,
+        },
+      };
+    } catch (_) {
+      return item;
     }
-  );
+  });
 
   const entries = resolvedItems.map((item) => ({
     anime: {
@@ -138,7 +179,7 @@ export const getMeta = async function ({
       try {
         const htmlRes = await axios.get(
           `${baseHost}/anime/${animeId}-${info?.slug || ""}`,
-          { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
+          { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG },
         );
         animeFromHtml = parseAnimeFromHtml(htmlRes.data, cheerio);
       } catch (_) {
@@ -149,7 +190,7 @@ export const getMeta = async function ({
       info,
       baseHost,
       animeId,
-      animeFromHtml
+      animeFromHtml,
     );
     const providerIds = metaPayload.extra?.ids || {};
     const mappingPromise = resolveAnimeMappings({
@@ -208,19 +249,38 @@ export const getMeta = async function ({
           isMovie: metaPayload.isMovie,
         })
       : {};
+    const tvdbTarget = selectPrimaryTvdbTarget(
+      mappingResolution,
+      metaPayload.isMovie,
+    );
+    const tvdbFields: Array<"logo" | "poster" | "background"> = [];
+    if (!tmdbMetadata?.poster) tvdbFields.push("poster");
+    if (!(tmdbMetadata?.logo || cinemetaMetadata.logo)) tvdbFields.push("logo");
+    if (!(tmdbMetadata?.background || cinemetaMetadata.background)) {
+      tvdbFields.push("background");
+    }
+    const tvdbMetadata =
+      tvdbTarget && tvdbFields.length > 0
+        ? await resolveTvdbArtworkMetadata({
+            providerContext,
+            tvdbId: tvdbTarget.id,
+            mediaType: tvdbTarget.mediaType,
+            seasonNumber: tvdbTarget.seasonNumber,
+            fields: tvdbFields,
+          })
+        : null;
     const needsAniZip =
-      !(
-        tmdbMetadata?.logo ||
-        cinemetaMetadata.logo
-      ) ||
+      !(tmdbMetadata?.logo || cinemetaMetadata.logo || tvdbMetadata?.logo) ||
       !(
         tmdbMetadata?.poster ||
+        tvdbMetadata?.poster ||
         providerArtwork.poster ||
         cinemetaMetadata.poster
       ) ||
       !(
         tmdbMetadata?.background ||
-        cinemetaMetadata.background
+        cinemetaMetadata.background ||
+        tvdbMetadata?.background
       );
     if (needsAniZip && !Object.values(aniZipArtwork).some(Boolean)) {
       aniZipArtwork = await resolveAniZipArtwork({
@@ -243,13 +303,14 @@ export const getMeta = async function ({
       seasonMappedLinkList.length > 1;
     if (needsTmdbSeasonLayout) {
       const tmdbTarget = selectPrimaryTmdbId(mappingResolution, false);
-      const tmdbMedia = tmdbTarget?.type === "tv"
-        ? await resolveTmdbMediaMetadata({
-            providerContext,
-            id: tmdbTarget.id,
-            type: "tv",
-          })
-        : null;
+      const tmdbMedia =
+        tmdbTarget?.type === "tv"
+          ? await resolveTmdbMediaMetadata({
+              providerContext,
+              id: tmdbTarget.id,
+              type: "tv",
+            })
+          : null;
       if (tmdbMedia?.seasons?.length) {
         seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
           animeId,
@@ -261,6 +322,7 @@ export const getMeta = async function ({
     }
     const artwork = selectTmdbPreferredArtwork({
       tmdb: tmdbMetadata,
+      tvdb: tvdbMetadata,
       provider: providerArtwork,
       cinemeta: cinemetaMetadata,
       aniZip: aniZipArtwork,
@@ -270,28 +332,34 @@ export const getMeta = async function ({
 
     const artworkSources: NonNullable<Info["extra"]>["artworkSources"] = {
       logo: tmdbMetadata?.logo
-        ? "tmdb" as const
+        ? ("tmdb" as const)
         : cinemetaMetadata.logo
-          ? "cinemeta" as const
-        : aniZipArtwork.logo
-          ? "anizip" as const
-          : "provider" as const,
+          ? ("cinemeta" as const)
+          : tvdbMetadata?.logo
+            ? ("tvdb" as const)
+            : aniZipArtwork.logo
+              ? ("anizip" as const)
+              : ("provider" as const),
       poster: tmdbMetadata?.poster
-        ? "tmdb" as const
-        : providerArtwork.poster
-          ? "provider" as const
-          : cinemetaMetadata.poster
-            ? "cinemeta" as const
-          : "anizip" as const,
+        ? ("tmdb" as const)
+        : tvdbMetadata?.poster
+          ? ("tvdb" as const)
+          : providerArtwork.poster
+            ? ("provider" as const)
+            : cinemetaMetadata.poster
+              ? ("cinemeta" as const)
+              : ("anizip" as const),
       background: tmdbMetadata?.background
-        ? "tmdb" as const
+        ? ("tmdb" as const)
         : cinemetaMetadata.background
-          ? "cinemeta" as const
-        : aniZipArtwork.background
-          ? "anizip" as const
-        : providerArtwork.background
-          ? "provider" as const
-        : undefined,
+          ? ("cinemeta" as const)
+          : tvdbMetadata?.background
+            ? ("tvdb" as const)
+            : aniZipArtwork.background
+              ? ("anizip" as const)
+              : providerArtwork.background
+                ? ("provider" as const)
+                : undefined,
     };
 
     return {
@@ -374,7 +442,12 @@ export const getArtwork = async function ({
         timeout: TIMEOUTS.LONG,
       });
       info = infoRes.data || {};
-      inferredIsMovie = buildMetaFromInfo(info, baseHost, animeId, null).isMovie;
+      inferredIsMovie = buildMetaFromInfo(
+        info,
+        baseHost,
+        animeId,
+        null,
+      ).isMovie;
     }
     const mappingResolution = await resolveAnimeMappings({
       providerContext,
@@ -395,10 +468,22 @@ export const getArtwork = async function ({
       fields,
       imageSize,
     });
+    const missingFields = fields.filter((field) => !tmdb?.[field]);
+    const tvdbTarget = selectPrimaryTvdbTarget(mappingResolution, isMovie);
+    const tvdb =
+      tvdbTarget && missingFields.length > 0
+        ? await resolveTvdbArtworkMetadata({
+            providerContext,
+            tvdbId: tvdbTarget.id,
+            mediaType: tvdbTarget.mediaType,
+            seasonNumber: tvdbTarget.seasonNumber,
+            fields: missingFields,
+          })
+        : null;
     return {
-      logo: tmdb?.logo,
-      poster: tmdb?.poster,
-      background: tmdb?.background,
+      logo: tmdb?.logo || tvdb?.logo,
+      poster: tmdb?.poster || tvdb?.poster,
+      background: tmdb?.background || tvdb?.background,
       resolved: true,
     };
   } catch (_) {

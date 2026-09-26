@@ -30,12 +30,7 @@ const {
 
 const imageUrl = (name) => `https://image.tmdb.org/t/p/original/${name}`;
 
-function detailsFixture({
-  locale,
-  title,
-  overview,
-  tagline,
-}) {
+function detailsFixture({ locale, title, overview, tagline }) {
   const schema = {
     "@type": "TVSeries",
     ...(title ? { name: title } : {}),
@@ -160,20 +155,20 @@ assert.deepStrictEqual(
       { locale: "xx-XX", value: "Language neutral" },
     ],
     (item) => item.value,
-    (item) => item.locale
+    (item) => item.locale,
   ),
-  { value: "Language neutral", language: "xx-XX" }
+  { value: "Language neutral", language: "xx-XX" },
 );
 assert.strictEqual(
   normalizeTmdbImageUrl("https://media.themoviedb.org/t/p/w500/test.jpg"),
-  imageUrl("test.jpg")
+  imageUrl("test.jpg"),
 );
 assert.strictEqual(
   normalizeTmdbImageUrl(
     "https://media.themoviedb.org/t/p/original/test.jpg",
-    "w300"
+    "w300",
   ),
-  "https://image.tmdb.org/t/p/w300/test.jpg"
+  "https://image.tmdb.org/t/p/w300/test.jpg",
 );
 assert.strictEqual(normalizeTmdbImageUrl("javascript:alert(1)"), undefined);
 
@@ -197,7 +192,7 @@ assert.deepStrictEqual(
     logo: "https://tmdb.test/logo.png",
     poster: "https://tmdb.test/poster.jpg",
     background: "https://tmdb.test/background.jpg",
-  }
+  },
 );
 assert.deepStrictEqual(
   selectTmdbPreferredArtwork({
@@ -220,10 +215,15 @@ assert.deepStrictEqual(
     poster: "https://tmdb.test/poster.jpg",
     background: "https://tmdb.test/background.jpg",
   },
-  "Cinemeta must precede AniZip/provider logos while TMDB backgrounds precede Cinemeta"
+  "Cinemeta must precede AniZip/provider logos while TMDB backgrounds precede Cinemeta",
 );
 assert.deepStrictEqual(
   selectTmdbPreferredArtwork({
+    tvdb: {
+      logo: "https://tvdb.test/logo.png",
+      poster: "https://tvdb.test/poster.jpg",
+      background: "https://tvdb.test/background.jpg",
+    },
     provider: { poster: "https://provider.test/poster.jpg" },
     cinemeta: {
       logo: "https://cinemeta.test/logo.png",
@@ -232,15 +232,20 @@ assert.deepStrictEqual(
   }),
   {
     logo: "https://cinemeta.test/logo.png",
-    poster: "https://provider.test/poster.jpg",
+    poster: "https://tvdb.test/poster.jpg",
     background: "https://cinemeta.test/background.jpg",
-  }
+  },
+  "TVDB posters should precede provider posters while Cinemeta remains preferred for logo/background",
 );
 
 const parsedDetails = parseTmdbDetailsPage(
-  detailsFixture({ locale: "it-IT", title: "Naruto", overview: "Un giovane ninja." }),
+  detailsFixture({
+    locale: "it-IT",
+    title: "Naruto",
+    overview: "Un giovane ninja.",
+  }),
   cheerio,
-  "it-IT"
+  "it-IT",
 );
 assert.strictEqual(parsedDetails.title, "Naruto");
 assert.strictEqual(parsedDetails.numberOfEpisodes, 220);
@@ -252,7 +257,7 @@ const parsedGallery = parseTmdbImageGallery(
   galleryFixture("logo", "it-IT"),
   cheerio,
   "logo",
-  "it"
+  "it",
 );
 assert.strictEqual(parsedGallery[0].language, "it");
 assert.strictEqual(parsedGallery[0].width, 1000);
@@ -260,9 +265,14 @@ assert.strictEqual(parsedGallery[0].height, 500);
 const sortedImages = mergeTmdbImages(
   [
     parsedGallery,
-    parseTmdbImageGallery(galleryFixture("logo", "en-US"), cheerio, "logo", "en"),
+    parseTmdbImageGallery(
+      galleryFixture("logo", "en-US"),
+      cheerio,
+      "logo",
+      "en",
+    ),
   ],
-  ["it-IT", "en-US"]
+  ["it-IT", "en-US"],
 );
 assert.strictEqual(sortedImages[0].language, "it");
 assert.deepStrictEqual(
@@ -286,10 +296,10 @@ assert.deepStrictEqual(
         },
       ],
     ],
-    ["en-US"]
+    ["en-US"],
   ).map((image) => image.url),
   [imageUrl("popular-small.png"), imageUrl("less-popular-large.png")],
-  "TMDB gallery popularity order must win over resolution and primary flags"
+  "TMDB gallery popularity order must win over resolution and primary flags",
 );
 
 const scopedResolution = {
@@ -303,8 +313,15 @@ const scopedResolution = {
     },
   ],
   ids: {
-    anidbIds: [], anilistIds: [], imdbMovieIds: [], imdbShowIds: [], malIds: [],
-    tmdbMovieIds: [], tmdbShowIds: [46260], tvdbMovieIds: [], tvdbShowIds: [],
+    anidbIds: [],
+    anilistIds: [],
+    imdbMovieIds: [],
+    imdbShowIds: [],
+    malIds: [],
+    tmdbMovieIds: [],
+    tmdbShowIds: [46260],
+    tvdbMovieIds: [],
+    tvdbShowIds: [],
   },
   sourceDescriptors: [],
 };
@@ -326,17 +343,17 @@ assert.strictEqual(
         },
       ],
     },
-    false
+    false,
   ).seasonNumber,
   undefined,
-  "ambiguous season scopes must fall back to general TMDB artwork"
+  "ambiguous season scopes must fall back to general TMDB artwork",
 );
 
 const parsedSeasons = parseTmdbSeasonsPage(
   seasonsFixture("it-IT"),
   cheerio,
   "it-IT",
-  46260
+  46260,
 );
 assert.strictEqual(parsedSeasons[0].seasonNumber, 2);
 assert.strictEqual(parsedSeasons[0].year, 2003);
@@ -347,14 +364,14 @@ const italianEpisodes = parseTmdbSeasonEpisodesPage(
   cheerio,
   "it-IT",
   46260,
-  2
+  2,
 );
 const englishEpisodes = parseTmdbSeasonEpisodesPage(
   episodeFixture("en-US"),
   cheerio,
   "en-US",
   46260,
-  2
+  2,
 );
 const mergedEpisodes = mergeTmdbEpisodes([italianEpisodes, englishEpisodes]);
 assert.strictEqual(mergedEpisodes[0].title.value, "L'eremita dei rospi");
@@ -410,14 +427,31 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
         ) {
           return { data: extendedFixture };
         }
-        const imageType = route.match(/\/images\/(logos|posters|backdrops)$/)?.[1];
+        const imageType = route.match(
+          /\/images\/(logos|posters|backdrops)$/,
+        )?.[1];
         if (imageType) return { data: galleryFixture(imageType, locale) };
         if (route === "/tv/46260") {
           const localized = {
             "it-IT": { locale, title: "", overview: "", tagline: "" },
-            "en-US": { locale, title: "Naruto", overview: "English overview", tagline: "" },
-            "ja-JP": { locale, title: "ナルト", overview: "日本語の概要", tagline: "Original tagline" },
-            "xx-XX": { locale, title: "No language title", overview: "", tagline: "" },
+            "en-US": {
+              locale,
+              title: "Naruto",
+              overview: "English overview",
+              tagline: "",
+            },
+            "ja-JP": {
+              locale,
+              title: "ナルト",
+              overview: "日本語の概要",
+              tagline: "Original tagline",
+            },
+            "xx-XX": {
+              locale,
+              title: "No language title",
+              overview: "",
+              tagline: "",
+            },
           }[locale];
           return { data: detailsFixture(localized) };
         }
@@ -441,18 +475,19 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   assert.strictEqual(media.logo, imageUrl("logos-it-it.png"));
   assert.strictEqual(
     calls.some(
-      (url) =>
-        /\/images\/logos\?/.test(url) && url.includes("language=ja-JP")
+      (url) => /\/images\/logos\?/.test(url) && url.includes("language=ja-JP"),
     ),
     false,
-    "TMDB logo lookup must not request the original Japanese locale"
+    "TMDB logo lookup must not request the original Japanese locale",
   );
   assert.strictEqual(media.seasons[0].name.value, "Stagione 2");
   assert.deepStrictEqual(media.crew, []);
   assert.deepStrictEqual(media.videos, []);
   assert.strictEqual(
-    calls.some((url) => /\/(cast|translations|videos|watch|episode_groups)\?/.test(url)),
-    false
+    calls.some((url) =>
+      /\/(cast|translations|videos|watch|episode_groups)\?/.test(url),
+    ),
+    false,
   );
 
   const callsAfterFirstResolution = calls.length;
@@ -511,7 +546,9 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
         const locale = parsed.searchParams.get("language") || "it-IT";
         const route = parsed.pathname;
         if (/\/season\/2$/.test(route)) return { data: episodeFixture(locale) };
-        const imageType = route.match(/\/images\/(logos|posters|backdrops)$/)?.[1];
+        const imageType = route.match(
+          /\/images\/(logos|posters|backdrops)$/,
+        )?.[1];
         if (imageType) return { data: galleryFixture(imageType, locale) };
         if (route === "/tv/46260") {
           return {
@@ -543,12 +580,12 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   });
   assert.strictEqual(
     compactPoster.poster,
-    "https://image.tmdb.org/t/p/w300/posters-it-it.png"
+    "https://image.tmdb.org/t/p/w300/posters-it-it.png",
   );
   assert.strictEqual(
     targetedCalls.some((url) => url.includes("language=en-US")),
     false,
-    "artwork lookup must stop after all Italian fields are resolved"
+    "artwork lookup must stop after all Italian fields are resolved",
   );
   const callsAfterArtwork = targetedCalls.length;
   await resolveTmdbArtworkMetadata({
@@ -586,7 +623,7 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
           assert.notStrictEqual(
             locale,
             "ja-JP",
-            "logo fallback must skip Japanese/original TMDB logos"
+            "logo fallback must skip Japanese/original TMDB logos",
           );
           return {
             data:
@@ -607,11 +644,11 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   });
   assert.strictEqual(
     neutralLogoArtwork.logo,
-    imageUrl("neutral-logo-xx-xx.png")
+    imageUrl("neutral-logo-xx-xx.png"),
   );
   assert.strictEqual(
     neutralLogoCalls.some((url) => url.includes("language=ja-JP")),
-    false
+    false,
   );
 
   const targetedSeason = await resolveTmdbEpisodeSeasonMetadata({
@@ -624,12 +661,12 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   assert.strictEqual(targetedSeason.episodes[0].title.language, "it-IT");
   assert.strictEqual(
     targetedSeason.episodes[0].thumbnail,
-    "https://image.tmdb.org/t/p/w300/episode-53.jpg"
+    "https://image.tmdb.org/t/p/w300/episode-53.jpg",
   );
   assert.strictEqual(
     targetedCalls.some((url) => url.includes("season/2/images/posters")),
     false,
-    "episode lookup must not request seasonal poster galleries"
+    "episode lookup must not request seasonal poster galleries",
   );
 
   const seasonArtworkCalls = [];
@@ -671,13 +708,13 @@ assert.strictEqual(episodeGroups[0].episodeCount, 24);
   });
   assert.strictEqual(
     seasonalArtwork.poster,
-    "https://image.tmdb.org/t/p/w300/season-2-poster-it-it.png"
+    "https://image.tmdb.org/t/p/w300/season-2-poster-it-it.png",
   );
   assert.strictEqual(seasonalArtwork.seasonNumber, 2);
   assert.strictEqual(
     seasonArtworkCalls.some((url) => url.includes("/tv/46260/images/posters")),
     false,
-    "a seasonal poster must avoid the general poster gallery"
+    "a seasonal poster must avoid the general poster gallery",
   );
 
   console.log("animeunity tmdb: OK");

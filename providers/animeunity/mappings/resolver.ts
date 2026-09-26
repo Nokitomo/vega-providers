@@ -75,14 +75,14 @@ function mergeTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
 }
 
 function buildRawTarget(
-  provider: "tmdb_movie" | "tmdb_show",
+  provider: "tmdb_movie" | "tmdb_show" | "tvdb_movie" | "tvdb_show",
   id: number,
   scope?: string,
 ): string {
   return [provider, String(id), scope].filter(Boolean).join(":");
 }
 
-async function resolveAniZipTmdbTargets({
+async function resolveAniZipExternalTargets({
   providerContext,
   anilistId,
   malId,
@@ -100,54 +100,79 @@ async function resolveAniZipTmdbTargets({
       ? target.provider === "tmdb_movie"
       : target.provider === "tmdb_show",
   );
-  if (hasTmdbTarget) return [];
+  const hasTvdbTarget = targets.some((target) =>
+    isMovie
+      ? target.provider === "tvdb_movie"
+      : target.provider === "tvdb_show",
+  );
+  if (hasTmdbTarget && (hasTvdbTarget || isMovie)) return [];
 
   const metadata = await resolveAniZipMetadata({
     providerContext,
     anilistId,
     malId,
   });
-  if (!metadata.tmdbId) return [];
+  const output: AniBridgeTarget[] = [];
 
-  if (isMovie || metadata.mediaType === "movie") {
+  if (
+    !hasTmdbTarget &&
+    metadata.tmdbId &&
+    (isMovie || metadata.mediaType === "movie")
+  ) {
     const raw = buildRawTarget("tmdb_movie", metadata.tmdbId);
-    return [
-      {
-        provider: "tmdb_movie",
-        id: String(metadata.tmdbId),
-        raw,
-        ranges: {},
-      },
-    ];
+    output.push({
+      provider: "tmdb_movie",
+      id: String(metadata.tmdbId),
+      raw,
+      ranges: {},
+    });
   }
 
-  const tvdbTargets = targets.filter(
-    (target) =>
-      target.provider === "tvdb_show" &&
-      (!metadata.tvdbId || target.id === String(metadata.tvdbId)),
-  );
-  if (tvdbTargets.length === 0) {
-    const raw = buildRawTarget("tmdb_show", metadata.tmdbId);
-    return [
-      {
+  if (!hasTvdbTarget && metadata.tvdbId) {
+    const provider =
+      isMovie || metadata.mediaType === "movie" ? "tvdb_movie" : "tvdb_show";
+    const raw = buildRawTarget(provider, metadata.tvdbId);
+    output.push({
+      provider,
+      id: String(metadata.tvdbId),
+      raw,
+      ranges: {},
+    });
+  }
+
+  if (
+    !hasTmdbTarget &&
+    metadata.tmdbId &&
+    !(isMovie || metadata.mediaType === "movie")
+  ) {
+    const tvdbTargets = targets.filter(
+      (target) =>
+        target.provider === "tvdb_show" &&
+        (!metadata.tvdbId || target.id === String(metadata.tvdbId)),
+    );
+    if (tvdbTargets.length === 0) {
+      const raw = buildRawTarget("tmdb_show", metadata.tmdbId);
+      output.push({
         provider: "tmdb_show",
         id: String(metadata.tmdbId),
         raw,
         ranges: {},
-      },
-    ];
+      });
+    } else {
+      tvdbTargets.forEach((target) => {
+        const raw = buildRawTarget("tmdb_show", metadata.tmdbId!, target.scope);
+        output.push({
+          provider: "tmdb_show",
+          id: String(metadata.tmdbId),
+          scope: target.scope,
+          raw,
+          ranges: { ...target.ranges },
+        });
+      });
+    }
   }
 
-  return tvdbTargets.map((target) => {
-    const raw = buildRawTarget("tmdb_show", metadata.tmdbId!, target.scope);
-    return {
-      provider: "tmdb_show",
-      id: String(metadata.tmdbId),
-      scope: target.scope,
-      raw,
-      ranges: { ...target.ranges },
-    };
-  });
+  return output;
 }
 
 export async function resolveAnimeMappings({
@@ -184,7 +209,7 @@ export async function resolveAnimeMappings({
     ? findAniBridgeSourceRecords(index, normalizedAnilistId, normalizedMalId)
     : [];
   let targets = mergeTargets(records.flatMap((record) => record.targets));
-  const aniZipTmdbTargets = await resolveAniZipTmdbTargets({
+  const aniZipTmdbTargets = await resolveAniZipExternalTargets({
     providerContext,
     anilistId: normalizedAnilistId,
     malId: normalizedMalId,
