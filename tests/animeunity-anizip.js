@@ -11,7 +11,12 @@ const {
 } = require("../dist/animeunity/mappings/index.js");
 
 const aniZipPayload = {
-  mappings: { imdb_id: "TT1234567", thetvdb_id: 777 },
+  mappings: {
+    imdb_id: "TT1234567",
+    thetvdb_id: 777,
+    themoviedb_id: "278043",
+    type: "TV",
+  },
   images: [
     { coverType: "Banner", url: "https://img.test/banner.jpg" },
     { coverType: "Fanart", url: "https://img.test/fanart.jpg" },
@@ -34,6 +39,9 @@ const aniZipPayload = {
 
 const parsed = parseAniZipMetadata(aniZipPayload);
 assert.strictEqual(parsed.imdbId, "tt1234567");
+assert.strictEqual(parsed.tvdbId, 777);
+assert.strictEqual(parsed.tmdbId, 278043);
+assert.strictEqual(parsed.mediaType, "series");
 assert.strictEqual(parsed.artwork.fanart, "https://img.test/fanart.jpg");
 assert.strictEqual(parsed.artwork.banner, "https://img.test/banner.jpg");
 assert.strictEqual(parsed.artwork.logo, "https://img.test/logo.png");
@@ -42,7 +50,7 @@ assert.strictEqual(parsed.episodes[0].overview, "English overview");
 assert.strictEqual(
   Object.prototype.hasOwnProperty.call(parsed.episodes[0], "summary"),
   false,
-  "AniZip summary must never enter normalized metadata"
+  "AniZip summary must never enter normalized metadata",
 );
 
 const iconOnlyPayload = {
@@ -61,7 +69,7 @@ const iconOnly = parseAniZipMetadata(iconOnlyPayload);
 assert.strictEqual(
   iconOnly.artwork.logo,
   undefined,
-  "TVDB icon artwork must not be treated as a clear logo"
+  "TVDB icon artwork must not be treated as a clear logo",
 );
 
 const createCache = () => {
@@ -75,7 +83,9 @@ const createCache = () => {
 
 const tmdbDetails = `<!doctype html><html><head><title>The Movie Database</title></head>
   <body><section class="facts left_column"><p><strong>Original Language</strong> Japanese</p></section></body></html>`;
-const tmdbEpisode = ({ complete }) => `<!doctype html><html><head><title>The Movie Database</title></head><body>
+const tmdbEpisode = ({
+  complete,
+}) => `<!doctype html><html><head><title>The Movie Database</title></head><body>
   <div class="episode_list"><div class="card" data-object-id="episode-1">
     ${complete ? '<img class="backdrop" src="https://media.themoviedb.org/t/p/w500/tmdb-episode.jpg">' : ""}
     <a data-episode-number="1" data-episode-id="episode-1"></a>
@@ -87,8 +97,8 @@ function mappingPayload(anilistId, tmdbId) {
   return {
     $meta: { schema_version: "3.0.3" },
     [`anilist:${anilistId}`]: {
-      [`tmdb_show:${tmdbId}:s2`]: { "1": "1" },
-      "tvdb_show:777:s2": { "1": "1" },
+      [`tmdb_show:${tmdbId}:s2`]: { 1: "1" },
+      "tvdb_show:777:s2": { 1: "1" },
     },
   };
 }
@@ -111,7 +121,9 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
         if (url.includes("/info_api/99/1?start_range=0&end_range=31")) {
           return { data: { episodes: [{ id: 9001, number: "1" }] } };
         }
-        if (url.startsWith(`https://www.themoviedb.org/tv/${tmdbId}/season/2?`)) {
+        if (
+          url.startsWith(`https://www.themoviedb.org/tv/${tmdbId}/season/2?`)
+        ) {
           return { data: tmdbEpisode({ complete }) };
         }
         if (url.startsWith(`https://www.themoviedb.org/tv/${tmdbId}?`)) {
@@ -167,14 +179,22 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
     providerContext: directContext,
     anilistId: 100,
   });
-  assert.strictEqual(directCalls, 1, "artwork and episodes must share the cache");
+  assert.strictEqual(
+    directCalls,
+    1,
+    "artwork and episodes must share the cache",
+  );
   await resolveAniZipEpisodeFallbacks({
     providerContext: directContext,
     anilistId: 100,
     sourceRevision: "13",
     requests,
   });
-  assert.strictEqual(directCalls, 2, "a changed source revision must refresh AniZip");
+  assert.strictEqual(
+    directCalls,
+    2,
+    "a changed source revision must refresh AniZip",
+  );
 
   const complete = createEpisodeContext({
     anilistId: 1001,
@@ -190,7 +210,7 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
   assert.strictEqual(
     complete.calls.some((url) => url.startsWith("https://api.ani.zip/")),
     false,
-    "AniZip must not be requested when TMDB has every episode field"
+    "AniZip must not be requested when TMDB has every episode field",
   );
 
   const partial = createEpisodeContext({
@@ -206,12 +226,13 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
   assert.strictEqual(partialEpisodes[0].synopsis, "English overview");
   assert.strictEqual(
     partialEpisodes[0].thumbnail,
-    "https://img.test/episode-1.jpg"
+    "https://img.test/episode-1.jpg",
   );
   assert.strictEqual(
-    partial.calls.filter((url) => url.startsWith("https://api.ani.zip/")).length,
+    partial.calls.filter((url) => url.startsWith("https://api.ani.zip/"))
+      .length,
     1,
-    "all missing episode fields must be resolved with one AniZip request"
+    "all missing episode fields must be resolved with one AniZip request",
   );
 
   console.log("animeunity anizip: OK");

@@ -16,7 +16,7 @@ const { getEpisodes } = require("../dist/animeunity/episodes.js");
 const executeVegaBundle = (fileName) => {
   const moduleCode = fs.readFileSync(
     path.join(__dirname, "..", "dist", "animeunity", fileName),
-    "utf8"
+    "utf8",
   );
   const executionContext = {
     exports: {},
@@ -33,7 +33,7 @@ const executeVegaBundle = (fileName) => {
       const Object = context.Object;
       ${moduleCode}
       return exports;
-    `
+    `,
   )(executionContext);
 };
 
@@ -56,6 +56,10 @@ const fixture = {
     "imdb_movie:tt0275277": {},
     "tmdb_movie:11299": {},
   },
+  "anilist:30": {
+    "mal:30": {},
+    "tvdb_show:78857:s2": { "1-13": "1-13" },
+  },
 };
 
 assert.deepStrictEqual(parseAniBridgeDescriptor("tmdb_show:46260:s2"), {
@@ -71,7 +75,7 @@ const index = parseAniBridgePayload(fixture, 1000);
 assert(index);
 assert.strictEqual(index.schemaVersion, "3.0.3");
 assert.strictEqual(index.generatedOn, "2026-09-24");
-assert.strictEqual(index.records.size, 3);
+assert.strictEqual(index.records.size, 4);
 assert.strictEqual(parseAniBridgePayload("not-json"), null);
 
 assert.deepStrictEqual(mapAniBridgeEpisodeRange("53-104", "1-52", 53), [1]);
@@ -128,17 +132,20 @@ const createContext = (handler) => ({
   assert.deepStrictEqual(series.ids.malIds, [20]);
   assert.deepStrictEqual(series.ids.tmdbShowIds, [46260]);
   assert.deepStrictEqual(series.ids.tvdbShowIds, [78857]);
-  assert.strictEqual(seriesCalls.filter((url) => url === ANIBRIDGE_MAPPINGS_URL).length, 1);
+  assert.strictEqual(
+    seriesCalls.filter((url) => url === ANIBRIDGE_MAPPINGS_URL).length,
+    1,
+  );
   assert.strictEqual(
     seriesCalls.filter((url) => url === PLEXANIBRIDGE_MAPPINGS_URL).length,
-    1
+    1,
   );
 
   const episodeMapping = resolveAniBridgeEpisodeMappings(series, 53);
   assert.strictEqual(episodeMapping.seasonNumber, 2);
   assert.deepStrictEqual(
     episodeMapping.mappings.find(
-      (mapping) => mapping.provider === "tmdb_show" && mapping.id === "46260"
+      (mapping) => mapping.provider === "tmdb_show" && mapping.id === "46260",
     ),
     {
       provider: "tmdb_show",
@@ -146,13 +153,60 @@ const createContext = (handler) => ({
       scope: "s2",
       seasonNumber: 2,
       episodeNumbers: [53],
-    }
+    },
   );
 
   const extra = buildAniBridgeExtra(series);
   assert.strictEqual(extra.mappings.schemaVersion, "3.0.3");
   assert.strictEqual(extra.mappings.imdbSource, "plexanibridge-v2");
-  assert(extra.mappings.targets.some((target) => target.provider === "tmdb_show"));
+  assert(
+    extra.mappings.targets.some((target) => target.provider === "tmdb_show"),
+  );
+
+  const aniZipFallbackCalls = [];
+  const aniZipFallbackContext = createContext(async (url) => {
+    aniZipFallbackCalls.push(url);
+    if (url === ANIBRIDGE_MAPPINGS_URL) return { data: fixture };
+    if (String(url).startsWith("https://api.ani.zip/mappings?")) {
+      return {
+        data: {
+          mappings: {
+            anilist_id: 30,
+            mal_id: 30,
+            type: "TV",
+            thetvdb_id: 78857,
+            themoviedb_id: "46260",
+          },
+        },
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  });
+  const aniZipFallback = await resolveAnimeMappings({
+    providerContext: aniZipFallbackContext,
+    anilistId: 30,
+    malId: 30,
+    isMovie: false,
+    includeLegacyImdb: false,
+  });
+  assert.deepStrictEqual(aniZipFallback.ids.tmdbShowIds, [46260]);
+  assert.deepStrictEqual(
+    aniZipFallback.targets.find(
+      (target) => target.provider === "tmdb_show" && target.id === "46260",
+    ),
+    {
+      provider: "tmdb_show",
+      id: "46260",
+      scope: "s2",
+      raw: "tmdb_show:46260:s2",
+      ranges: { "1-13": "1-13" },
+    },
+  );
+  assert(
+    aniZipFallbackCalls.some((url) =>
+      String(url).startsWith("https://api.ani.zip/mappings?"),
+    ),
+  );
 
   const episodeCalls = [];
   const episodeContext = createContext(async (url) => {
@@ -203,7 +257,7 @@ const createContext = (handler) => ({
   assert.strictEqual(secondVegaEpisodes[0].seasonNumber, 2);
   assert.strictEqual(
     vegaCalls.filter((url) => url === ANIBRIDGE_MAPPINGS_URL).length,
-    1
+    1,
   );
 
   console.log("animeunity anibridge: OK");

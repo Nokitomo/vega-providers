@@ -1,11 +1,8 @@
 import { ExternalIdMapping, Info, ProviderContext } from "../../types";
+import { resolveAniZipMetadata } from "../anizip/client";
 import { getAniBridgeIndex, findAniBridgeSourceRecords } from "./anibridge";
 import { resolveLegacyImdbId } from "./legacyImdb";
-import {
-  AniBridgeIds,
-  AniBridgeTarget,
-  AnimeMappingResolution,
-} from "./types";
+import { AniBridgeIds, AniBridgeTarget, AnimeMappingResolution } from "./types";
 
 function emptyIds(): AniBridgeIds {
   return {
@@ -37,7 +34,8 @@ function addTargetId(ids: AniBridgeIds, target: AniBridgeTarget) {
       addNumericId(ids.anilistIds, target.id);
       break;
     case "imdb_movie":
-      if (!ids.imdbMovieIds.includes(target.id)) ids.imdbMovieIds.push(target.id);
+      if (!ids.imdbMovieIds.includes(target.id))
+        ids.imdbMovieIds.push(target.id);
       break;
     case "imdb_show":
       if (!ids.imdbShowIds.includes(target.id)) ids.imdbShowIds.push(target.id);
@@ -72,8 +70,84 @@ function mergeTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
     merged.set(key, { ...target, ranges: { ...target.ranges } });
   });
   return Array.from(merged.values()).sort((left, right) =>
-    left.raw.localeCompare(right.raw)
+    left.raw.localeCompare(right.raw),
   );
+}
+
+function buildRawTarget(
+  provider: "tmdb_movie" | "tmdb_show",
+  id: number,
+  scope?: string,
+): string {
+  return [provider, String(id), scope].filter(Boolean).join(":");
+}
+
+async function resolveAniZipTmdbTargets({
+  providerContext,
+  anilistId,
+  malId,
+  isMovie,
+  targets,
+}: {
+  providerContext: ProviderContext;
+  anilistId?: number;
+  malId?: number;
+  isMovie: boolean;
+  targets: AniBridgeTarget[];
+}): Promise<AniBridgeTarget[]> {
+  const hasTmdbTarget = targets.some((target) =>
+    isMovie
+      ? target.provider === "tmdb_movie"
+      : target.provider === "tmdb_show",
+  );
+  if (hasTmdbTarget) return [];
+
+  const metadata = await resolveAniZipMetadata({
+    providerContext,
+    anilistId,
+    malId,
+  });
+  if (!metadata.tmdbId) return [];
+
+  if (isMovie || metadata.mediaType === "movie") {
+    const raw = buildRawTarget("tmdb_movie", metadata.tmdbId);
+    return [
+      {
+        provider: "tmdb_movie",
+        id: String(metadata.tmdbId),
+        raw,
+        ranges: {},
+      },
+    ];
+  }
+
+  const tvdbTargets = targets.filter(
+    (target) =>
+      target.provider === "tvdb_show" &&
+      (!metadata.tvdbId || target.id === String(metadata.tvdbId)),
+  );
+  if (tvdbTargets.length === 0) {
+    const raw = buildRawTarget("tmdb_show", metadata.tmdbId);
+    return [
+      {
+        provider: "tmdb_show",
+        id: String(metadata.tmdbId),
+        raw,
+        ranges: {},
+      },
+    ];
+  }
+
+  return tvdbTargets.map((target) => {
+    const raw = buildRawTarget("tmdb_show", metadata.tmdbId!, target.scope);
+    return {
+      provider: "tmdb_show",
+      id: String(metadata.tmdbId),
+      scope: target.scope,
+      raw,
+      ranges: { ...target.ranges },
+    };
+  });
 }
 
 export async function resolveAnimeMappings({
@@ -109,7 +183,17 @@ export async function resolveAnimeMappings({
   const records = index
     ? findAniBridgeSourceRecords(index, normalizedAnilistId, normalizedMalId)
     : [];
-  const targets = mergeTargets(records.flatMap((record) => record.targets));
+  let targets = mergeTargets(records.flatMap((record) => record.targets));
+  const aniZipTmdbTargets = await resolveAniZipTmdbTargets({
+    providerContext,
+    anilistId: normalizedAnilistId,
+    malId: normalizedMalId,
+    isMovie,
+    targets,
+  });
+  if (aniZipTmdbTargets.length > 0) {
+    targets = mergeTargets([...targets, ...aniZipTmdbTargets]);
+  }
   const ids = emptyIds();
   if (normalizedAnilistId) ids.anilistIds.push(normalizedAnilistId);
   if (normalizedMalId) ids.malIds.push(normalizedMalId);
@@ -118,8 +202,8 @@ export async function resolveAnimeMappings({
     values.sort((a: any, b: any) =>
       typeof a === "number" && typeof b === "number"
         ? a - b
-        : String(a).localeCompare(String(b))
-    )
+        : String(a).localeCompare(String(b)),
+    ),
   );
 
   const mappedImdbIds = isMovie ? ids.imdbMovieIds : ids.imdbShowIds;
@@ -149,7 +233,7 @@ export async function resolveAnimeMappings({
 }
 
 export function buildAniBridgeExtra(
-  resolution: AnimeMappingResolution
+  resolution: AnimeMappingResolution,
 ): Pick<NonNullable<Info["extra"]>, "ids" | "mappings"> {
   const targets: ExternalIdMapping[] = resolution.targets.map((target) => ({
     provider: target.provider,

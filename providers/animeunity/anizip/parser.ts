@@ -28,22 +28,33 @@ function normalizeImdbId(value: unknown): string | undefined {
   return /^tt\d{5,}$/.test(text) ? text : undefined;
 }
 
+function normalizeMediaType(value: unknown): "movie" | "series" | undefined {
+  const text = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (["movie", "film"].includes(text)) return "movie";
+  if (["tv", "series", "show"].includes(text)) return "series";
+  return undefined;
+}
+
 export function parseAniZipArtwork(payload: any): AniZipArtwork {
   const images = Array.isArray(payload?.images) ? payload.images : [];
   const findImage = (type: string): string | undefined => {
     const match = images.find(
       (image: any) =>
-        String(image?.coverType || "").trim().toLowerCase() ===
-        type.toLowerCase()
+        String(image?.coverType || "")
+          .trim()
+          .toLowerCase() === type.toLowerCase(),
     );
     return normalizeHttpsUrl(match?.url);
   };
 
   return {
-    logo:
-      [findImage("Clearlogo"), findImage("Clear Logo"), findImage("Logo")].find(
-        (url) => !!url && !isTvdbIconUrl(url)
-      ),
+    logo: [
+      findImage("Clearlogo"),
+      findImage("Clear Logo"),
+      findImage("Logo"),
+    ].find((url) => !!url && !isTvdbIconUrl(url)),
     poster: findImage("Poster"),
     fanart: findImage("Fanart"),
     banner: findImage("Banner"),
@@ -53,7 +64,7 @@ export function parseAniZipArtwork(payload: any): AniZipArtwork {
 function parseAniZipEpisode(value: any): AniZipEpisode | null {
   const episodeNumber = normalizePositiveNumber(value?.episodeNumber);
   const absoluteEpisodeNumber = normalizePositiveNumber(
-    value?.absoluteEpisodeNumber
+    value?.absoluteEpisodeNumber,
   );
   if (episodeNumber == null && absoluteEpisodeNumber == null) return null;
 
@@ -76,6 +87,9 @@ export function parseAniZipMetadata(payload: any): AniZipMetadata {
 
   return {
     imdbId: normalizeImdbId(payload?.mappings?.imdb_id),
+    tmdbId: normalizePositiveNumber(payload?.mappings?.themoviedb_id),
+    tvdbId: normalizePositiveNumber(payload?.mappings?.thetvdb_id),
+    mediaType: normalizeMediaType(payload?.mappings?.type),
     artwork: parseAniZipArtwork(payload),
     episodes,
   };

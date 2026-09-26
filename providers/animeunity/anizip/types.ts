@@ -20,6 +20,9 @@ export type AniZipEpisode = {
 
 export type AniZipMetadata = {
   imdbId?: string;
+  tmdbId?: number;
+  tvdbId?: number;
+  mediaType?: "movie" | "series";
   artwork: AniZipArtwork;
   episodes: AniZipEpisode[];
 };
