@@ -637,6 +637,12 @@ export const getMeta = async function ({
       tagKeys: Object.keys(tagKeys).length > 0 ? tagKeys : undefined,
       cast,
       episodesCount,
+      extra: {
+        artworkSources: {
+          poster: image ? "provider" : undefined,
+          background: background ? "provider" : undefined,
+        },
+      },
       related,
       linkList,
     };

@@ -61,6 +61,18 @@ export interface Stream {
 }
 
 // getInfo
+export type ArtworkSource =
+  | "tmdb"
+  | "cinemeta"
+  | "provider"
+  | "anizip"
+  | "tvdb";
+
+export type ArtworkCandidate = {
+  source: ArtworkSource;
+  url: string;
+};
+
 export interface Info {
   titleKey?: string;
   titleParams?: I18nParams;
@@ -125,9 +137,14 @@ export interface Info {
       alwaysHome?: boolean;
     };
     artworkSources?: {
-      logo?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
-      poster?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
-      background?: "tmdb" | "cinemeta" | "provider" | "anizip" | "tvdb";
+      logo?: ArtworkSource;
+      poster?: ArtworkSource;
+      background?: ArtworkSource;
+    };
+    artworkCandidates?: {
+      logo?: ArtworkCandidate[];
+      poster?: ArtworkCandidate[];
+      background?: ArtworkCandidate[];
     };
     meta?: {
       day?: string;

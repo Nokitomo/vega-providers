@@ -114,6 +114,12 @@ banner, TMDB, Cinemeta, AniZip Fanart, then AniZip Banner. External metadata
 uses persistent cache entries with bounded refresh windows, and AniZip episode
 data is refreshed early when the provider episode count changes.
 
+StreamingUnity keeps provider poster/background artwork first, then exposes
+TMDB and TVDB candidates. Logos intentionally use TMDB, then TVDB,
+then the provider candidate; Vega inserts Cinemeta before the provider logo.
+The returned `extra.artworkSources` value always identifies the selected URL,
+while `extra.artworkCandidates` preserves every available ordered fallback.
+
 The reusable resolver still supports complete title metadata on demand by
 calling `resolveTmdbMediaMetadata` with `includeExtended: true`. Season artwork
 and episode lists are loaded only when that season is requested, and all TMDB

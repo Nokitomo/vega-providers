@@ -52,6 +52,22 @@ const buildContext = () => {
           }),
         };
       }
+      if (
+        url ===
+        "https://www.themoviedb.org/movie/9001?language=it-IT"
+      ) {
+        return {
+          data: `<!doctype html><html><head><title>The Movie Database</title><script type="application/ld+json">{"@type":"Movie","name":"Provider Movie"}</script></head><body></body></html>`,
+        };
+      }
+      if (
+        url ===
+        "https://www.themoviedb.org/movie/9001/images/logos?language=it-IT"
+      ) {
+        return {
+          data: `<!doctype html><html><head><title>The Movie Database</title></head><body><li class="card" data-image-id="tmdb-logo"><div class="image_content"><a href="https://image.tmdb.org/t/p/original/tmdb-logo.png"><img src="https://image.tmdb.org/t/p/w500/tmdb-logo.png" /></a></div><input data-language="it" /></li></body></html>`,
+        };
+      }
       throw new Error(`Unexpected request: ${url}`);
     },
   };
@@ -81,26 +97,50 @@ const buildContext = () => {
   );
   assert.strictEqual(
     info.logo,
-    "https://cdn.streamingunity.test/images/provider-logo.png",
+    "https://image.tmdb.org/t/p/original/tmdb-logo.png",
   );
   assert.strictEqual(
     info.background,
     "https://cdn.streamingunity.test/images/provider-background.jpg",
   );
   assert.deepStrictEqual(info.extra.artworkSources, {
-    logo: "provider",
+    logo: "tmdb",
     poster: "provider",
     background: "provider",
   });
-  assert.strictEqual(
-    context.requests.filter(
-      (url) =>
-        url.includes("themoviedb.org") ||
-        url.includes("thetvdb.com") ||
-        url.includes("query.wikidata.org"),
-    ).length,
-    0,
-    "TMDB/TVDB/Wikidata must not be requested when provider metadata is complete",
+  assert.deepStrictEqual(info.extra.artworkCandidates.logo, [
+    {
+      source: "tmdb",
+      url: "https://image.tmdb.org/t/p/original/tmdb-logo.png",
+    },
+    {
+      source: "provider",
+      url: "https://cdn.streamingunity.test/images/provider-logo.png",
+    },
+  ]);
+  assert.deepStrictEqual(info.extra.artworkCandidates.poster, [
+    {
+      source: "provider",
+      url: "https://cdn.streamingunity.test/images/provider-poster.jpg",
+    },
+  ]);
+  assert.deepStrictEqual(info.extra.artworkCandidates.background, [
+    {
+      source: "provider",
+      url: "https://cdn.streamingunity.test/images/provider-background.jpg",
+    },
+  ]);
+  const externalRequests = context.requests.filter(
+    (url) =>
+      url.includes("themoviedb.org") ||
+      url.includes("thetvdb.com") ||
+      url.includes("query.wikidata.org"),
+  );
+  assert.ok(
+    externalRequests.some((url) =>
+      url.includes("themoviedb.org/movie/9001/images/logos"),
+    ),
+    "TMDB logo artwork must be requested ahead of the provider logo",
   );
 
   console.log("streamingunity meta fallbacks: OK");

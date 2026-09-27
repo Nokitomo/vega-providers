@@ -1,4 +1,4 @@
-import { Info, Link, ProviderContext } from "../types";
+import { ArtworkCandidate, Info, Link, ProviderContext } from "../types";
 import {
   DEFAULT_CDN_URL,
   DEFAULT_LOCALE,
@@ -181,83 +181,105 @@ const resolveExternalFallbackArtwork = async ({
     poster?: "provider" | "tmdb" | "tvdb";
     background?: "provider" | "tmdb" | "tvdb";
   };
+  candidates: {
+    logo: ArtworkCandidate[];
+    poster: ArtworkCandidate[];
+    background: ArtworkCandidate[];
+  };
 }> => {
-  const sources: {
-    logo?: "provider" | "tmdb" | "tvdb";
-    poster?: "provider" | "tmdb" | "tvdb";
-    background?: "provider" | "tmdb" | "tvdb";
-  } = {
-    logo: hasText(logo) ? "provider" : undefined,
-    poster: hasText(poster) ? "provider" : undefined,
-    background: hasText(background) ? "provider" : undefined,
-  };
-  let resolvedLogo = logo;
-  let resolvedPoster = poster;
-  let resolvedBackground = background;
-
-  const missingFields = (): TmdbArtworkField[] => {
-    const fields: TmdbArtworkField[] = [];
-    if (!hasText(resolvedLogo)) fields.push("logo");
-    if (!hasText(resolvedPoster)) fields.push("poster");
-    if (!hasText(resolvedBackground)) fields.push("background");
-    return fields;
-  };
-
   const tmdbId = toNumber(title?.tmdb_id);
   const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
-  const tmdbFields = missingFields();
-  if (tmdbId && tmdbFields.length > 0) {
-    const tmdb = await resolveTmdbArtworkMetadata({
-      providerContext,
-      id: tmdbId,
-      type: tmdbType,
-      fields: tmdbFields,
-    });
-    if (!hasText(resolvedLogo) && hasText(tmdb?.logo)) {
-      resolvedLogo = tmdb.logo;
-      sources.logo = "tmdb";
-    }
-    if (!hasText(resolvedPoster) && hasText(tmdb?.poster)) {
-      resolvedPoster = tmdb.poster;
-      sources.poster = "tmdb";
-    }
-    if (!hasText(resolvedBackground) && hasText(tmdb?.background)) {
-      resolvedBackground = tmdb.background;
-      sources.background = "tmdb";
-    }
-  }
+  const artworkFields: TmdbArtworkField[] = ["logo", "poster", "background"];
+  const tmdbPromise = tmdbId
+    ? resolveTmdbArtworkMetadata({
+        providerContext,
+        id: tmdbId,
+        type: tmdbType,
+        fields: artworkFields,
+      })
+    : null;
 
   let resolvedTvdbId = tvdbId || resolveStreamingUnityTvdbId(title, type);
-  const tvdbFields = missingFields();
-  if (!resolvedTvdbId && tvdbFields.length > 0 && resolveMissingExternalIds) {
-    resolvedTvdbId = (await resolveMissingExternalIds()).tvdbId;
-  }
-  if (resolvedTvdbId && tvdbFields.length > 0) {
-    const tvdb = await resolveTvdbArtworkMetadata({
-      providerContext,
-      tvdbId: resolvedTvdbId,
-      mediaType: type === "series" ? "series" : "movie",
-      fields: tvdbFields,
+  const resolvedIdsPromise =
+    !resolvedTvdbId && resolveMissingExternalIds
+      ? resolveMissingExternalIds()
+      : null;
+  const tvdbPromise = resolvedTvdbId
+    ? resolveTvdbArtworkMetadata({
+        providerContext,
+        tvdbId: resolvedTvdbId,
+        mediaType: type === "series" ? "series" : "movie",
+        fields: artworkFields,
+      })
+    : null;
+  const [tmdb, resolvedIds, initialTvdb] = await Promise.all([
+    tmdbPromise,
+    resolvedIdsPromise,
+    tvdbPromise,
+  ]);
+  resolvedTvdbId = resolvedTvdbId || resolvedIds?.tvdbId;
+  const tvdb = tvdbPromise
+    ? initialTvdb
+    : resolvedTvdbId
+      ? await resolveTvdbArtworkMetadata({
+          providerContext,
+          tvdbId: resolvedTvdbId,
+          mediaType: type === "series" ? "series" : "movie",
+          fields: artworkFields,
+        })
+      : null;
+
+  const buildCandidates = (
+    values: Array<{ source: ArtworkCandidate["source"]; url?: string }>
+  ): ArtworkCandidate[] => {
+    const seen = new Set<string>();
+    return values.flatMap(({ source, url }) => {
+      const normalized = String(url || "").trim();
+      if (!normalized || seen.has(normalized)) return [];
+      seen.add(normalized);
+      return [{ source, url: normalized }];
     });
-    if (!hasText(resolvedLogo) && hasText(tvdb?.logo)) {
-      resolvedLogo = tvdb.logo;
-      sources.logo = "tvdb";
-    }
-    if (!hasText(resolvedPoster) && hasText(tvdb?.poster)) {
-      resolvedPoster = tvdb.poster;
-      sources.poster = "tvdb";
-    }
-    if (!hasText(resolvedBackground) && hasText(tvdb?.background)) {
-      resolvedBackground = tvdb.background;
-      sources.background = "tvdb";
-    }
-  }
+  };
+
+  const candidates = {
+    logo: buildCandidates([
+      { source: "tmdb", url: tmdb?.logo },
+      { source: "tvdb", url: tvdb?.logo },
+      { source: "provider", url: logo },
+    ]),
+    poster: buildCandidates([
+      { source: "provider", url: poster },
+      { source: "tmdb", url: tmdb?.poster },
+      { source: "tvdb", url: tvdb?.poster },
+    ]),
+    background: buildCandidates([
+      { source: "provider", url: background },
+      { source: "tmdb", url: tmdb?.background },
+      { source: "tvdb", url: tvdb?.background },
+    ]),
+  };
+  const resolvedLogo = candidates.logo[0];
+  const resolvedPoster = candidates.poster[0];
+  const resolvedBackground = candidates.background[0];
 
   return {
-    logo: resolvedLogo,
-    poster: resolvedPoster,
-    background: resolvedBackground,
-    sources,
+    logo: resolvedLogo?.url,
+    poster: resolvedPoster?.url,
+    background: resolvedBackground?.url,
+    sources: {
+      logo: resolvedLogo?.source as "provider" | "tmdb" | "tvdb" | undefined,
+      poster: resolvedPoster?.source as
+        | "provider"
+        | "tmdb"
+        | "tvdb"
+        | undefined,
+      background: resolvedBackground?.source as
+        | "provider"
+        | "tmdb"
+        | "tvdb"
+        | undefined,
+    },
+    candidates,
   };
 };
 
@@ -1027,6 +1049,7 @@ export const getMeta = async function ({
         },
         mappings: aniBridgeExtra.mappings,
         artworkSources: fallbackArtwork.sources,
+        artworkCandidates: fallbackArtwork.candidates,
         meta: {
           status: title?.status || undefined,
           type: title?.type || undefined,
