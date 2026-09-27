@@ -97,6 +97,8 @@ export interface Info {
       tmdbShowIds?: number[];
       tvdbMovieIds?: number[];
       tvdbShowIds?: number[];
+      wikidataIds?: string[];
+      traktSlugs?: string[];
       crunchyId?: number | string;
       disneyId?: number | string;
       netflixId?: number | string;

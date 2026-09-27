@@ -94,10 +94,13 @@ const buildContext = () => {
   });
   assert.strictEqual(
     context.requests.filter(
-      (url) => url.includes("themoviedb.org") || url.includes("thetvdb.com"),
+      (url) =>
+        url.includes("themoviedb.org") ||
+        url.includes("thetvdb.com") ||
+        url.includes("query.wikidata.org"),
     ).length,
     0,
-    "TMDB/TVDB must not be requested when provider metadata is complete",
+    "TMDB/TVDB/Wikidata must not be requested when provider metadata is complete",
   );
 
   console.log("streamingunity meta fallbacks: OK");

@@ -2,8 +2,12 @@ const assert = require("assert");
 const cheerio = require("cheerio");
 
 const episodesModule = require("../dist/streamingunity/episodes.js");
+const {
+  ANIBRIDGE_MAPPINGS_URL,
+} = require("../dist/animeunity/mappings/index.js");
 
 const BASE_URL = "https://streamingunity.test";
+const WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql";
 
 const inertiaHtml = (props) => {
   const encoded = JSON.stringify({ props })
@@ -204,6 +208,179 @@ const buildTvdbFallbackContext = () => {
   };
 };
 
+const buildReverseAniBridgeTvdbContext = () => {
+  const requests = [];
+  const title = {
+    id: 30,
+    tmdb_id: 5003,
+    imdb_id: "",
+    genres: [{ name: "Anime" }],
+  };
+  const loadedSeason = {
+    number: 1,
+    episodes: [
+      {
+        id: 302,
+        number: 2,
+        name: "",
+        plot: "",
+        images: [],
+        translations: [],
+      },
+    ],
+  };
+  const axios = {
+    get: async (url) => {
+      requests.push(url);
+      if (url === `${BASE_URL}/it/titles/30-fixture/season-1`) {
+        return {
+          data: inertiaHtml({
+            title,
+            loadedSeason,
+            cdn_url: "https://cdn.streamingunity.test",
+          }),
+        };
+      }
+      if (url.startsWith("https://www.themoviedb.org/tv/5003/season/1?")) {
+        return { data: emptyTmdbSeason };
+      }
+      if (url.startsWith("https://www.themoviedb.org/tv/5003?")) {
+        return { data: tmdbDetails };
+      }
+      if (url === ANIBRIDGE_MAPPINGS_URL) {
+        return {
+          data: {
+            $meta: { schema_version: "3.0.3", generated_on: "2026-09-26" },
+            "anilist:303": {
+              "tmdb_show:5003:s1": { "1-12": "1-12" },
+              "tvdb_show:7003:s1": { "1-12": "1-12" },
+            },
+          },
+        };
+      }
+      if (url === "https://www.thetvdb.com/?id=7003&tab=series") {
+        return {
+          data: tvdbSeriesPage,
+          request: {
+            res: {
+              responseUrl: "https://www.thetvdb.com/series/tvdb-test-show",
+            },
+          },
+        };
+      }
+      if (
+        url ===
+        "https://www.thetvdb.com/series/tvdb-test-show/seasons/official/1"
+      ) {
+        return { data: tvdbSeasonPage, request: { res: { responseUrl: url } } };
+      }
+      if (url === "https://www.thetvdb.com/episodes/222") {
+        return { data: tvdbEpisodePage, request: { res: { responseUrl: url } } };
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+  };
+  return {
+    requests,
+    providerContext: {
+      axios,
+      cheerio,
+      commonHeaders: { "User-Agent": "StreamingUnityEpisodesFixture/1.0" },
+      getBaseUrl: async () => BASE_URL,
+    },
+  };
+};
+
+const buildWikidataTvdbContext = () => {
+  const requests = [];
+  const title = {
+    id: 40,
+    tmdb_id: 5004,
+    imdb_id: "",
+    genres: [{ name: "Drama" }],
+  };
+  const loadedSeason = {
+    number: 1,
+    episodes: [
+      {
+        id: 402,
+        number: 2,
+        name: "",
+        plot: "",
+        images: [],
+        translations: [],
+      },
+    ],
+  };
+  const axios = {
+    get: async (url) => {
+      requests.push(url);
+      if (url === `${BASE_URL}/it/titles/40-fixture/season-1`) {
+        return {
+          data: inertiaHtml({
+            title,
+            loadedSeason,
+            cdn_url: "https://cdn.streamingunity.test",
+          }),
+        };
+      }
+      if (url.startsWith("https://www.themoviedb.org/tv/5004/season/1?")) {
+        return { data: emptyTmdbSeason };
+      }
+      if (url.startsWith("https://www.themoviedb.org/tv/5004?")) {
+        return { data: tmdbDetails };
+      }
+      if (url === WIKIDATA_SPARQL_URL) {
+        return {
+          data: {
+            results: {
+              bindings: [
+                {
+                  item: {
+                    value: "http://www.wikidata.org/entity/Q5004",
+                  },
+                  imdb: { value: "tt0050040" },
+                  tvdbSeries: { value: "7004" },
+                  trakt: { value: "wikidata-test-show" },
+                },
+              ],
+            },
+          },
+        };
+      }
+      if (url === "https://www.thetvdb.com/?id=7004&tab=series") {
+        return {
+          data: tvdbSeriesPage,
+          request: {
+            res: {
+              responseUrl: "https://www.thetvdb.com/series/tvdb-test-show",
+            },
+          },
+        };
+      }
+      if (
+        url ===
+        "https://www.thetvdb.com/series/tvdb-test-show/seasons/official/1"
+      ) {
+        return { data: tvdbSeasonPage, request: { res: { responseUrl: url } } };
+      }
+      if (url === "https://www.thetvdb.com/episodes/222") {
+        return { data: tvdbEpisodePage, request: { res: { responseUrl: url } } };
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+  };
+  return {
+    requests,
+    providerContext: {
+      axios,
+      cheerio,
+      commonHeaders: { "User-Agent": "StreamingUnityEpisodesFixture/1.0" },
+      getBaseUrl: async () => BASE_URL,
+    },
+  };
+};
+
 (async () => {
   const context = buildContext();
   const episodes = await episodesModule.getEpisodes({
@@ -249,6 +426,48 @@ const buildTvdbFallbackContext = () => {
   assert(
     tvdbContext.requests.some((url) => url.includes("thetvdb.com")),
     "TVDB should be requested when TMDB still misses episode metadata",
+  );
+
+  const reverseContext = buildReverseAniBridgeTvdbContext();
+  const reverseEpisodes = await episodesModule.getEpisodes({
+    url: `${BASE_URL}/it/titles/30-fixture/season-1`,
+    providerContext: reverseContext.providerContext,
+  });
+  assert.strictEqual(reverseEpisodes.length, 1);
+  assert.strictEqual(reverseEpisodes[0].title, "Titolo TVDB 2");
+  assert.strictEqual(reverseEpisodes[0].synopsis, "Sinossi TVDB 2");
+  assert.strictEqual(
+    reverseEpisodes[0].thumbnail,
+    "https://artworks.thetvdb.com/banners/v4/episode/222/thumb.jpg",
+  );
+  assert(
+    reverseContext.requests.includes(ANIBRIDGE_MAPPINGS_URL),
+    "AniBridge reverse lookup should run when an anime-like StreamingUnity title lacks TVDB",
+  );
+  assert(
+    reverseContext.requests.some((url) => url.includes("thetvdb.com")),
+    "TVDB should be requested through the AniBridge reverse TVDB id",
+  );
+
+  const wikidataContext = buildWikidataTvdbContext();
+  const wikidataEpisodes = await episodesModule.getEpisodes({
+    url: `${BASE_URL}/it/titles/40-fixture/season-1`,
+    providerContext: wikidataContext.providerContext,
+  });
+  assert.strictEqual(wikidataEpisodes.length, 1);
+  assert.strictEqual(wikidataEpisodes[0].title, "Titolo TVDB 2");
+  assert.strictEqual(wikidataEpisodes[0].synopsis, "Sinossi TVDB 2");
+  assert(
+    wikidataContext.requests.includes(WIKIDATA_SPARQL_URL),
+    "Wikidata should run for non-anime StreamingUnity titles that lack TVDB",
+  );
+  assert(
+    !wikidataContext.requests.includes(ANIBRIDGE_MAPPINGS_URL),
+    "AniBridge reverse lookup should stay anime-only",
+  );
+  assert(
+    wikidataContext.requests.some((url) => url.includes("thetvdb.com")),
+    "TVDB should be requested through the Wikidata TVDB id",
   );
 
   console.log("streamingunity episodes: OK");

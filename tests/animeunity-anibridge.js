@@ -10,6 +10,7 @@ const {
   parseAniBridgePayload,
   resolveAniBridgeEpisodeMappings,
   resolveAnimeMappings,
+  resolveExternalAnimeMappings,
 } = require("../dist/animeunity/mappings/index.js");
 const { getEpisodes } = require("../dist/animeunity/episodes.js");
 
@@ -128,6 +129,7 @@ const createContext = (handler) => ({
   });
   assert.strictEqual(series.imdbId, "tt0409591");
   assert.strictEqual(series.imdbSource, "plexanibridge-v2");
+  assert.strictEqual(series.lookupSource, "anilist-mal");
   assert.deepStrictEqual(series.ids.anilistIds, [20]);
   assert.deepStrictEqual(series.ids.malIds, [20]);
   assert.deepStrictEqual(series.ids.tmdbShowIds, [46260]);
@@ -138,6 +140,44 @@ const createContext = (handler) => ({
   );
   assert.strictEqual(
     seriesCalls.filter((url) => url === PLEXANIBRIDGE_MAPPINGS_URL).length,
+    1,
+  );
+
+  const reverseCalls = [];
+  const reverseContext = createContext(async (url) => {
+    reverseCalls.push(url);
+    if (url === ANIBRIDGE_MAPPINGS_URL) return { data: fixture };
+    if (url === PLEXANIBRIDGE_MAPPINGS_URL) {
+      return {
+        data: {
+          20: { anilist_id: 20, mal_id: 20, imdb_id: "tt0409591" },
+        },
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  });
+  const reverse = await resolveExternalAnimeMappings({
+    providerContext: reverseContext,
+    tmdbId: 46260,
+    isMovie: false,
+  });
+  assert.strictEqual(reverse.lookupSource, "external-reverse");
+  assert.strictEqual(reverse.imdbId, "tt0409591");
+  assert.strictEqual(reverse.imdbSource, "plexanibridge-v2");
+  assert.deepStrictEqual(reverse.ids.anilistIds, [20]);
+  assert.deepStrictEqual(reverse.ids.malIds, [20]);
+  assert.deepStrictEqual(reverse.ids.tmdbShowIds, [46260]);
+  assert.deepStrictEqual(reverse.ids.tvdbShowIds, [78857]);
+  assert(
+    reverse.targets.some(
+      (target) =>
+        target.provider === "anilist" &&
+        target.id === "20" &&
+        target.ranges["53-104"] === "53-104",
+    ),
+  );
+  assert.strictEqual(
+    reverseCalls.filter((url) => url === PLEXANIBRIDGE_MAPPINGS_URL).length,
     1,
   );
 

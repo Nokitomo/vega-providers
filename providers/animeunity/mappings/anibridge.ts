@@ -5,6 +5,7 @@ import {
 } from "./descriptors";
 import { getProviderRuntimeCache } from "./runtimeCache";
 import {
+  AniBridgeDescriptor,
   AniBridgeIndex,
   AniBridgeSourceRecord,
   AniBridgeTarget,
@@ -66,10 +67,7 @@ export function parseAniBridgePayload(
   Object.entries(root).forEach(([sourceValue, rawTargets]) => {
     if (sourceValue.startsWith("$")) return;
     const source = parseAniBridgeDescriptor(sourceValue);
-    if (
-      !source ||
-      (source.provider !== "anilist" && source.provider !== "mal")
-    ) {
+    if (!source) {
       return;
     }
     if (
@@ -145,11 +143,127 @@ export function findAniBridgeSourceRecords(
   anilistId?: number,
   malId?: number
 ): AniBridgeSourceRecord[] {
-  return [
+  return findAniBridgeRecordsByDescriptors(index, [
     buildAniBridgeDescriptor("anilist", anilistId),
     buildAniBridgeDescriptor("mal", malId),
-  ]
+  ]);
+}
+
+function descriptorMatchesQuery(
+  descriptor: AniBridgeDescriptor,
+  query: AniBridgeDescriptor
+): boolean {
+  if (descriptor.provider !== query.provider || descriptor.id !== query.id) {
+    return false;
+  }
+  return !query.scope || descriptor.scope === query.scope;
+}
+
+function invertRanges(ranges: Record<string, string>): Record<string, string> {
+  const output: Record<string, string> = {};
+  Object.entries(ranges).forEach(([sourceRange, targetRange]) => {
+    if (sourceRange && targetRange) output[targetRange] = sourceRange;
+  });
+  return output;
+}
+
+function composeReverseRanges(
+  queryTarget: AniBridgeTarget,
+  siblingTarget: AniBridgeTarget
+): Record<string, string> {
+  const output: Record<string, string> = {};
+  Object.entries(siblingTarget.ranges).forEach(([sourceRange, siblingRange]) => {
+    const queryRange = queryTarget.ranges[sourceRange];
+    if (queryRange && siblingRange) output[queryRange] = siblingRange;
+  });
+  return output;
+}
+
+function targetFromDescriptor(
+  descriptor: AniBridgeDescriptor,
+  ranges: Record<string, string> = {}
+): AniBridgeTarget {
+  return {
+    ...descriptor,
+    ranges,
+  };
+}
+
+function mergeRecordTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
+  const merged = new Map<string, AniBridgeTarget>();
+  targets.forEach((target) => {
+    const key = `${target.provider}:${target.id}:${target.scope || ""}`;
+    const current = merged.get(key);
+    if (current) {
+      current.ranges = { ...current.ranges, ...target.ranges };
+      return;
+    }
+    merged.set(key, { ...target, ranges: { ...target.ranges } });
+  });
+  return Array.from(merged.values()).sort((left, right) =>
+    left.raw.localeCompare(right.raw)
+  );
+}
+
+function buildReverseRecordTargets(
+  record: AniBridgeSourceRecord,
+  queryTarget: AniBridgeTarget
+): AniBridgeTarget[] {
+  const source = parseAniBridgeDescriptor(record.sourceDescriptor);
+  const targets: AniBridgeTarget[] = [];
+  if (source) {
+    targets.push(targetFromDescriptor(source, invertRanges(queryTarget.ranges)));
+  }
+  record.targets.forEach((target) => {
+    if (
+      target.provider === queryTarget.provider &&
+      target.id === queryTarget.id &&
+      target.scope === queryTarget.scope
+    ) {
+      return;
+    }
+    targets.push(
+      targetFromDescriptor(target, composeReverseRanges(queryTarget, target))
+    );
+  });
+  return mergeRecordTargets(targets);
+}
+
+export function findAniBridgeRecordsByDescriptors(
+  index: AniBridgeIndex,
+  descriptors: Array<string | undefined>
+): AniBridgeSourceRecord[] {
+  const queries = descriptors
     .filter((value): value is string => !!value)
-    .map((descriptor) => index.records.get(descriptor))
-    .filter((record): record is AniBridgeSourceRecord => record != null);
+    .map((descriptor) => parseAniBridgeDescriptor(descriptor))
+    .filter((descriptor): descriptor is AniBridgeDescriptor => !!descriptor);
+  if (queries.length === 0) return [];
+
+  const output = new Map<string, AniBridgeSourceRecord>();
+  const addRecord = (sourceDescriptor: string, targets: AniBridgeTarget[]) => {
+    if (targets.length === 0) return;
+    const current = output.get(sourceDescriptor);
+    output.set(sourceDescriptor, {
+      sourceDescriptor,
+      targets: mergeRecordTargets([...(current?.targets || []), ...targets]),
+    });
+  };
+
+  queries.forEach((query) => {
+    index.records.forEach((record) => {
+      const source = parseAniBridgeDescriptor(record.sourceDescriptor);
+      if (source && descriptorMatchesQuery(source, query)) {
+        addRecord(query.raw, record.targets);
+      }
+
+      record.targets.forEach((target) => {
+        if (!descriptorMatchesQuery(target, query)) return;
+        addRecord(query.raw, buildReverseRecordTargets(record, target));
+      });
+    });
+  });
+
+  return Array.from(output.values()).sort((left, right) =>
+    left.sourceDescriptor.localeCompare(right.sourceDescriptor)
+  );
 }

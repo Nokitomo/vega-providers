@@ -1,8 +1,18 @@
 import { ExternalIdMapping, Info, ProviderContext } from "../../types";
 import { resolveAniZipMetadata } from "../anizip/client";
-import { getAniBridgeIndex, findAniBridgeSourceRecords } from "./anibridge";
+import {
+  getAniBridgeIndex,
+  findAniBridgeRecordsByDescriptors,
+  findAniBridgeSourceRecords,
+} from "./anibridge";
 import { resolveLegacyImdbId } from "./legacyImdb";
-import { AniBridgeIds, AniBridgeTarget, AnimeMappingResolution } from "./types";
+import {
+  AniBridgeDescriptor,
+  AniBridgeIds,
+  AniBridgeTarget,
+  AnimeMappingResolution,
+} from "./types";
+import { parseAniBridgeDescriptor } from "./descriptors";
 
 function emptyIds(): AniBridgeIds {
   return {
@@ -58,6 +68,10 @@ function addTargetId(ids: AniBridgeIds, target: AniBridgeTarget) {
   }
 }
 
+function addDescriptorId(ids: AniBridgeIds, descriptor: AniBridgeDescriptor) {
+  addTargetId(ids, { ...descriptor, ranges: {} });
+}
+
 function mergeTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
   const merged = new Map<string, AniBridgeTarget>();
   targets.forEach((target) => {
@@ -80,6 +94,73 @@ function buildRawTarget(
   scope?: string,
 ): string {
   return [provider, String(id), scope].filter(Boolean).join(":");
+}
+
+function normalizePositiveInt(value: unknown): number | undefined {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function normalizeImdbId(value: unknown): string | undefined {
+  const text = String(value ?? "").trim().toLowerCase();
+  return /^tt\d{5,}$/.test(text) ? text : undefined;
+}
+
+function buildExternalLookupDescriptors({
+  isMovie,
+  tmdbId,
+  tvdbId,
+  imdbId,
+}: {
+  isMovie: boolean;
+  tmdbId?: number;
+  tvdbId?: number;
+  imdbId?: string;
+}): string[] {
+  const descriptors: string[] = [];
+  const tmdb = normalizePositiveInt(tmdbId);
+  const tvdb = normalizePositiveInt(tvdbId);
+  const imdb = normalizeImdbId(imdbId);
+  if (tmdb) descriptors.push(`${isMovie ? "tmdb_movie" : "tmdb_show"}:${tmdb}`);
+  if (tvdb) descriptors.push(`${isMovie ? "tvdb_movie" : "tvdb_show"}:${tvdb}`);
+  if (imdb) descriptors.push(`${isMovie ? "imdb_movie" : "imdb_show"}:${imdb}`);
+  return descriptors;
+}
+
+function buildIdsFromRecords(
+  records: ReturnType<typeof findAniBridgeRecordsByDescriptors>,
+  sourceDescriptors: string[]
+): AniBridgeIds {
+  const ids = emptyIds();
+  sourceDescriptors
+    .map((descriptor) => parseAniBridgeDescriptor(descriptor))
+    .filter((descriptor): descriptor is AniBridgeDescriptor => !!descriptor)
+    .forEach((descriptor) => addDescriptorId(ids, descriptor));
+  records
+    .flatMap((record) => record.targets)
+    .forEach((target) => addTargetId(ids, target));
+  Object.values(ids).forEach((values) =>
+    values.sort((a: any, b: any) =>
+      typeof a === "number" && typeof b === "number"
+        ? a - b
+        : String(a).localeCompare(String(b))
+    )
+  );
+  return ids;
+}
+
+function pickPrimaryImdbId(ids: AniBridgeIds, isMovie: boolean): string | undefined {
+  return (isMovie ? ids.imdbMovieIds : ids.imdbShowIds)[0];
+}
+
+function pickPrimaryDiscoveredAnimeIds(ids: AniBridgeIds): {
+  anilistId?: number;
+  malId?: number;
+} {
+  return {
+    anilistId: ids.anilistIds[0],
+    malId: ids.malIds[0],
+  };
 }
 
 async function resolveAniZipExternalTargets({
@@ -254,6 +335,73 @@ export async function resolveAnimeMappings({
     ids,
     imdbId,
     imdbSource,
+    lookupSource: "anilist-mal",
+  };
+}
+
+export async function resolveExternalAnimeMappings({
+  providerContext,
+  isMovie,
+  tmdbId,
+  tvdbId,
+  imdbId,
+  includeLegacyImdb = true,
+}: {
+  providerContext: ProviderContext;
+  isMovie: boolean;
+  tmdbId?: number;
+  tvdbId?: number;
+  imdbId?: string;
+  includeLegacyImdb?: boolean;
+}): Promise<AnimeMappingResolution> {
+  const descriptors = buildExternalLookupDescriptors({
+    isMovie,
+    tmdbId,
+    tvdbId,
+    imdbId,
+  });
+  if (descriptors.length === 0) {
+    return {
+      sourceDescriptors: [],
+      targets: [],
+      ids: emptyIds(),
+      lookupSource: "external-reverse",
+    };
+  }
+
+  const index = await getAniBridgeIndex(providerContext);
+  const records = index
+    ? findAniBridgeRecordsByDescriptors(index, descriptors)
+    : [];
+  const sourceDescriptors = records.map((record) => record.sourceDescriptor);
+  const targets = mergeTargets(records.flatMap((record) => record.targets));
+  const ids = buildIdsFromRecords(records, sourceDescriptors);
+
+  let resolvedImdbId: string | undefined =
+    normalizeImdbId(imdbId) || pickPrimaryImdbId(ids, isMovie);
+  let imdbSource: AnimeMappingResolution["imdbSource"] = resolvedImdbId
+    ? "anibridge-v3"
+    : undefined;
+
+  if (!resolvedImdbId && includeLegacyImdb) {
+    const discovered = pickPrimaryDiscoveredAnimeIds(ids);
+    resolvedImdbId = await resolveLegacyImdbId({
+      providerContext,
+      anilistId: discovered.anilistId,
+      malId: discovered.malId,
+    });
+    if (resolvedImdbId) imdbSource = "plexanibridge-v2";
+  }
+
+  return {
+    schemaVersion: index?.schemaVersion,
+    generatedOn: index?.generatedOn,
+    sourceDescriptors,
+    targets,
+    ids,
+    imdbId: resolvedImdbId,
+    imdbSource,
+    lookupSource: "external-reverse",
   };
 }
 

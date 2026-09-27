@@ -29,6 +29,12 @@ import {
   resolveTvdbMediaTextMetadata,
 } from "../animeunity/tvdb";
 import { TmdbArtworkField, TmdbMediaType } from "../animeunity/tmdb/types";
+import {
+  readStreamingUnityExternalIds,
+  resolveStreamingUnityExternalIds,
+  StreamingUnityExternalIds,
+} from "./externalMappings";
+import { buildAniBridgeExtra } from "../animeunity/mappings";
 
 const pickLogoImage = (
   images: any[] | undefined,
@@ -152,6 +158,8 @@ const resolveExternalFallbackArtwork = async ({
   providerContext,
   title,
   type,
+  tvdbId,
+  resolveMissingExternalIds,
   poster,
   logo,
   background,
@@ -159,6 +167,8 @@ const resolveExternalFallbackArtwork = async ({
   providerContext: ProviderContext;
   title: any;
   type: "movie" | "series";
+  tvdbId?: number;
+  resolveMissingExternalIds?: () => Promise<StreamingUnityExternalIds>;
   poster?: string;
   logo?: string;
   background?: string;
@@ -217,12 +227,15 @@ const resolveExternalFallbackArtwork = async ({
     }
   }
 
-  const tvdbId = resolveStreamingUnityTvdbId(title, type);
+  let resolvedTvdbId = tvdbId || resolveStreamingUnityTvdbId(title, type);
   const tvdbFields = missingFields();
-  if (tvdbId && tvdbFields.length > 0) {
+  if (!resolvedTvdbId && tvdbFields.length > 0 && resolveMissingExternalIds) {
+    resolvedTvdbId = (await resolveMissingExternalIds()).tvdbId;
+  }
+  if (resolvedTvdbId && tvdbFields.length > 0) {
     const tvdb = await resolveTvdbArtworkMetadata({
       providerContext,
-      tvdbId,
+      tvdbId: resolvedTvdbId,
       mediaType: type === "series" ? "series" : "movie",
       fields: tvdbFields,
     });
@@ -789,8 +802,25 @@ export const getMeta = async function ({
     let rating = title?.score != null ? String(title.score) : "";
 
     const type = String(title?.type || "").toLowerCase() === "tv" ? "series" : "movie";
-    const tmdbId = toNumber(title?.tmdb_id);
-    const tvdbId = resolveStreamingUnityTvdbId(title, type);
+    const providerExternalIds = readStreamingUnityExternalIds(title, type);
+    const tmdbId = providerExternalIds.tmdbId;
+    let tvdbId = providerExternalIds.tvdbId;
+    let imdbId = providerExternalIds.imdbId || "";
+    let resolvedExternalIds: StreamingUnityExternalIds | null = null;
+    const resolveMissingExternalIds = async (): Promise<StreamingUnityExternalIds> => {
+      if (!resolvedExternalIds) {
+        resolvedExternalIds = await resolveStreamingUnityExternalIds({
+          providerContext,
+          title,
+          type,
+          needTvdb: !tvdbId,
+          needImdb: !imdbId,
+        });
+        tvdbId = tvdbId || resolvedExternalIds.tvdbId;
+        imdbId = imdbId || resolvedExternalIds.imdbId || "";
+      }
+      return resolvedExternalIds;
+    };
     const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
     const needsTmdbCore =
       !!tmdbId &&
@@ -830,6 +860,9 @@ export const getMeta = async function ({
             .filter((name): name is string => hasText(name))
             .slice(0, 12);
 
+    if (!tvdbId && tmdbId && (!hasText(titleName) || !hasText(plot))) {
+      await resolveMissingExternalIds();
+    }
     const needsTvdbText = !!tvdbId && (!hasText(titleName) || !hasText(plot));
     const tvdbText = needsTvdbText
       ? await resolveTvdbMediaTextMetadata({
@@ -845,6 +878,8 @@ export const getMeta = async function ({
       providerContext,
       title,
       type,
+      tvdbId,
+      resolveMissingExternalIds,
       poster,
       logo,
       background,
@@ -912,8 +947,8 @@ export const getMeta = async function ({
             titleKey: "Play",
             link: buildStreamingUnityPlaybackLink(titleUrl, {
               mediaType: "movie",
-              imdbId: String(title?.imdb_id || "").trim(),
-              tmdbId: String(title?.tmdb_id || "").trim(),
+              imdbId,
+              tmdbId: tmdbId ? String(tmdbId) : "",
             }),
             type: "movie",
           },
@@ -925,6 +960,17 @@ export const getMeta = async function ({
 
     const viewsRaw = title?.views_it || title?.views;
     const dailyViewsRaw = title?.daily_views_it || title?.daily_views;
+    const resolvedMapping = (resolvedExternalIds as StreamingUnityExternalIds | null)
+      ?.mappingResolution;
+    const wikidataId = (resolvedExternalIds as StreamingUnityExternalIds | null)
+      ?.wikidataId;
+    const traktSlug = (resolvedExternalIds as StreamingUnityExternalIds | null)
+      ?.traktSlug;
+    const aniBridgeExtra: Partial<
+      Pick<NonNullable<Info["extra"]>, "ids" | "mappings">
+    > = resolvedMapping
+      ? buildAniBridgeExtra(resolvedMapping)
+      : {};
 
     return {
       title: titleName,
@@ -933,7 +979,7 @@ export const getMeta = async function ({
       logo: logo || undefined,
       background: background || poster || undefined,
       poster: poster || undefined,
-      imdbId: String(title?.imdb_id || ""),
+      imdbId,
       year: year || undefined,
       runtime: runtime || undefined,
       country: title?.country || undefined,
@@ -946,6 +992,7 @@ export const getMeta = async function ({
       episodesCount,
       extra: {
         ids: {
+          ...aniBridgeExtra.ids,
           tmdbMovieIds:
             type === "movie" && tmdbId
               ? [tmdbId]
@@ -962,6 +1009,8 @@ export const getMeta = async function ({
             type === "series" && tvdbId
               ? [tvdbId]
               : undefined,
+          wikidataIds: wikidataId ? [wikidataId] : undefined,
+          traktSlugs: traktSlug ? [traktSlug] : undefined,
           netflixId: title?.netflix_id || undefined,
           primeId: title?.prime_id || undefined,
           disneyId: title?.disney_id || undefined,
@@ -976,6 +1025,7 @@ export const getMeta = async function ({
         flags: {
           dub: title?.dub_ita || undefined,
         },
+        mappings: aniBridgeExtra.mappings,
         artworkSources: fallbackArtwork.sources,
         meta: {
           status: title?.status || undefined,

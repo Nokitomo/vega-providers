@@ -5,7 +5,11 @@ export {
   parsePlexAniBridgePayload,
 } from "./legacyImdb";
 export { mapAniBridgeEpisodeRange, resolveAniBridgeEpisodeMappings } from "./ranges";
-export { buildAniBridgeExtra, resolveAnimeMappings } from "./resolver";
+export {
+  buildAniBridgeExtra,
+  resolveAnimeMappings,
+  resolveExternalAnimeMappings,
+} from "./resolver";
 export type {
   AniBridgeDescriptor,
   AniBridgeIndex,

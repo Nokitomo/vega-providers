@@ -1,0 +1,1 @@
+"use strict";Object.defineProperty(exports,"__esModule",{value:!0}),exports.resolveWikidataExternalIds=void 0;var externalIdsResolver_1=require("./externalIdsResolver");Object.defineProperty(exports,"resolveWikidataExternalIds",{enumerable:!0,get:function(){return externalIdsResolver_1.resolveWikidataExternalIds}});

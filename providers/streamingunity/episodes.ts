@@ -14,6 +14,7 @@ import {
 import { buildStreamingUnityPlaybackLink } from "./playback";
 import { resolveTmdbEpisodeSeasonMetadata } from "../animeunity/tmdb";
 import { resolveTvdbEpisodeFallbacks } from "../animeunity/tvdb";
+import { resolveStreamingUnityExternalIds } from "./externalMappings";
 
 const fetchHtml = async (
   url: string,
@@ -115,6 +116,16 @@ const mapEpisodes = (
 const hasEpisodeText = (value?: string): boolean =>
   typeof value === "string" && value.trim().length > 0;
 
+const episodesMissingMetadata = (episodes: EpisodeLink[]): EpisodeLink[] =>
+  episodes.filter(
+    (episode) =>
+      episode.episodeNumber != null &&
+      (!hasEpisodeText(episode.title) ||
+        episode.titleKey ||
+        !hasEpisodeText(episode.synopsis) ||
+        !hasEpisodeText(episode.thumbnail))
+  );
+
 const toNumber = (value: any): number | undefined => {
   if (value === null || value === undefined || value === "") return undefined;
   const parsed = Number(value);
@@ -145,14 +156,7 @@ const enrichEpisodesFromTmdb = async ({
     return episodes;
   }
 
-  const missing = episodes.filter(
-    (episode) =>
-      episode.episodeNumber != null &&
-      (!hasEpisodeText(episode.title) ||
-        episode.titleKey ||
-        !hasEpisodeText(episode.synopsis) ||
-        !hasEpisodeText(episode.thumbnail))
-  );
+  const missing = episodesMissingMetadata(episodes);
   if (missing.length === 0) return episodes;
 
   const season = await resolveTmdbEpisodeSeasonMetadata({
@@ -221,14 +225,7 @@ const enrichEpisodesFromTvdb = async ({
     return episodes;
   }
 
-  const missing = episodes.filter(
-    (episode) =>
-      episode.episodeNumber != null &&
-      (!hasEpisodeText(episode.title) ||
-        episode.titleKey ||
-        !hasEpisodeText(episode.synopsis) ||
-        !hasEpisodeText(episode.thumbnail))
-  );
+  const missing = episodesMissingMetadata(episodes);
   if (missing.length === 0) return episodes;
 
   const fallbacks = await resolveTvdbEpisodeFallbacks({
@@ -312,12 +309,25 @@ export const getEpisodes = async function ({
       providerContext,
       sourceRevision: String(episodes.length || ""),
     });
+    const directTvdbId =
+      toNumber(title?.tvdb_id) ||
+      toNumber(title?.thetvdb_id) ||
+      toNumber(title?.tvdb_show_id);
+    const needsTvdbFallback =
+      !directTvdbId && tmdbEnriched.length > 0 &&
+      episodesMissingMetadata(tmdbEnriched).length > 0;
+    const resolvedExternalIds = needsTvdbFallback
+      ? await resolveStreamingUnityExternalIds({
+          providerContext,
+          title,
+          type: "series",
+          needTvdb: true,
+        })
+      : undefined;
+
     return enrichEpisodesFromTvdb({
       episodes: tmdbEnriched,
-      tvdbId:
-        toNumber(title?.tvdb_id) ||
-        toNumber(title?.thetvdb_id) ||
-        toNumber(title?.tvdb_show_id),
+      tvdbId: directTvdbId || resolvedExternalIds?.tvdbId,
       seasonNumber,
       providerContext,
       sourceRevision: String(episodes.length || ""),

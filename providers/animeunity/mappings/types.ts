@@ -45,6 +45,7 @@ export type AnimeMappingResolution = {
   ids: AniBridgeIds;
   imdbId?: string;
   imdbSource?: "anibridge-v3" | "plexanibridge-v2";
+  lookupSource?: "anilist-mal" | "external-reverse";
 };
 
 export type EpisodeMappingResolution = {
