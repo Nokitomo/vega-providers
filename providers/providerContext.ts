@@ -28,4 +28,11 @@ export const providerContext: ProviderContext = {
   Aes,
   cheerio,
   extractors,
+  kvStore: {
+    get: async () => undefined,
+    set: async () => {},
+    delete: async () => false,
+    keys: async () => [],
+    clear: async () => {},
+  },
 };

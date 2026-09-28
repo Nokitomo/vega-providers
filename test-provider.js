@@ -23,6 +23,20 @@ function prompt(question) {
   });
 }
 
+function createKvStore() {
+  const values = new Map();
+  return {
+    get: async (key) => values.get(key),
+    set: async (key, value) => {
+      if (value === undefined) values.delete(key);
+      else values.set(key, value);
+    },
+    delete: async (key) => values.delete(key),
+    keys: async () => [...values.keys()],
+    clear: async () => values.clear(),
+  };
+}
+
 // Mock providerContext (predefined - user doesn't need to provide this)
 const providerContext = {
   axios,
@@ -39,6 +53,7 @@ const providerContext = {
     gdFlixExtracter: gdFlixExtracter,
   },
   Crypto: {},
+  kvStore: createKvStore(),
 };
 
 // Function parameter definitions based on README and types
@@ -113,6 +128,14 @@ const functionParams = {
       type: "Enter type (movie/series) [default: movie]: ",
     },
   },
+  getSettingsSchema: {
+    required: [],
+    optional: [],
+    defaults: {
+      providerContext,
+    },
+    prompts: {},
+  },
 };
 
 // Sample values for quick testing
@@ -135,6 +158,7 @@ const sampleValues = {
     link: "https://example.com/stream-url",
     type: "movie",
   },
+  getSettingsSchema: {},
 };
 
 async function getParameters(functionName, providerName) {
@@ -202,6 +226,8 @@ async function testProvider(providerName, functionName) {
         module = require(`${modulePath}/episodes.js`);
       } else if (functionName === "getStream") {
         module = require(`${modulePath}/stream.js`);
+      } else if (functionName === "getSettingsSchema") {
+        module = require(`${modulePath}/settings.js`);
       } else {
         throw new Error(`Unknown function: ${functionName}`);
       }
@@ -326,6 +352,11 @@ const responseSchemas = {
   getMeta: InfoSchema,
   getEpisodes: z.array(EpisodeLinkSchema),
   getStream: z.array(StreamSchema),
+  getSettingsSchema: z.array(z.object({
+    key: z.string().min(1),
+    label: z.string().min(1),
+    type: z.enum(["text", "toggle", "select", "multiselect", "number"]),
+  }).passthrough()),
 };
 
 function validateResponse(functionName, result) {
@@ -417,6 +448,7 @@ async function main() {
     console.log("  - getSearchPosts (search for posts)");
     console.log("  - getMeta        (get metadata for a movie/show)");
     console.log("  - getEpisodes    (get episodes for a season)");
+    console.log("  - getSettingsSchema (get configurable provider settings)");
     console.log("  - getStream      (get streaming links)");
     console.log("\nFlags:");
     console.log("  --rebuild        Rebuild TypeScript files before testing");
@@ -445,6 +477,7 @@ async function main() {
     "getSearchPosts",
     "getMeta",
     "getEpisodes",
+    "getSettingsSchema",
     "getStream",
   ];
   if (!validFunctions.includes(functionName)) {

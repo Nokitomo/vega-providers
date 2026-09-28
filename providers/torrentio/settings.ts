@@ -1,0 +1,73 @@
+import {ProviderContext, SettingsField} from "../types";
+
+export const getSettingsSchema = async function ({
+  providerContext: _providerContext,
+}: {
+  providerContext: ProviderContext;
+}): Promise<SettingsField[]> {
+  return [
+    {
+      key: "debridService",
+      type: "select",
+      label: "Debrid Provider",
+      description: "Optional premium service for cached, direct streams",
+      options: [
+        {label: "None (P2P torrents)", value: "none"},
+        {label: "Real-Debrid", value: "realdebrid"},
+        {label: "AllDebrid", value: "alldebrid"},
+        {label: "Premiumize", value: "premiumize"},
+        {label: "TorBox", value: "torbox"},
+        {label: "Debrid-Link", value: "debridlink"},
+      ],
+      defaultValue: "none",
+    },
+    {
+      key: "debridApiKey",
+      type: "text",
+      label: "Debrid API Key / Token",
+      description: "Optional token from your selected Debrid provider",
+      placeholder: "Enter your personal API token",
+      defaultValue: "",
+      secure: true,
+    },
+    {
+      key: "qualityFilter",
+      type: "select",
+      label: "Maximum Resolution",
+      options: [
+        {label: "All qualities", value: "all"},
+        {label: "Up to 4K", value: "2160"},
+        {label: "Up to 1080p", value: "1080"},
+        {label: "Up to 720p", value: "720"},
+        {label: "Up to 480p", value: "480"},
+      ],
+      defaultValue: "all",
+    },
+    {
+      key: "sortBy",
+      type: "select",
+      label: "Sort Results By",
+      options: [
+        {label: "Quality, then seeders", value: "qualitythenseeders"},
+        {label: "Seeders", value: "seeders"},
+        {label: "File size", value: "size"},
+      ],
+      defaultValue: "qualitythenseeders",
+    },
+    {
+      key: "customInstanceUrl",
+      type: "text",
+      label: "Torrentio Instance URL",
+      description: "Optional self-hosted or proxy instance",
+      placeholder: "https://torrentio.strem.fun",
+      defaultValue: "https://torrentio.strem.fun",
+    },
+    {
+      key: "includeP2PFallback",
+      type: "toggle",
+      label: "Include P2P torrents",
+      description: "Show magnet links when a direct cached stream is unavailable",
+      defaultValue: true,
+    },
+  ];
+};

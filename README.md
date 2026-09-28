@@ -16,6 +16,7 @@ providers/
     posts.ts
     stream.ts
     episodes.ts (optional)
+    settings.ts (optional)
 ```
 
 Provider modules are bundled during the build so internal imports (e.g. `./parsers/*`)
@@ -83,6 +84,27 @@ are supported without relying on runtime `require()` in the app.
 - **Exports:**
   - `getEpisodes({ url, providerContext })`: Returns an array of `EpisodeLink` objects for the given season or episode group.
 
+### 6. `settings.ts` (Optional)
+
+- Add `"hasSettings": true` to the provider entry in `manifest.json`.
+- Export `getSettingsSchema({ providerContext })`, returning `SettingsField[]`.
+- Supported fields are `text`, `toggle`, `select`, `multiselect`, and `number`.
+- Mark secret text fields such as personal API tokens with `secure: true`.
+- Read and write values through `providerContext.kvStore`; do not embed credentials in provider code.
+- The app scopes and encrypts stored values per provider source and provider. Uninstalling or resetting a provider clears its values.
+
+```ts
+export const getSettingsSchema = async () => [
+  {
+    key: "apiKey",
+    type: "text",
+    label: "API Key",
+    secure: true,
+    defaultValue: "",
+  },
+];
+```
+
 ## Internationalization (i18n) fields
 
 The app can localize provider-provided labels when you include optional i18n fields.
@@ -135,6 +157,7 @@ requests share the provider runtime cache.
 - `commonHeaders`: Standard HTTP headers
 - `extractors`: Shared extractor functions
 - `Aes`: (if needed) for encryption/decryption
+- `kvStore`: Provider-scoped persistent settings and state (`get`, `set`, `delete`, `keys`, `clear`)
 
 This ensures all providers use the same tools and patterns, making code easier to maintain and extend.
 

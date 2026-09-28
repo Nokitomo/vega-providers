@@ -29,6 +29,7 @@
     "test:streamcenter:routing": "node tests/streamcenter-routing.js",
     "test:streamcenter:vega:smoke": "node tests/streamcenter-vega-smoke.js",
     "test:stream:dedup": "node tests/stream-dedup.js",
+    "test:torrentio": "node tests/torrentio-provider.js",
     "test:ui": "npm run test:interactive",
     "build": "node build-simple.js",
     "build:vega": "node build-simple.js",

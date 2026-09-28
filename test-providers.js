@@ -5,6 +5,20 @@ const path = require("path");
 
 // Load extractors and utilities
 let providerContext;
+function createKvStore() {
+  const values = new Map();
+  return {
+    get: async (key) => values.get(key),
+    set: async (key, value) => {
+      if (value === undefined) values.delete(key);
+      else values.set(key, value);
+    },
+    delete: async (key) => values.delete(key),
+    keys: async () => [...values.keys()],
+    clear: async () => values.clear(),
+  };
+}
+
 try {
   const { getBaseUrl } = require("./dist/getBaseUrl.js");
   const { hubcloudExtracter } = require("./dist/hubcloudExtractor.js");
@@ -27,6 +41,7 @@ try {
       gdFlixExtracter,
     },
     Crypto: {},
+    kvStore: createKvStore(),
   };
 } catch (error) {
   console.log(
@@ -208,10 +223,13 @@ class ProviderTester {
       console.log(`   ✅ Got ${posts.length} posts`);
 
       // Pick random posts to test
-      const postsToTest = pickRandom(
+      const selectedPosts = pickRandom(
         posts,
         Math.min(this.postsToTest, posts.length)
       );
+      const postsToTest = Array.isArray(selectedPosts)
+        ? selectedPosts
+        : [selectedPosts];
       console.log(
         `   🎲 Selected ${postsToTest.length} random posts for meta testing`
       );
@@ -377,10 +395,13 @@ class ProviderTester {
         console.log(`\n   🎬 Found ${directLinks.length} direct link entries`);
 
         const testDirectLink = pickRandom(directLinks);
-        const linksToTest = pickRandom(
+        const selectedLinks = pickRandom(
           testDirectLink.link.directLinks,
           Math.min(this.linksToTest, testDirectLink.link.directLinks.length)
         );
+        const linksToTest = Array.isArray(selectedLinks)
+          ? selectedLinks
+          : [selectedLinks];
 
         console.log(
           `   🎲 Testing ${linksToTest.length} random direct link(s)`
@@ -388,9 +409,7 @@ class ProviderTester {
 
         const streamModule = this.loadModule(providerName, "stream");
         if (streamModule && streamModule.getStream) {
-          for (const directLink of Array.isArray(linksToTest)
-            ? linksToTest
-            : [linksToTest]) {
+          for (const directLink of linksToTest) {
             console.log(`\n      Testing: ${directLink.title}`);
             console.log(`      Link: ${directLink.link}`);
 

@@ -1,0 +1,1 @@
+var module={exports:exports};Object.defineProperty(exports,"__esModule",{value:!0}),exports.genres=exports.catalog=void 0,exports.catalog=[{title:"Popular Movies",filter:"movie/top"},{title:"Popular Series",filter:"series/top"}],exports.genres=[];

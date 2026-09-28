@@ -449,6 +449,73 @@ export interface ProviderType {
   }) => Promise<Post[]>;
 }
 
+export type SettingsFieldType =
+  | "text"
+  | "toggle"
+  | "select"
+  | "multiselect"
+  | "number";
+
+export interface SelectOption {
+  label: string;
+  value: string;
+}
+
+export interface BaseSettingsField {
+  key: string;
+  label: string;
+  description?: string;
+  type: SettingsFieldType;
+}
+
+export interface TextSettingsField extends BaseSettingsField {
+  type: "text";
+  placeholder?: string;
+  defaultValue?: string;
+  /** Mask this value in compatible clients (for API keys and tokens). */
+  secure?: boolean;
+}
+
+export interface ToggleSettingsField extends BaseSettingsField {
+  type: "toggle";
+  defaultValue?: boolean;
+}
+
+export interface SelectSettingsField extends BaseSettingsField {
+  type: "select";
+  options: SelectOption[];
+  defaultValue?: string;
+}
+
+export interface MultiSelectSettingsField extends BaseSettingsField {
+  type: "multiselect";
+  options: SelectOption[];
+  defaultValue?: string[];
+}
+
+export interface NumberSettingsField extends BaseSettingsField {
+  type: "number";
+  min?: number;
+  max?: number;
+  step?: number;
+  defaultValue?: number;
+}
+
+export type SettingsField =
+  | TextSettingsField
+  | ToggleSettingsField
+  | SelectSettingsField
+  | MultiSelectSettingsField
+  | NumberSettingsField;
+
+export interface ProviderKvStore {
+  get: <T = unknown>(key: string) => Promise<T | undefined>;
+  set: (key: string, value: unknown) => Promise<void>;
+  delete: (key: string) => Promise<boolean>;
+  keys: () => Promise<string[]>;
+  clear: () => Promise<void>;
+}
+
 export type ProviderContext = {
   axios: AxiosStatic;
   Aes: any; // AES encryption utility, if used
@@ -460,6 +527,7 @@ export type ProviderContext = {
     setString: (key: string, value: string) => void;
     delete?: (key: string) => void;
   };
+  kvStore: ProviderKvStore;
   extractors: {
     hubcloudExtracter: (link: string, signal: AbortSignal) => Promise<Stream[]>;
     gofileExtracter: (id: string) => Promise<{

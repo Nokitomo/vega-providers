@@ -208,6 +208,7 @@ class ProviderBuilder {
         "meta.js",
         "stream.js",
         "episodes.js",
+        "settings.js",
       ];
       let fileCount = 0;
 
@@ -241,6 +242,7 @@ class ProviderBuilder {
       "meta.js",
       "stream.js",
       "episodes.js",
+      "settings.js",
     ];
     let bundledCount = 0;
 
