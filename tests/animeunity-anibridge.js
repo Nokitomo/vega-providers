@@ -196,6 +196,45 @@ const createContext = (handler) => ({
     },
   );
 
+  const preferredMapping = resolveAniBridgeEpisodeMappings(
+    {
+      targets: [
+        {
+          provider: "tmdb_show",
+          id: "95479",
+          scope: "s1",
+          raw: "tmdb_show:95479:s1",
+          ranges: { "1-23": "25-47" },
+        },
+        {
+          provider: "tmdb_show",
+          id: "95479",
+          scope: "s2",
+          raw: "tmdb_show:95479:s2",
+          ranges: { "1-23": "1-23" },
+        },
+      ],
+    },
+    1,
+    { provider: "tmdb_show", id: "95479", scope: "s2" },
+  );
+  assert.strictEqual(preferredMapping.seasonNumber, 2);
+  assert.deepStrictEqual(
+    preferredMapping.mappings.filter(
+      (mapping) => mapping.provider === "tmdb_show",
+    ),
+    [
+      {
+        provider: "tmdb_show",
+        id: "95479",
+        scope: "s2",
+        seasonNumber: 2,
+        episodeNumbers: [1],
+      },
+    ],
+    "the selected season link must suppress conflicting TMDB mappings",
+  );
+
   const extra = buildAniBridgeExtra(series);
   assert.strictEqual(extra.mappings.schemaVersion, "3.0.3");
   assert.strictEqual(extra.mappings.imdbSource, "plexanibridge-v2");

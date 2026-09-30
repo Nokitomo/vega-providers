@@ -20,6 +20,7 @@
     "test:animeunity:tvdb": "node tests/animeunity-tvdb.js",
     "test:animeunity:anizip": "node tests/animeunity-anizip.js",
     "test:animeunity:season-links": "node tests/animeunity-season-links.js",
+    "test:animeunity:jujutsu:live": "node tests/animeunity-jujutsu-live.js",
     "test:altadef:fixtures": "node tests/altadefinizionez-stream-fixtures.js",
     "test:altadef:smoke": "node tests/altadefinizionez-stream-smoke.js",
     "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",

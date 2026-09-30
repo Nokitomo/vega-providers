@@ -300,7 +300,7 @@ export const getMeta = async function ({
       purpose !== "hero" &&
       !metaPayload.isMovie &&
       Number(metaPayload.episodesCount || 0) > 0 &&
-      seasonMappedLinkList.length > 1;
+      seasonMappedLinkList.length > 0;
     if (needsTmdbSeasonLayout) {
       const tmdbTarget = selectPrimaryTmdbId(mappingResolution, false);
       const tmdbMedia =

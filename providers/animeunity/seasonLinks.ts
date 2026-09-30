@@ -12,6 +12,9 @@ type SourceRange = {
 type SeasonRange = SourceRange & {
   seasonNumber: number;
   title?: string;
+  mappingDescriptor: string;
+  targetStart?: number;
+  corroborated: boolean;
 };
 
 const parseSourceRange = (value: string): SourceRange | null => {
@@ -52,6 +55,65 @@ const localizedSeasonTitle = (
   return title || undefined;
 };
 
+const parseTargetStart = (target: AniBridgeTarget): number | undefined => {
+  const values = Object.values(target.ranges || {})
+    .map((value) =>
+      Number.parseFloat(String(value).match(/\d+(?:\.\d+)?/)?.[0] || "")
+    )
+    .filter((value) => Number.isFinite(value));
+  return values.length > 0 ? Math.min(...values) : undefined;
+};
+
+const sourceBounds = (target: AniBridgeTarget): SourceRange | null => {
+  const ranges = Object.keys(target.ranges || {})
+    .map(parseSourceRange)
+    .filter((range): range is SourceRange => range != null);
+  if (ranges.length === 0) return null;
+  return {
+    start: Math.min(...ranges.map((range) => range.start)),
+    end: Math.max(...ranges.map((range) => range.end)),
+  };
+};
+
+const rangesOverlap = (left: SourceRange, right: SourceRange): boolean =>
+  left.start <= right.end && right.start <= left.end;
+
+const isSameSourceRange = (
+  target: AniBridgeTarget,
+  start: number,
+  end: number
+): boolean => {
+  const bounds = sourceBounds(target);
+  return bounds?.start === start && bounds.end === end;
+};
+
+const isBetterSeasonRange = (
+  candidate: SeasonRange,
+  current: SeasonRange,
+  totalCount: number
+): boolean => {
+  const candidateScore = [
+    candidate.start === 1 && candidate.end >= totalCount ? 1 : 0,
+    candidate.seasonNumber > 0 ? 1 : 0,
+    candidate.corroborated ? 1 : 0,
+    candidate.targetStart === 1 ? 1 : 0,
+    candidate.end - candidate.start + 1,
+  ];
+  const currentScore = [
+    current.start === 1 && current.end >= totalCount ? 1 : 0,
+    current.seasonNumber > 0 ? 1 : 0,
+    current.corroborated ? 1 : 0,
+    current.targetStart === 1 ? 1 : 0,
+    current.end - current.start + 1,
+  ];
+  for (let index = 0; index < candidateScore.length; index += 1) {
+    if (candidateScore[index] !== currentScore[index]) {
+      return candidateScore[index] > currentScore[index];
+    }
+  }
+  return candidate.seasonNumber < current.seasonNumber;
+};
+
 const toSeasonLink = (animeId: number, totalCount: number, range: SeasonRange): Link => {
   const end = Math.min(range.end, totalCount);
   const title = range.title || `Season ${range.seasonNumber}`;
@@ -61,7 +123,9 @@ const toSeasonLink = (animeId: number, totalCount: number, range: SeasonRange): 
     titleParams: range.title ? undefined : { number: range.seasonNumber },
     seasonNumber: range.seasonNumber,
     availabilityStatus: "available" as const,
-    episodesLink: `${animeId}|${range.start}|${end}`,
+    episodesLink: `${animeId}|${range.start}|${end}|${encodeURIComponent(
+      range.mappingDescriptor
+    )}`,
   };
 };
 
@@ -83,8 +147,9 @@ const buildMappedSeasonRanges = ({
   primaryShowId: string;
   totalCount: number;
   tmdbSeasons?: TmdbSeasonMetadata[];
-}): SeasonRange[] => {
-  const ranges: SeasonRange[] = [];
+}): { ranges: SeasonRange[]; hadConflicts: boolean } => {
+  const candidates: SeasonRange[] = [];
+  let mappingCandidatesCount = 0;
   targets
     .filter(
       (target) =>
@@ -94,29 +159,69 @@ const buildMappedSeasonRanges = ({
     )
     .forEach((target) => {
       const seasonNumber = parseSeasonScope(target.scope);
-      const sourceRanges = Object.keys(target.ranges || {})
-        .map(parseSourceRange)
-        .filter((range): range is SourceRange => range != null);
-      if (seasonNumber == null || sourceRanges.length === 0) return;
-      const start = Math.min(...sourceRanges.map((range) => range.start));
-      const end = Math.max(...sourceRanges.map((range) => range.end));
+      const bounds = sourceBounds(target);
+      if (seasonNumber == null || !bounds) return;
+      const { start, end } = bounds;
       if (start > totalCount) return;
-      ranges.push({
+      mappingCandidatesCount += 1;
+      const tmdbSeason = tmdbSeasons?.find(
+        (season) => season.seasonNumber === seasonNumber
+      );
+      if (tmdbSeasons && !tmdbSeason) {
+        return;
+      }
+      candidates.push({
         start,
         end,
         seasonNumber,
         title: localizedSeasonTitle(seasonNumber, tmdbSeasons),
+        mappingDescriptor:
+          target.raw ||
+          [target.provider, target.id, target.scope].filter(Boolean).join(":"),
+        targetStart: parseTargetStart(target),
+        corroborated: targets.some(
+          (candidate) =>
+            candidate.provider === "tvdb_show" &&
+            candidate.scope === target.scope &&
+            isSameSourceRange(candidate, start, end)
+        ),
       });
     });
-  return ranges.sort((left, right) => {
+
+  const ranges: SeasonRange[] = [];
+  candidates
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .forEach((candidate) => {
+      const conflictingIndexes = ranges
+        .map((range, index) => (rangesOverlap(range, candidate) ? index : -1))
+        .filter((index) => index >= 0);
+      if (conflictingIndexes.length === 0) {
+        ranges.push(candidate);
+        return;
+      }
+      const conflicts = conflictingIndexes.map((index) => ranges[index]);
+      const winner = conflicts.reduce(
+        (best, current) =>
+          isBetterSeasonRange(current, best, totalCount) ? current : best,
+        candidate
+      );
+      conflictingIndexes
+        .sort((left, right) => right - left)
+        .forEach((index) => ranges.splice(index, 1));
+      ranges.push(winner);
+    });
+
+  ranges.sort((left, right) => {
     const byStart = left.start - right.start;
     return byStart || left.seasonNumber - right.seasonNumber;
   });
+  return { ranges, hadConflicts: ranges.length < mappingCandidatesCount };
 };
 
 const buildTmdbAbsoluteSeasonRanges = (
   tmdbSeasons: TmdbSeasonMetadata[] | undefined,
-  totalCount: number
+  totalCount: number,
+  primaryShowId: string
 ): SeasonRange[] => {
   let nextStart = 1;
   const ranges: SeasonRange[] = [];
@@ -139,6 +244,8 @@ const buildTmdbAbsoluteSeasonRanges = (
         end,
         seasonNumber: season.seasonNumber,
         title: localizedSeasonTitle(season.seasonNumber, tmdbSeasons),
+        mappingDescriptor: `tmdb_show:${primaryShowId}:s${season.seasonNumber}`,
+        corroborated: false,
       });
     });
   return ranges;
@@ -201,13 +308,18 @@ export function buildTmdbSeasonEpisodeLinks({
     String(mappingResolution.ids?.tmdbShowIds?.[0] || "");
   if (!primaryShowId) return [];
 
-  const mappedRanges = buildMappedSeasonRanges({
+  const mappedResult = buildMappedSeasonRanges({
     targets: mappingResolution.targets,
     primaryShowId,
     totalCount,
     tmdbSeasons,
   });
-  const tmdbRanges = buildTmdbAbsoluteSeasonRanges(tmdbSeasons, totalCount);
+  const mappedRanges = mappedResult.ranges;
+  const tmdbRanges = buildTmdbAbsoluteSeasonRanges(
+    tmdbSeasons,
+    totalCount,
+    primaryShowId
+  );
 
   if (mappedRanges.length === 0 && shouldBuildFromTmdbOnly(tmdbRanges, totalCount)) {
     return tmdbRanges
@@ -239,5 +351,5 @@ export function buildTmdbSeasonEpisodeLinks({
     }
   }
 
-  return links.length > 1 ? links : [];
+  return links.length > 1 || mappedResult.hadConflicts ? links : [];
 }

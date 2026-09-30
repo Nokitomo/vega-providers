@@ -1,6 +1,7 @@
 import { ExternalEpisodeMapping } from "../../types";
 import { parseSeasonScope } from "./descriptors";
 import {
+  AniBridgeDescriptor,
   AniBridgeTarget,
   AnimeMappingResolution,
   EpisodeMappingResolution,
@@ -132,17 +133,36 @@ function pickPrimaryTmdbShowId(targets: AniBridgeTarget[]): string | undefined {
 
 export function resolveAniBridgeEpisodeMappings(
   resolution: AnimeMappingResolution,
-  sourceEpisodeNumber: number
+  sourceEpisodeNumber: number,
+  preferredTarget?: Pick<AniBridgeDescriptor, "provider" | "id" | "scope">
 ): EpisodeMappingResolution {
-  const mappings = resolution.targets
+  let mappings = resolution.targets
     .map((target) => mapTargetEpisode(target, sourceEpisodeNumber))
     .filter((mapping): mapping is ExternalEpisodeMapping => mapping != null);
 
+  const preferred = preferredTarget
+    ? mappings.find(
+        (mapping) =>
+          mapping.provider === preferredTarget.provider &&
+          mapping.id === preferredTarget.id &&
+          mapping.scope === preferredTarget.scope
+      )
+    : undefined;
+  if (preferred?.provider === "tmdb_show") {
+    mappings = mappings.filter(
+      (mapping) =>
+        mapping.provider !== "tmdb_show" ||
+        (mapping.id === preferred.id && mapping.scope === preferred.scope)
+    );
+  }
+
   const primaryTmdbShowId = pickPrimaryTmdbShowId(resolution.targets);
-  const primary = mappings.find(
-    (mapping) =>
-      mapping.provider === "tmdb_show" && mapping.id === primaryTmdbShowId
-  );
+  const primary =
+    preferred ||
+    mappings.find(
+      (mapping) =>
+        mapping.provider === "tmdb_show" && mapping.id === primaryTmdbShowId
+    );
 
   return {
     seasonNumber: primary?.seasonNumber,

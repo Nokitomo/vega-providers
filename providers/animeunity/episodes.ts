@@ -5,6 +5,7 @@ import {
   parseEpisodeRangeRequest,
 } from "./episodeRanges";
 import {
+  parseAniBridgeDescriptor,
   resolveAniBridgeEpisodeMappings,
   resolveAnimeMappings,
 } from "./mappings";
@@ -47,6 +48,9 @@ export const getEpisodes = async function ({
     const request = parseEpisodeRangeRequest(url);
     if (!request) return [];
     const animeId = request.animeId;
+    const preferredMapping = parseAniBridgeDescriptor(
+      request.mappingDescriptor
+    );
 
     const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
       headers: {
@@ -94,7 +98,10 @@ export const getEpisodes = async function ({
             parsedEpisodeNumber != null
               ? resolveAniBridgeEpisodeMappings(
                   mappingResolution,
-                  parsedEpisodeNumber
+                  parsedEpisodeNumber,
+                  preferredMapping?.provider === "tmdb_show"
+                    ? preferredMapping
+                    : undefined
                 )
               : undefined;
           const title = hasNumber ? `Episode ${number}` : "Episode";

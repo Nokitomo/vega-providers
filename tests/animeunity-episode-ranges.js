@@ -15,6 +15,15 @@ assert.deepStrictEqual(parseEpisodeRangeRequest("20|121|240"), {
   start: 121,
   end: 240,
 });
+assert.deepStrictEqual(
+  parseEpisodeRangeRequest("20|1|23|tmdb_show%3A95479%3As2"),
+  {
+    animeId: 20,
+    start: 1,
+    end: 23,
+    mappingDescriptor: "tmdb_show:95479:s2",
+  },
+);
 assert.strictEqual(parseEpisodeRangeRequest("invalid"), null);
 
 const links = buildEpisodeRangeLinks(20, 250);

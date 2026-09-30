@@ -8,6 +8,7 @@ export type EpisodeRangeRequest = {
   animeId: number;
   start: number;
   end?: number;
+  mappingDescriptor?: string;
 };
 
 export type EpisodeFetchRange = {
@@ -49,7 +50,20 @@ export const parseEpisodeRangeRequest = (value: string): EpisodeRangeRequest | n
   const rawEnd = Number.parseInt(parts[2] || "", 10);
   const start = Number.isFinite(rawStart) && rawStart > 0 ? rawStart : 1;
   const end = Number.isFinite(rawEnd) && rawEnd >= start ? rawEnd : undefined;
-  return { animeId, start, end };
+  let mappingDescriptor: string | undefined;
+  if (parts[3]) {
+    try {
+      mappingDescriptor = decodeURIComponent(parts[3]).trim() || undefined;
+    } catch (_) {
+      mappingDescriptor = parts[3].trim() || undefined;
+    }
+  }
+  return {
+    animeId,
+    start,
+    end,
+    ...(mappingDescriptor ? { mappingDescriptor } : {}),
+  };
 };
 
 export const buildEpisodeFetchRanges = (

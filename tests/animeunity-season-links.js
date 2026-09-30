@@ -41,13 +41,13 @@ assert.deepStrictEqual(
       title: "Season 1",
       titleKey: "Season {{number}}",
       seasonNumber: 1,
-      episodesLink: "12|1|61",
+      episodesLink: "12|1|61|tmdb_show%3A37854%3As1",
     },
     {
       title: "Season 2",
       titleKey: "Season {{number}}",
       seasonNumber: 2,
-      episodesLink: "12|62|77",
+      episodesLink: "12|62|77|tmdb_show%3A37854%3As2",
     },
     {
       title: "Episodes 78-130",
@@ -111,9 +111,9 @@ assert.deepStrictEqual(
     episodesLink: item.episodesLink,
   })),
   [
-    { title: "East Blue", titleKey: undefined, seasonNumber: 1, episodesLink: "12|1|61" },
-    { title: "Alabasta", titleKey: undefined, seasonNumber: 2, episodesLink: "12|62|77" },
-    { title: "Skypiea", titleKey: undefined, seasonNumber: 3, episodesLink: "12|78|130" },
+    { title: "East Blue", titleKey: undefined, seasonNumber: 1, episodesLink: "12|1|61|tmdb_show%3A37854%3As1" },
+    { title: "Alabasta", titleKey: undefined, seasonNumber: 2, episodesLink: "12|62|77|tmdb_show%3A37854%3As2" },
+    { title: "Skypiea", titleKey: undefined, seasonNumber: 3, episodesLink: "12|78|130|tmdb_show%3A37854%3As3" },
   ],
   "TMDB seasons should extend incomplete AniBridge ranges when the known ranges match"
 );
@@ -148,6 +148,101 @@ assert.strictEqual(
   fallbackLinks[fallbackLinks.length - 1].titleKey,
   "Episodes {{start}}-{{end}}",
   "unsafe TMDB alignment should keep uncovered episodes visible as a generic range"
+);
+
+const jujutsuSeasonTwo = buildTmdbSeasonEpisodeLinks({
+  animeId: 4197,
+  totalCount: 23,
+  mappingResolution: {
+    ids: { tmdbShowIds: [95479] },
+    targets: [
+      {
+        provider: "tmdb_show",
+        id: "95479",
+        scope: "s1",
+        raw: "tmdb_show:95479:s1",
+        ranges: { "1-23": "25-47" },
+      },
+      {
+        provider: "tmdb_show",
+        id: "95479",
+        scope: "s2",
+        raw: "tmdb_show:95479:s2",
+        ranges: { "1-23": "1-23" },
+      },
+      {
+        provider: "tvdb_show",
+        id: "377543",
+        scope: "s2",
+        raw: "tvdb_show:377543:s2",
+        ranges: { "1-23": "1-23" },
+      },
+    ],
+  },
+  tmdbSeasons: [
+    { seasonNumber: 1, episodeCount: 59, name: { value: "Stagione 1", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+  ],
+});
+assert.deepStrictEqual(
+  jujutsuSeasonTwo.map((item) => ({
+    seasonNumber: item.seasonNumber,
+    episodesLink: item.episodesLink,
+  })),
+  [
+    {
+      seasonNumber: 1,
+      episodesLink: "4197|1|23|tmdb_show%3A95479%3As1",
+    },
+  ],
+  "overlapping absolute and season-local mappings should resolve to one canonical season"
+);
+
+const jujutsuSeasonThree = buildTmdbSeasonEpisodeLinks({
+  animeId: 7209,
+  totalCount: 12,
+  mappingResolution: {
+    ids: { tmdbShowIds: [95479] },
+    targets: [
+      {
+        provider: "tmdb_show",
+        id: "95479",
+        scope: "s0",
+        raw: "tmdb_show:95479:s0",
+        ranges: { "1-9": "1-9" },
+      },
+      {
+        provider: "tmdb_show",
+        id: "95479",
+        scope: "s1",
+        raw: "tmdb_show:95479:s1",
+        ranges: { "1-12": "48-59" },
+      },
+      {
+        provider: "tvdb_show",
+        id: "377543",
+        scope: "s3",
+        raw: "tvdb_show:377543:s3",
+        ranges: { "1-12": "1-12" },
+      },
+    ],
+  },
+  tmdbSeasons: [
+    { seasonNumber: 0, episodeCount: 9, name: { value: "Speciali", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 1, episodeCount: 59, name: { value: "Stagione 1", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+  ],
+});
+assert.deepStrictEqual(
+  jujutsuSeasonThree.map((item) => ({
+    seasonNumber: item.seasonNumber,
+    episodesLink: item.episodesLink,
+  })),
+  [
+    {
+      seasonNumber: 1,
+      episodesLink: "7209|1|12|tmdb_show%3A95479%3As1",
+    },
+  ],
+  "a partial specials mapping must not override the complete regular-season mapping"
 );
 
 console.log("animeunity season links: OK");
