@@ -103,7 +103,7 @@ function mappingPayload(anilistId, tmdbId) {
   };
 }
 
-function createEpisodeContext({ anilistId, tmdbId, complete }) {
+function createEpisodeContext({ anilistId, tmdbId, complete, tmdbSeason = 2 }) {
   const calls = [];
   const context = {
     cheerio,
@@ -122,7 +122,7 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
           return { data: { episodes: [{ id: 9001, number: "1" }] } };
         }
         if (
-          url.startsWith(`https://www.themoviedb.org/tv/${tmdbId}/season/2?`)
+          url.startsWith(`https://www.themoviedb.org/tv/${tmdbId}/season/${tmdbSeason}?`)
         ) {
           return { data: tmdbEpisode({ complete }) };
         }
@@ -233,6 +233,32 @@ function createEpisodeContext({ anilistId, tmdbId, complete }) {
       .length,
     1,
     "all missing episode fields must be resolved with one AniZip request",
+  );
+
+  const preferredSeason = createEpisodeContext({
+    anilistId: 1003,
+    tmdbId: 5003,
+    complete: true,
+    tmdbSeason: 3,
+  });
+  const preferredSeasonEpisodes = await getEpisodes({
+    url: "99|1|1|tmdb_show%3A5003%3As3",
+    providerContext: preferredSeason.context,
+  });
+  assert.strictEqual(preferredSeasonEpisodes[0].seasonNumber, 3);
+  assert.strictEqual(preferredSeasonEpisodes[0].title, "Titolo TMDB");
+  assert.deepStrictEqual(
+    preferredSeasonEpisodes[0].externalMappings.find(
+      (mapping) => mapping.provider === "tmdb_show",
+    ),
+    {
+      provider: "tmdb_show",
+      id: "5003",
+      scope: "s3",
+      seasonNumber: 3,
+      episodeNumbers: [1],
+    },
+    "a verified TMDB season link must provide metadata when AniBridge has no target for that season",
   );
 
   console.log("animeunity anizip: OK");

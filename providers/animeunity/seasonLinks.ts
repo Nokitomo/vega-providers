@@ -17,13 +17,22 @@ type SeasonRange = SourceRange & {
   corroborated: boolean;
 };
 
-const parseSourceRange = (value: string): SourceRange | null => {
+const parseSourceRange = (
+  value: string,
+  openRangeEnd?: number
+): SourceRange | null => {
   const match = String(value || "")
     .trim()
-    .match(/^(\d+)(?:-(\d+))?$/);
+    .match(/^(\d+)(?:-(\d*))?$/);
   if (!match?.[1]) return null;
   const start = Number.parseInt(match[1], 10);
-  const end = match[2] ? Number.parseInt(match[2], 10) : start;
+  const hasRangeSeparator = String(value || "").includes("-");
+  const end = match[2]
+    ? Number.parseInt(match[2], 10)
+    : hasRangeSeparator
+      ? openRangeEnd
+      : start;
+  if (end == null) return null;
   if (!Number.isFinite(start) || !Number.isFinite(end) || start <= 0 || end < start) {
     return null;
   }
@@ -64,9 +73,12 @@ const parseTargetStart = (target: AniBridgeTarget): number | undefined => {
   return values.length > 0 ? Math.min(...values) : undefined;
 };
 
-const sourceBounds = (target: AniBridgeTarget): SourceRange | null => {
+const sourceBounds = (
+  target: AniBridgeTarget,
+  openRangeEnd?: number
+): SourceRange | null => {
   const ranges = Object.keys(target.ranges || {})
-    .map(parseSourceRange)
+    .map((value) => parseSourceRange(value, openRangeEnd))
     .filter((range): range is SourceRange => range != null);
   if (ranges.length === 0) return null;
   return {
@@ -81,10 +93,38 @@ const rangesOverlap = (left: SourceRange, right: SourceRange): boolean =>
 const isSameSourceRange = (
   target: AniBridgeTarget,
   start: number,
-  end: number
+  end: number,
+  openRangeEnd?: number
 ): boolean => {
-  const bounds = sourceBounds(target);
+  const bounds = sourceBounds(target, openRangeEnd);
   return bounds?.start === start && bounds.end === end;
+};
+
+const alignWithTmdbRange = (
+  range: SeasonRange,
+  tmdbRanges: SeasonRange[]
+): SeasonRange => {
+  const tmdbRange = tmdbRanges.find(
+    (candidate) => candidate.seasonNumber === range.seasonNumber
+  );
+  if (!tmdbRange) return range;
+
+  const exact =
+    range.start === tmdbRange.start && range.end === tmdbRange.end;
+  const boundaryNoise =
+    Math.abs(range.start - tmdbRange.start) <= 1 &&
+    Math.abs(range.end - tmdbRange.end) <= 1;
+  const absoluteOpenRange =
+    range.start === tmdbRange.start &&
+    range.targetStart === tmdbRange.start &&
+    range.end >= tmdbRange.end;
+  if (!exact && !boundaryNoise && !absoluteOpenRange) return range;
+
+  return {
+    ...range,
+    start: tmdbRange.start,
+    end: tmdbRange.end,
+  };
 };
 
 const isBetterSeasonRange = (
@@ -142,11 +182,13 @@ const buildMappedSeasonRanges = ({
   primaryShowId,
   totalCount,
   tmdbSeasons,
+  tmdbRanges,
 }: {
   targets: AniBridgeTarget[];
   primaryShowId: string;
   totalCount: number;
   tmdbSeasons?: TmdbSeasonMetadata[];
+  tmdbRanges: SeasonRange[];
 }): { ranges: SeasonRange[]; hadConflicts: boolean } => {
   const candidates: SeasonRange[] = [];
   let mappingCandidatesCount = 0;
@@ -159,7 +201,7 @@ const buildMappedSeasonRanges = ({
     )
     .forEach((target) => {
       const seasonNumber = parseSeasonScope(target.scope);
-      const bounds = sourceBounds(target);
+      const bounds = sourceBounds(target, totalCount);
       if (seasonNumber == null || !bounds) return;
       const { start, end } = bounds;
       if (start > totalCount) return;
@@ -170,7 +212,7 @@ const buildMappedSeasonRanges = ({
       if (tmdbSeasons && !tmdbSeason) {
         return;
       }
-      candidates.push({
+      candidates.push(alignWithTmdbRange({
         start,
         end,
         seasonNumber,
@@ -183,9 +225,9 @@ const buildMappedSeasonRanges = ({
           (candidate) =>
             candidate.provider === "tvdb_show" &&
             candidate.scope === target.scope &&
-            isSameSourceRange(candidate, start, end)
+            isSameSourceRange(candidate, start, end, totalCount)
         ),
-      });
+      }, tmdbRanges));
     });
 
   const ranges: SeasonRange[] = [];
@@ -265,7 +307,11 @@ const mappedRangesMatchTmdb = (
   tmdbRanges: SeasonRange[],
   totalCount: number
 ): boolean => {
-  if (!isContiguousFromOne(mappedRanges) || tmdbRanges.length === 0) return false;
+  if (
+    mappedRanges.length < 2 ||
+    !isContiguousFromOne(mappedRanges) ||
+    tmdbRanges.length === 0
+  ) return false;
   return mappedRanges.every((mappedRange) => {
     const tmdbRange = tmdbRanges.find(
       (range) => range.seasonNumber === mappedRange.seasonNumber
@@ -308,18 +354,19 @@ export function buildTmdbSeasonEpisodeLinks({
     String(mappingResolution.ids?.tmdbShowIds?.[0] || "");
   if (!primaryShowId) return [];
 
-  const mappedResult = buildMappedSeasonRanges({
-    targets: mappingResolution.targets,
-    primaryShowId,
-    totalCount,
-    tmdbSeasons,
-  });
-  const mappedRanges = mappedResult.ranges;
   const tmdbRanges = buildTmdbAbsoluteSeasonRanges(
     tmdbSeasons,
     totalCount,
     primaryShowId
   );
+  const mappedResult = buildMappedSeasonRanges({
+    targets: mappingResolution.targets,
+    primaryShowId,
+    totalCount,
+    tmdbSeasons,
+    tmdbRanges,
+  });
+  const mappedRanges = mappedResult.ranges;
 
   if (mappedRanges.length === 0 && shouldBuildFromTmdbOnly(tmdbRanges, totalCount)) {
     return tmdbRanges

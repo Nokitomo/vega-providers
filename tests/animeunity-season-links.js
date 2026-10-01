@@ -128,13 +128,13 @@ const fallbackLinks = buildTmdbSeasonEpisodeLinks({
         provider: "tmdb_show",
         id: "37854",
         scope: "s1",
-        ranges: { "1-60": "1-60" },
+        ranges: { "1-59": "1-59" },
       },
       {
         provider: "tmdb_show",
         id: "37854",
         scope: "s2",
-        ranges: { "61-77": "61-77" },
+        ranges: { "60-77": "60-77" },
       },
     ],
   },
@@ -243,6 +243,76 @@ assert.deepStrictEqual(
     },
   ],
   "a partial specials mapping must not override the complete regular-season mapping"
+);
+
+const onePieceLinks = buildTmdbSeasonEpisodeLinks({
+  animeId: 12,
+  totalCount: 1180,
+  mappingResolution: {
+    ids: { tmdbShowIds: [37854] },
+    targets: [
+      { provider: "tmdb_show", id: "37854", scope: "s1", raw: "tmdb_show:37854:s1", ranges: { "1-61": "1-61" } },
+      { provider: "tmdb_show", id: "37854", scope: "s2", raw: "tmdb_show:37854:s2", ranges: { "62-77": "62-77" } },
+      { provider: "tmdb_show", id: "37854", scope: "s3", raw: "tmdb_show:37854:s3", ranges: { "78-91": "78-91" } },
+      { provider: "tmdb_show", id: "37854", scope: "s4", raw: "tmdb_show:37854:s4", ranges: { "92-130": "92-130" } },
+      { provider: "tmdb_show", id: "37854", scope: "s5", raw: "tmdb_show:37854:s5", ranges: { "131-143": "1-13" } },
+      { provider: "tmdb_show", id: "37854", scope: "s6", raw: "tmdb_show:37854:s6", ranges: { "143-195": "1-52", "144-195": "144-195" } },
+      ...[
+        [7, 196, 228], [8, 229, 263], [9, 264, 336], [10, 337, 381],
+        [11, 382, 407], [12, 408, 421], [13, 422, 522], [14, 523, 580],
+        [15, 581, 642], [16, 643, 692], [17, 693, 748], [18, 749, 803],
+        [19, 804, 877], [20, 878, 891],
+      ].map(([season, start, end]) => ({
+        provider: "tmdb_show",
+        id: "37854",
+        scope: `s${season}`,
+        raw: `tmdb_show:37854:s${season}`,
+        ranges: { [`${start}-${end}`]: `${start}-${end}` },
+      })),
+      { provider: "tmdb_show", id: "37854", scope: "s21", raw: "tmdb_show:37854:s21", ranges: { "892-1088": "892-1088" } },
+      { provider: "tmdb_show", id: "37854", scope: "s22", raw: "tmdb_show:37854:s22", ranges: { "1089-": "1089-" } },
+    ],
+  },
+  tmdbSeasons: [
+    { seasonNumber: 1, episodeCount: 61, name: { value: "Saga del Mare Orientale", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 2, episodeCount: 16, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 3, episodeCount: 14, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 4, episodeCount: 39, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 5, episodeCount: 13, name: { value: "Saga Della Nebbia Arcobaleno", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 6, episodeCount: 52, name: { value: "Saga dell'Isola nel Cielo", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    ...Array.from({ length: 14 }, (_, index) => ({ seasonNumber: index + 7, episodeCount: [33, 35, 73, 45, 26, 14, 101, 58, 62, 50, 56, 55, 74, 14][index], posters: [], backgrounds: [], sourceUrl: "" })),
+    { seasonNumber: 21, episodeCount: 197, name: { value: "Saga del Paese di Wa", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 22, episodeCount: 67, name: { value: "Saga di Egghead", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 23, episodeCount: 25, name: { value: "Elbaph", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+  ],
+});
+const onePieceBySeason = new Map(
+  onePieceLinks.map((item) => [item.seasonNumber, item])
+);
+assert.strictEqual(
+  onePieceBySeason.get(5).episodesLink,
+  "12|131|143|tmdb_show%3A37854%3As5",
+  "a one-episode mapping overlap must not remove the preceding season",
+);
+assert.strictEqual(
+  onePieceBySeason.get(6).episodesLink,
+  "12|144|195|tmdb_show%3A37854%3As6",
+  "TMDB boundaries must correct a noisy AniBridge boundary",
+);
+assert.strictEqual(
+  onePieceBySeason.get(22).episodesLink,
+  "12|1089|1155|tmdb_show%3A37854%3As22",
+  "open AniBridge ranges must stop at the matching TMDB season boundary",
+);
+assert.strictEqual(
+  onePieceBySeason.get(23).episodesLink,
+  "12|1156|1180|tmdb_show%3A37854%3As23",
+  "TMDB must extend the layout beyond the last AniBridge season",
+);
+assert.strictEqual(
+  onePieceLinks.some((item) => item.titleKey === "Episodes {{start}}-{{end}}"),
+  false,
+  "fully covered TMDB ranges must not leave a generic fallback season",
 );
 
 console.log("animeunity season links: OK");

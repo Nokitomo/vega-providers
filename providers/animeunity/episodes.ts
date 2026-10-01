@@ -6,6 +6,7 @@ import {
 } from "./episodeRanges";
 import {
   parseAniBridgeDescriptor,
+  parseSeasonScope,
   resolveAniBridgeEpisodeMappings,
   resolveAnimeMappings,
 } from "./mappings";
@@ -94,7 +95,7 @@ export const getEpisodes = async function ({
           seenEpisodeIds.add(link);
           const hasNumber = !!number;
           const parsedEpisodeNumber = parseEpisodeNumber(number);
-          const mappedEpisode =
+          let mappedEpisode =
             parsedEpisodeNumber != null
               ? resolveAniBridgeEpisodeMappings(
                   mappingResolution,
@@ -104,6 +105,36 @@ export const getEpisodes = async function ({
                     : undefined
                 )
               : undefined;
+          if (
+            mappedEpisode &&
+            parsedEpisodeNumber != null &&
+            preferredMapping?.provider === "tmdb_show" &&
+            !mappedEpisode.mappings.some(
+              (mapping) =>
+                mapping.provider === preferredMapping.provider &&
+                mapping.id === preferredMapping.id &&
+                mapping.scope === preferredMapping.scope
+            )
+          ) {
+            const preferredSeason = parseSeasonScope(preferredMapping.scope);
+            if (preferredSeason != null) {
+              mappedEpisode = {
+                seasonNumber: preferredSeason,
+                mappings: [
+                  ...mappedEpisode.mappings.filter(
+                    (mapping) => mapping.provider !== "tmdb_show"
+                  ),
+                  {
+                    provider: "tmdb_show",
+                    id: preferredMapping.id,
+                    scope: preferredMapping.scope,
+                    seasonNumber: preferredSeason,
+                    episodeNumbers: [parsedEpisodeNumber],
+                  },
+                ],
+              };
+            }
+          }
           const title = hasNumber ? `Episode ${number}` : "Episode";
           episodes.push({
             title,
