@@ -61,6 +61,10 @@ const fixture = {
     "mal:30": {},
     "tvdb_show:78857:s2": { "1-13": "1-13" },
   },
+  "tvdb_show:78857:s2": {
+    "anilist:20": { "1-52": "53-104" },
+    "tmdb_show:46260:s2": { "1-52": "1-52" },
+  },
 };
 
 assert.deepStrictEqual(parseAniBridgeDescriptor("tmdb_show:46260:s2"), {
@@ -76,7 +80,7 @@ const index = parseAniBridgePayload(fixture, 1000);
 assert(index);
 assert.strictEqual(index.schemaVersion, "3.0.3");
 assert.strictEqual(index.generatedOn, "2026-09-24");
-assert.strictEqual(index.records.size, 4);
+assert.strictEqual(index.records.size, 5);
 assert.strictEqual(parseAniBridgePayload("not-json"), null);
 
 assert.deepStrictEqual(mapAniBridgeEpisodeRange("53-104", "1-52", 53), [1]);

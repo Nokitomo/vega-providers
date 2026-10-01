@@ -34,6 +34,15 @@ const aniZipPayload = {
       summary: "Wrong summary\nSource: Crunchyroll",
       image: "https://img.test/episode-1.jpg",
     },
+    2: {
+      tvdbShowId: 777,
+      seasonNumber: 2,
+      episodeNumber: 1,
+      absoluteEpisodeNumber: 13,
+      title: { it: "Secondo episodio", en: "Second episode" },
+      overview: "Second overview",
+      image: "https://img.test/episode-2.jpg",
+    },
   },
 };
 
@@ -46,6 +55,8 @@ assert.strictEqual(parsed.artwork.fanart, "https://img.test/fanart.jpg");
 assert.strictEqual(parsed.artwork.banner, "https://img.test/banner.jpg");
 assert.strictEqual(parsed.artwork.logo, "https://img.test/logo.png");
 assert.strictEqual(parsed.episodes[0].titleIt, "Titolo italiano");
+assert.strictEqual(parsed.episodes[0].sourceEpisodeNumber, 1);
+assert.strictEqual(parsed.episodes[1].sourceEpisodeNumber, 2);
 assert.strictEqual(parsed.episodes[0].overview, "English overview");
 assert.strictEqual(
   Object.prototype.hasOwnProperty.call(parsed.episodes[0], "summary"),
@@ -175,6 +186,23 @@ function createEpisodeContext({ anilistId, tmdbId, complete, tmdbSeason = 2 }) {
     synopsis: "English overview",
     thumbnail: "https://img.test/episode-1.jpg",
   });
+  const sourceKeyFallback = await resolveAniZipEpisodeFallbacks({
+    providerContext: directContext,
+    anilistId: 100,
+    sourceRevision: "12",
+    requests: [
+      {
+        sourceEpisodeNumber: 2,
+        seasonNumber: 2,
+        externalMappings: requests[0].externalMappings,
+      },
+    ],
+  });
+  assert.strictEqual(
+    sourceKeyFallback[0].title,
+    "Secondo episodio",
+    "the AniZip object key must win over duplicated nested TVDB numbers",
+  );
   await resolveAniZipArtwork({
     providerContext: directContext,
     anilistId: 100,

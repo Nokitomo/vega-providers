@@ -10,6 +10,14 @@ function findMappedEpisode(
   episodes: AniZipEpisode[],
   request: AniZipEpisodeRequest
 ): AniZipEpisode | undefined {
+  if (request.sourceEpisodeNumber != null) {
+    const sourceExact = episodes.find(
+      (episode) =>
+        episode.sourceEpisodeNumber === request.sourceEpisodeNumber
+    );
+    if (sourceExact) return sourceExact;
+  }
+
   const tvdbMappings = (request.externalMappings || []).filter(
     (mapping) =>
       mapping.provider === "tvdb_show" &&

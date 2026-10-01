@@ -61,7 +61,7 @@ export function parseAniZipArtwork(payload: any): AniZipArtwork {
   };
 }
 
-function parseAniZipEpisode(value: any): AniZipEpisode | null {
+function parseAniZipEpisode(value: any, sourceKey?: string): AniZipEpisode | null {
   const episodeNumber = normalizePositiveNumber(value?.episodeNumber);
   const absoluteEpisodeNumber = normalizePositiveNumber(
     value?.absoluteEpisodeNumber,
@@ -69,6 +69,7 @@ function parseAniZipEpisode(value: any): AniZipEpisode | null {
   if (episodeNumber == null && absoluteEpisodeNumber == null) return null;
 
   return {
+    sourceEpisodeNumber: normalizePositiveNumber(sourceKey),
     tvdbShowId: normalizePositiveNumber(value?.tvdbShowId),
     seasonNumber: normalizePositiveNumber(value?.seasonNumber),
     episodeNumber,
@@ -81,8 +82,8 @@ function parseAniZipEpisode(value: any): AniZipEpisode | null {
 }
 
 export function parseAniZipMetadata(payload: any): AniZipMetadata {
-  const episodes = Object.values(payload?.episodes || {})
-    .map(parseAniZipEpisode)
+  const episodes = Object.entries(payload?.episodes || {})
+    .map(([sourceKey, episode]) => parseAniZipEpisode(episode, sourceKey))
     .filter((episode): episode is AniZipEpisode => episode != null);
 
   return {

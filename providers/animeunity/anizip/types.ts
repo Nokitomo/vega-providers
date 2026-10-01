@@ -8,6 +8,7 @@ export type AniZipArtwork = {
 };
 
 export type AniZipEpisode = {
+  sourceEpisodeNumber?: number;
   tvdbShowId?: number;
   seasonNumber?: number;
   episodeNumber?: number;

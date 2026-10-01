@@ -250,17 +250,21 @@ export function findAniBridgeRecordsByDescriptors(
   };
 
   queries.forEach((query) => {
+    const directTargets: AniBridgeTarget[] = [];
+    const reverseTargets: AniBridgeTarget[] = [];
     index.records.forEach((record) => {
       const source = parseAniBridgeDescriptor(record.sourceDescriptor);
       if (source && descriptorMatchesQuery(source, query)) {
-        addRecord(query.raw, record.targets);
+        directTargets.push(...record.targets);
       }
 
       record.targets.forEach((target) => {
         if (!descriptorMatchesQuery(target, query)) return;
-        addRecord(query.raw, buildReverseRecordTargets(record, target));
+        reverseTargets.push(...buildReverseRecordTargets(record, target));
       });
     });
+    addRecord(query.raw, reverseTargets);
+    addRecord(query.raw, directTargets);
   });
 
   return Array.from(output.values()).sort((left, right) =>

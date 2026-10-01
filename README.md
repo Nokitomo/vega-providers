@@ -132,6 +132,11 @@ then fall back to general TMDB artwork. Episode fields are resolved independentl
 TMDB is primary and AniZip supplies only missing titles (`it`, then `en`),
 English `overview` text, and TheTVDB thumbnails. AniZip `summary` is ignored.
 The large raw TMDB/AniZip objects are not added to `Info.extra` or `EpisodeLink`.
+Season links preserve AnimeUnity's absolute episode numbers because TMDB uses
+the same numbering for these split anime seasons. Direct AniBridge ranges take
+priority over ranges discovered by reverse lookup. AniZip fallback matching
+uses the JSON episode key first, avoiding duplicated or shifted nested TVDB
+numbers.
 
 Artwork fallback requests are conditional. Logos use TMDB, Cinemeta, AniZip,
 then the provider. Backgrounds are composed with the app as provider, AniList
