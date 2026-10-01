@@ -19,6 +19,10 @@ providers/
     settings.ts (optional)
 ```
 
+Provider icons are stored as optimized square PNG files in `assets/` and are
+referenced through stable jsDelivr URLs in `manifest.json`. Keep the manifest
+`icon` empty only when a provider intentionally has no icon.
+
 Provider modules are bundled during the build so internal imports (e.g. `./parsers/*`)
 are supported without relying on runtime `require()` in the app.
 
@@ -27,7 +31,6 @@ are supported without relying on runtime `require()` in the app.
 ### 1. `catalog.ts`
 
 <img src="https://github.com/user-attachments/assets/40e5da3d-326d-4f5c-b266-a4167da2a269" width="200"/>
-
 
 - **Purpose:** Defines the categories or filters available for your provider.
 - **How it's used:**
@@ -303,7 +306,6 @@ export const getEpisodes = async function ({
 The `linkList` property in the object returned by `getMeta` is used to describe available seasons, episodes, or direct download/stream links for the item.
 
 <img src="https://github.com/user-attachments/assets/f5dc31fc-0701-4d97-8056-01a58ecdefc0" width="200"/>
-
 
 - Each entry in `linkList` can represent a season or anything you want; it will be shown in the dropdown.
 - If your provider requires an extra request to fetch episodes for a season, set the `episodesLink` property. When the user selects that season, the app will call `getEpisodes` with this value.
