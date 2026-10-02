@@ -9,6 +9,7 @@ export type EpisodeRangeRequest = {
   start: number;
   end?: number;
   mappingDescriptor?: string;
+  recordAligned?: boolean;
 };
 
 export type EpisodeFetchRange = {
@@ -58,11 +59,13 @@ export const parseEpisodeRangeRequest = (value: string): EpisodeRangeRequest | n
       mappingDescriptor = parts[3].trim() || undefined;
     }
   }
+  const recordAligned = parts[4] === "records";
   return {
     animeId,
     start,
     end,
     ...(mappingDescriptor ? { mappingDescriptor } : {}),
+    ...(recordAligned ? { recordAligned: true } : {}),
   };
 };
 

@@ -12,6 +12,7 @@ import {
 } from "./mappings";
 import { resolveTmdbEpisodeSeasonMetadata } from "./tmdb";
 import { resolveAniZipEpisodeFallbacks } from "./anizip";
+import { parseAnimeUnityEpisodeSpan } from "./episodeRecords";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -74,6 +75,7 @@ export const getEpisodes = async function ({
 
     const episodes: EpisodeLink[] = [];
     const seenEpisodeIds = new Set<string>();
+    let recordAlignedEpisodeIndex = 0;
     const ranges = buildEpisodeFetchRanges(request, totalCount);
     for (const { start, end } of ranges) {
       const rangeUrl = `${baseHost}/info_api/${animeId}/1?start_range=${start}&end_range=${end}`;
@@ -85,9 +87,14 @@ export const getEpisodes = async function ({
           },
           timeout: TIMEOUTS.LONG,
         });
-        const list = res.data?.episodes || [];
+        const list = [...(res.data?.episodes || [])].sort((left: any, right: any) => {
+          const leftSpan = parseAnimeUnityEpisodeSpan(left?.number);
+          const rightSpan = parseAnimeUnityEpisodeSpan(right?.number);
+          return (leftSpan?.start || 0) - (rightSpan?.start || 0);
+        });
         list.forEach((episode: any) => {
           const number = normalizeEpisodeNumber(episode?.number);
+          const sourceSpan = parseAnimeUnityEpisodeSpan(number);
           const id = episode?.id;
           if (!id) return;
           const link = String(id);
@@ -95,6 +102,14 @@ export const getEpisodes = async function ({
           seenEpisodeIds.add(link);
           const hasNumber = !!number;
           const parsedEpisodeNumber = parseEpisodeNumber(number);
+          const isRequestedRecord =
+            !!request.recordAligned &&
+            !!sourceSpan &&
+            sourceSpan.start >= request.start &&
+            sourceSpan.end <= (request.end ?? totalCount);
+          const recordEpisodeNumber = isRequestedRecord
+            ? ++recordAlignedEpisodeIndex
+            : undefined;
           let mappedEpisode =
             parsedEpisodeNumber != null
               ? resolveAniBridgeEpisodeMappings(
@@ -106,6 +121,28 @@ export const getEpisodes = async function ({
                 )
               : undefined;
           if (
+            recordEpisodeNumber != null &&
+            preferredMapping?.provider === "tmdb_show"
+          ) {
+            const preferredSeason = parseSeasonScope(preferredMapping.scope);
+            if (preferredSeason != null) {
+              mappedEpisode = {
+                seasonNumber: preferredSeason,
+                mappings: [
+                  ...(mappedEpisode?.mappings || []).filter(
+                    (mapping) => mapping.provider !== "tmdb_show"
+                  ),
+                  {
+                    provider: "tmdb_show",
+                    id: preferredMapping.id,
+                    scope: preferredMapping.scope,
+                    seasonNumber: preferredSeason,
+                    episodeNumbers: [recordEpisodeNumber],
+                  },
+                ],
+              };
+            }
+          } else if (
             mappedEpisode &&
             parsedEpisodeNumber != null &&
             preferredMapping?.provider === "tmdb_show" &&
@@ -135,13 +172,30 @@ export const getEpisodes = async function ({
               };
             }
           }
-          const title = hasNumber ? `Episode ${number}` : "Episode";
+          const isEpisodeRange =
+            !!sourceSpan && sourceSpan.end > sourceSpan.start;
+          const title = hasNumber
+            ? isEpisodeRange
+              ? `Episodes ${sourceSpan.start}-${sourceSpan.end}`
+              : `Episode ${number}`
+            : "Episode";
           episodes.push({
             title,
-            titleKey: hasNumber ? "Episode {{number}}" : "Episode",
-            titleParams: hasNumber ? { number } : undefined,
+            titleKey: hasNumber
+              ? isEpisodeRange
+                ? "Episodes {{start}}-{{end}}"
+                : "Episode {{number}}"
+              : "Episode",
+            titleParams: hasNumber
+              ? isEpisodeRange
+                ? { start: sourceSpan.start, end: sourceSpan.end }
+                : { number }
+              : undefined,
             episodeNumber: parsedEpisodeNumber,
             sourceEpisodeNumber: parsedEpisodeNumber,
+            sourceEpisodeEndNumber: isEpisodeRange
+              ? sourceSpan.end
+              : undefined,
             seasonNumber: mappedEpisode?.seasonNumber,
             externalMappings:
               mappedEpisode && mappedEpisode.mappings.length > 0

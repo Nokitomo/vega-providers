@@ -315,4 +315,43 @@ assert.strictEqual(
   "fully covered TMDB ranges must not leave a generic fallback season",
 );
 
+const pokemonRecords = [
+  ...Array.from({ length: 170 }, (_, index) => String(index + 1)),
+  "171-172",
+  ...Array.from({ length: 20 }, (_, index) => String(index + 173)),
+].map((label, index) => {
+  const [start, end = start] = label.split("-").map(Number);
+  return { id: String(index + 1), label, start, end, raw: {} };
+});
+const pokemonLinks = buildTmdbSeasonEpisodeLinks({
+  animeId: 1306,
+  totalCount: 192,
+  mappingResolution: {
+    ids: { tmdbShowIds: [60572] },
+    targets: [
+      { provider: "tmdb_show", id: "60572", scope: "s6", ranges: { "2-41": "1-40" } },
+      { provider: "tmdb_show", id: "60572", scope: "s7", ranges: { "42-93": "1-52" } },
+      { provider: "tmdb_show", id: "60572", scope: "s8", ranges: { "94-146": "1-53" } },
+      { provider: "tmdb_show", id: "60572", scope: "s9", ranges: { "147-192": "1-46" } },
+    ],
+  },
+  tmdbSeasons: [
+    { seasonNumber: 6, episodeCount: 40, name: { value: "Advanced", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 7, episodeCount: 52, name: { value: "Advanced Challenge", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 8, episodeCount: 53, name: { value: "Advanced Battle", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+    { seasonNumber: 9, episodeCount: 46, name: { value: "Battle Frontier", language: "it-IT" }, posters: [], backgrounds: [], sourceUrl: "" },
+  ],
+  sourceRecords: pokemonRecords,
+});
+assert.deepStrictEqual(
+  pokemonLinks.map(item => item.episodesLink),
+  [
+    "1306|1|40|tmdb_show%3A60572%3As6|records",
+    "1306|41|92|tmdb_show%3A60572%3As7|records",
+    "1306|93|145|tmdb_show%3A60572%3As8|records",
+    "1306|146|192|tmdb_show%3A60572%3As9|records",
+  ],
+  "record-aligned seasons must recover episode 1 and preserve the combined 171-172 source record",
+);
+
 console.log("animeunity season links: OK");

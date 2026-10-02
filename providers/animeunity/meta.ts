@@ -24,6 +24,7 @@ import {
 import { resolveTvdbArtworkMetadata } from "./tvdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
 import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
+import { fetchAnimeUnityEpisodeRecords } from "./episodeRecords";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -316,11 +317,43 @@ export const getMeta = async function ({
             })
           : null;
       if (tmdbMedia?.seasons?.length) {
+        const mappedSeasonNumbers = new Set(
+          mappingResolution.targets
+            .filter(
+              target =>
+                target.provider === "tmdb_show" &&
+                target.id === String(tmdbTarget?.id || "") &&
+                Object.keys(target.ranges || {}).length > 0,
+            )
+            .map(target => parseSeasonScope(target.scope))
+            .filter((season): season is number => season != null && season > 0),
+        );
+        const mappedTmdbSeasons = tmdbMedia.seasons.filter(season =>
+          mappedSeasonNumbers.has(season.seasonNumber),
+        );
+        const tmdbEpisodeCount = mappedTmdbSeasons
+          .reduce((total, season) => total + Number(season.episodeCount || 0), 0);
+        const declaredEpisodeCount = Number(metaPayload.episodesCount || 0);
+        const shouldInspectSourceRecords =
+          mappedTmdbSeasons.length > 1 &&
+          tmdbEpisodeCount > 0 &&
+          declaredEpisodeCount !== tmdbEpisodeCount &&
+          Math.abs(declaredEpisodeCount - tmdbEpisodeCount) <=
+            Math.max(10, Math.ceil(tmdbEpisodeCount * 0.05));
+        const sourceRecords = shouldInspectSourceRecords
+          ? await fetchAnimeUnityEpisodeRecords({
+              providerContext,
+              baseHost,
+              animeId,
+              totalCount: declaredEpisodeCount,
+            })
+          : undefined;
         seasonMappedLinkList = buildTmdbSeasonEpisodeLinks({
           animeId,
           totalCount: metaPayload.episodesCount,
           mappingResolution,
           tmdbSeasons: tmdbMedia.seasons,
+          sourceRecords,
         });
       }
     }

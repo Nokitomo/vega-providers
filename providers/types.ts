@@ -175,6 +175,7 @@ export interface EpisodeLink {
   titleParams?: I18nParams;
   episodeNumber?: number;
   sourceEpisodeNumber?: number;
+  sourceEpisodeEndNumber?: number;
   seasonNumber?: number;
   synopsis?: string;
   thumbnail?: string;

@@ -3,6 +3,7 @@ import { EPISODE_RANGE_KEY } from "./episodeRanges";
 import { parseSeasonScope } from "./mappings";
 import { AnimeMappingResolution, AniBridgeTarget } from "./mappings";
 import { TmdbSeasonMetadata } from "./tmdb";
+import { AnimeUnityEpisodeRecord } from "./episodeRecords";
 
 type SourceRange = {
   start: number;
@@ -15,6 +16,7 @@ type SeasonRange = SourceRange & {
   mappingDescriptor: string;
   targetStart?: number;
   corroborated: boolean;
+  recordAligned?: boolean;
 };
 
 const parseSourceRange = (
@@ -165,7 +167,7 @@ const toSeasonLink = (animeId: number, totalCount: number, range: SeasonRange): 
     availabilityStatus: "available" as const,
     episodesLink: `${animeId}|${range.start}|${end}|${encodeURIComponent(
       range.mappingDescriptor
-    )}`,
+    )}${range.recordAligned ? "|records" : ""}`,
   };
 };
 
@@ -293,6 +295,52 @@ const buildTmdbAbsoluteSeasonRanges = (
   return ranges;
 };
 
+const buildTmdbRecordSeasonRanges = (
+  tmdbSeasons: TmdbSeasonMetadata[] | undefined,
+  sourceRecords: AnimeUnityEpisodeRecord[] | undefined,
+  primaryShowId: string,
+  mappedSeasonNumbers: Set<number>
+): SeasonRange[] => {
+  const seasons = (tmdbSeasons || [])
+    .filter(
+      (season) =>
+        season.seasonNumber > 0 &&
+        mappedSeasonNumbers.has(season.seasonNumber) &&
+        Number.isFinite(season.episodeCount) &&
+        Number(season.episodeCount) > 0
+    )
+    .sort((left, right) => left.seasonNumber - right.seasonNumber);
+  const records = sourceRecords || [];
+  const expectedCount = seasons.reduce(
+    (total, season) => total + Number(season.episodeCount),
+    0
+  );
+  if (seasons.length <= 1 || records.length === 0 || records.length !== expectedCount) {
+    return [];
+  }
+  const ranges: SeasonRange[] = [];
+  let offset = 0;
+  for (const season of seasons) {
+    const count = Number(season.episodeCount);
+    const chunk = records.slice(offset, offset + count);
+    offset += count;
+    if (chunk.length !== count) return [];
+    const first = chunk[0];
+    const last = chunk[chunk.length - 1];
+    if (!first || !last) return [];
+    ranges.push({
+      start: first.start,
+      end: last.end,
+      seasonNumber: season.seasonNumber,
+      title: localizedSeasonTitle(season.seasonNumber, tmdbSeasons),
+      mappingDescriptor: `tmdb_show:${primaryShowId}:s${season.seasonNumber}`,
+      corroborated: false,
+      recordAligned: true,
+    });
+  }
+  return ranges;
+};
+
 const isContiguousFromOne = (ranges: SeasonRange[]): boolean => {
   let expectedStart = 1;
   for (const range of ranges) {
@@ -339,11 +387,13 @@ export function buildTmdbSeasonEpisodeLinks({
   totalCount,
   mappingResolution,
   tmdbSeasons,
+  sourceRecords,
 }: {
   animeId: number;
   totalCount?: number;
   mappingResolution: AnimeMappingResolution;
   tmdbSeasons?: TmdbSeasonMetadata[];
+  sourceRecords?: AnimeUnityEpisodeRecord[];
 }): Link[] {
   if (!Number.isFinite(animeId) || animeId <= 0 || !totalCount || totalCount <= 0) {
     return [];
@@ -353,6 +403,25 @@ export function buildTmdbSeasonEpisodeLinks({
     selectPrimaryTmdbShowId(mappingResolution.targets) ||
     String(mappingResolution.ids?.tmdbShowIds?.[0] || "");
   if (!primaryShowId) return [];
+
+  const recordRanges = buildTmdbRecordSeasonRanges(
+    tmdbSeasons,
+    sourceRecords,
+    primaryShowId,
+    new Set(
+      mappingResolution.targets
+        .filter(
+          (target) =>
+            target.provider === "tmdb_show" && target.id === primaryShowId
+            && Object.keys(target.ranges || {}).length > 0
+        )
+        .map((target) => parseSeasonScope(target.scope))
+        .filter((season): season is number => season != null && season > 0)
+    )
+  );
+  if (recordRanges.length > 0) {
+    return recordRanges.map((range) => toSeasonLink(animeId, totalCount, range));
+  }
 
   const tmdbRanges = buildTmdbAbsoluteSeasonRanges(
     tmdbSeasons,
