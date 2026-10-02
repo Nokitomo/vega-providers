@@ -88,6 +88,23 @@ function mergeTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
   );
 }
 
+function findDirectMetadataTargets(
+  index: Awaited<ReturnType<typeof getAniBridgeIndex>>,
+  anilistId?: number,
+  malId?: number,
+): AniBridgeTarget[] {
+  if (!index) return [];
+  const descriptors = [
+    anilistId ? `anilist:${anilistId}` : undefined,
+    malId ? `mal:${malId}` : undefined,
+  ].filter((value): value is string => Boolean(value));
+  return mergeTargets(
+    descriptors.flatMap(
+      descriptor => index.records.get(descriptor)?.targets || [],
+    ),
+  );
+}
+
 function buildRawTarget(
   provider: "tmdb_movie" | "tmdb_show" | "tvdb_movie" | "tvdb_show",
   id: number,
@@ -290,15 +307,24 @@ export async function resolveAnimeMappings({
     ? findAniBridgeSourceRecords(index, normalizedAnilistId, normalizedMalId)
     : [];
   let targets = mergeTargets(records.flatMap((record) => record.targets));
+  let metadataTargets = findDirectMetadataTargets(
+    index,
+    normalizedAnilistId,
+    normalizedMalId,
+  );
   const aniZipTmdbTargets = await resolveAniZipExternalTargets({
     providerContext,
     anilistId: normalizedAnilistId,
     malId: normalizedMalId,
     isMovie,
-    targets,
+    targets: metadataTargets,
   });
   if (aniZipTmdbTargets.length > 0) {
     targets = mergeTargets([...targets, ...aniZipTmdbTargets]);
+    metadataTargets = mergeTargets([
+      ...metadataTargets,
+      ...aniZipTmdbTargets,
+    ]);
   }
   const ids = emptyIds();
   if (normalizedAnilistId) ids.anilistIds.push(normalizedAnilistId);
@@ -312,7 +338,11 @@ export async function resolveAnimeMappings({
     ),
   );
 
-  const mappedImdbIds = isMovie ? ids.imdbMovieIds : ids.imdbShowIds;
+  const metadataIds = emptyIds();
+  metadataTargets.forEach(target => addTargetId(metadataIds, target));
+  const mappedImdbIds = isMovie
+    ? metadataIds.imdbMovieIds
+    : metadataIds.imdbShowIds;
   let imdbId: string | undefined = mappedImdbIds[0];
   let imdbSource: AnimeMappingResolution["imdbSource"] = imdbId
     ? "anibridge-v3"
@@ -332,6 +362,7 @@ export async function resolveAnimeMappings({
     generatedOn: index?.generatedOn,
     sourceDescriptors: records.map((record) => record.sourceDescriptor),
     targets,
+    metadataTargets,
     ids,
     imdbId,
     imdbSource,
@@ -364,6 +395,7 @@ export async function resolveExternalAnimeMappings({
     return {
       sourceDescriptors: [],
       targets: [],
+      metadataTargets: [],
       ids: emptyIds(),
       lookupSource: "external-reverse",
     };
@@ -398,6 +430,7 @@ export async function resolveExternalAnimeMappings({
     generatedOn: index?.generatedOn,
     sourceDescriptors,
     targets,
+    metadataTargets: targets,
     ids,
     imdbId: resolvedImdbId,
     imdbSource,

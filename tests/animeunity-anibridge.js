@@ -13,6 +13,7 @@ const {
   resolveExternalAnimeMappings,
 } = require("../dist/animeunity/mappings/index.js");
 const { getEpisodes } = require("../dist/animeunity/episodes.js");
+const { selectPrimaryTmdbId } = require("../dist/animeunity/tmdb/index.js");
 
 const executeVegaBundle = (fileName) => {
   const moduleCode = fs.readFileSync(
@@ -65,6 +66,40 @@ const fixture = {
     "anilist:20": { "1-52": "53-104" },
     "tmdb_show:46260:s2": { "1-52": "1-52" },
   },
+  "anilist:131573": {
+    "imdb_movie:tt14331144": { "1": "1" },
+    "mal:48561": { "1": "1" },
+    "tmdb_movie:810693": { "1": "1" },
+    "tvdb_show:377543:s0": { "1": "2" },
+  },
+  "mal:48561": {
+    "anilist:131573": { "1": "1" },
+    "imdb_movie:tt14331144": { "1": "1" },
+    "tmdb_movie:810693": { "1": "1" },
+    "tvdb_show:377543:s0": { "1": "2" },
+  },
+  "anilist:192809": {
+    "imdb_movie:tt36956670": { "1": "1" },
+    "mal:59654": { "1": "1" },
+    "tmdb_movie:1338799": { "1": "1" },
+    "tvdb_show:377543:s0": { "1": "7" },
+  },
+  "mal:59654": {
+    "anilist:192809": { "1": "1" },
+    "imdb_movie:tt36956670": { "1": "1" },
+    "tmdb_movie:1338799": { "1": "1" },
+    "tvdb_show:377543:s0": { "1": "7" },
+  },
+  "anidb:99999:R": {
+    "anilist:131573": {},
+    "anilist:192809": {},
+    "imdb_movie:tt14331144": {},
+    "imdb_movie:tt36956670": {},
+    "mal:48561": {},
+    "mal:59654": {},
+    "tmdb_movie:810693": {},
+    "tmdb_movie:1338799": {},
+  },
 };
 
 assert.deepStrictEqual(parseAniBridgeDescriptor("tmdb_show:46260:s2"), {
@@ -80,7 +115,7 @@ const index = parseAniBridgePayload(fixture, 1000);
 assert(index);
 assert.strictEqual(index.schemaVersion, "3.0.3");
 assert.strictEqual(index.generatedOn, "2026-09-24");
-assert.strictEqual(index.records.size, 5);
+assert.strictEqual(index.records.size, 10);
 assert.strictEqual(parseAniBridgePayload("not-json"), null);
 
 assert.deepStrictEqual(mapAniBridgeEpisodeRange("53-104", "1-52", 53), [1]);
@@ -111,6 +146,35 @@ const createContext = (handler) => ({
   assert.strictEqual(movie.imdbSource, "anibridge-v3");
   assert.deepStrictEqual(movie.ids.tmdbMovieIds, [11299]);
   assert.strictEqual(movieCalls.includes(PLEXANIBRIDGE_MAPPINGS_URL), false);
+
+  const relatedMovieContext = createContext(async (url) => {
+    if (url === ANIBRIDGE_MAPPINGS_URL) return { data: fixture };
+    throw new Error(`Unexpected URL: ${url}`);
+  });
+  const jujutsuZero = await resolveAnimeMappings({
+    providerContext: relatedMovieContext,
+    anilistId: 131573,
+    malId: 48561,
+    isMovie: true,
+  });
+  const hiddenInventory = await resolveAnimeMappings({
+    providerContext: relatedMovieContext,
+    anilistId: 192809,
+    malId: 59654,
+    isMovie: true,
+  });
+  assert.deepStrictEqual(jujutsuZero.ids.tmdbMovieIds, [810693, 1338799]);
+  assert.deepStrictEqual(hiddenInventory.ids.tmdbMovieIds, [810693, 1338799]);
+  assert.strictEqual(jujutsuZero.imdbId, "tt14331144");
+  assert.strictEqual(hiddenInventory.imdbId, "tt36956670");
+  assert.deepStrictEqual(selectPrimaryTmdbId(jujutsuZero, true), {
+    id: 810693,
+    type: "movie",
+  });
+  assert.deepStrictEqual(selectPrimaryTmdbId(hiddenInventory, true), {
+    id: 1338799,
+    type: "movie",
+  });
 
   const seriesCalls = [];
   const seriesContext = createContext(async (url) => {

@@ -14,7 +14,7 @@ function selectPrimaryShowId(
   resolution: AnimeMappingResolution
 ): number | undefined {
   const scores = new Map<string, number>();
-  resolution.targets.forEach((target) => {
+  (resolution.metadataTargets || resolution.targets).forEach((target) => {
     if (target.provider !== "tmdb_show") return;
     scores.set(
       target.id,
@@ -32,9 +32,13 @@ export function selectPrimaryTmdbId(
   resolution: AnimeMappingResolution,
   isMovie: boolean
 ): { id: number; type: TmdbMediaType } | null {
+  const metadataTargets = resolution.metadataTargets || resolution.targets;
+  const movieTarget = metadataTargets.find(
+    target => target.provider === "tmdb_movie",
+  );
   const id = isMovie
-    ? resolution.ids.tmdbMovieIds[0]
-    : selectPrimaryShowId(resolution) || resolution.ids.tmdbShowIds[0];
+    ? Number.parseInt(movieTarget?.id || "", 10)
+    : selectPrimaryShowId(resolution);
   return id ? { id, type: isMovie ? "movie" : "tv" } : null;
 }
 
@@ -45,7 +49,7 @@ export function selectPrimaryTmdbTarget(
   const selected = selectPrimaryTmdbId(resolution, isMovie);
   if (!selected || selected.type === "movie") return selected;
 
-  const matchingTargets = resolution.targets.filter(
+  const matchingTargets = (resolution.metadataTargets || resolution.targets).filter(
     (target) => target.provider === "tmdb_show" && target.id === String(selected.id)
   );
   const seasons = matchingTargets.map((target) => parseSeasonScope(target.scope));

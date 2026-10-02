@@ -138,6 +138,12 @@ priority over ranges discovered by reverse lookup. AniZip fallback matching
 uses the JSON episode key first, avoiding duplicated or shifted nested TVDB
 numbers.
 
+Title-level artwork and IMDb lookups only use AniBridge targets attached
+directly to the requested AniList/MAL work. Reverse-discovered related works
+remain available for episode relationships but cannot replace the movie or
+series identity used for metadata. When an exact TMDB target is absent, AniZip
+can still supply one for the requested AniList/MAL IDs.
+
 Artwork fallback requests are conditional. Logos use TMDB, Cinemeta, AniZip,
 then the provider. Backgrounds are composed with the app as provider, AniList
 banner, TMDB, Cinemeta, AniZip Fanart, then AniZip Banner. External metadata

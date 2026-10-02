@@ -42,6 +42,8 @@ export type AnimeMappingResolution = {
   generatedOn?: string;
   sourceDescriptors: string[];
   targets: AniBridgeTarget[];
+  /** Targets that describe the requested work itself, excluding related works. */
+  metadataTargets?: AniBridgeTarget[];
   ids: AniBridgeIds;
   imdbId?: string;
   imdbSource?: "anibridge-v3" | "plexanibridge-v2";

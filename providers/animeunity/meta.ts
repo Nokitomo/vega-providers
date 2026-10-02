@@ -33,13 +33,17 @@ function selectPrimaryTvdbTarget(
   mappingResolution: Awaited<ReturnType<typeof resolveAnimeMappings>>,
   isMovie: boolean,
 ): { id: number; mediaType: "series" | "movie"; seasonNumber?: number } | null {
+  const metadataTargets =
+    mappingResolution.metadataTargets || mappingResolution.targets;
   if (isMovie) {
-    const selectedId = String(mappingResolution.ids.tvdbMovieIds[0] || "");
+    const selectedId =
+      metadataTargets.find(target => target.provider === "tvdb_movie")?.id ||
+      "";
     const id = Number.parseInt(selectedId, 10);
     return Number.isFinite(id) && id > 0 ? { id, mediaType: "movie" } : null;
   }
 
-  const targets = mappingResolution.targets.filter(
+  const targets = metadataTargets.filter(
     (target) => target.provider === "tvdb_show",
   );
   const selectedId =
