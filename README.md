@@ -96,6 +96,15 @@ are supported without relying on runtime `require()` in the app.
 - Read and write values through `providerContext.kvStore`; do not embed credentials in provider code.
 - The app scopes and encrypts stored values per provider source and provider. Uninstalling or resetting a provider clears its values.
 
+AnimeUnity, StreamingUnity e StreamCenter offrono una chiave API TMDB v3 opzionale
+nelle rispettive impostazioni. La chiave e salvata dall'app nello storage locale
+cifrato del singolo provider, non nel manifest o nei bundle. Se presente, i
+resolver TMDB interrogano prima l'API mantenendo la priorita linguistica e delle
+immagini esistente; per dati mancanti o errori usano le pagine TMDB e poi i
+fallback verso gli altri servizi gia previsti dal provider. Senza chiave il
+percorso web resta invariato. Le credenziali non vanno incluse nei log o nei
+test fixture committati.
+
 ```ts
 export const getSettingsSchema = async () => [
   {

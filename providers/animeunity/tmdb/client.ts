@@ -1,4 +1,5 @@
 import { ProviderContext } from "../../types";
+import { readTmdbApiKey, resolveApiMedia } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
 import { fetchTmdbHtml, TMDB_BASE_URL } from "./http";
 import { parseTmdbDetailsPage } from "./details";
@@ -307,7 +308,7 @@ function mergeDetails(
   };
 }
 
-export async function resolveTmdbMediaMetadata({
+async function resolveTmdbMediaWeb({
   providerContext,
   id,
   type,
@@ -377,6 +378,72 @@ export async function resolveTmdbMediaMetadata({
 
   cache.set(pendingKey, request);
   return request;
+}
+
+export async function resolveTmdbMediaMetadata(args: {
+  providerContext: ProviderContext;
+  id: number;
+  type: TmdbMediaType;
+  includeExtended?: boolean;
+}): Promise<TmdbMediaMetadata | null> {
+  const { providerContext, id, type, includeExtended = false } = args;
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  if (!apiKey || includeExtended) return resolveTmdbMediaWeb(args);
+  const api = await resolveApiMedia({ providerContext, apiKey, id, type });
+  if (
+    api?.title?.value && api.overview?.value &&
+    (type !== "tv" || api.seasons.length > 0) &&
+    api.cast.length > 0 && api.genres.length > 0 &&
+    !!api.facts.Runtime && api.rating != null &&
+    !!(api.releaseDate || api.startDate)
+  ) return api;
+  const web = await resolveTmdbMediaWeb(args);
+  if (!api) return web;
+  if (!web) return api;
+  const prefer = <T>(primary: T[], fallback: T[]): T[] =>
+    primary.length ? primary : fallback;
+  const preferRecord = (
+    primary: Record<string, string>, fallback: Record<string, string>
+  ): Record<string, string> =>
+    Object.keys(primary).length ? primary : fallback;
+  return {
+    ...web, ...api,
+    title: api.title || web.title,
+    overview: api.overview || web.overview,
+    tagline: api.tagline || web.tagline,
+    originalTitle: api.originalTitle || web.originalTitle,
+    releaseDate: api.releaseDate || web.releaseDate,
+    startDate: api.startDate || web.startDate,
+    endDate: api.endDate || web.endDate,
+    certification: api.certification || web.certification,
+    status: api.status || web.status,
+    rating: api.rating ?? web.rating,
+    ratingCount: api.ratingCount ?? web.ratingCount,
+    seasons: api.seasons.length ? api.seasons : web.seasons,
+    cast: api.cast.length ? api.cast : web.cast,
+    crew: prefer(api.crew, web.crew),
+    videos: prefer(api.videos, web.videos),
+    watchProviders: prefer(api.watchProviders, web.watchProviders),
+    episodeGroups: prefer(api.episodeGroups, web.episodeGroups),
+    translations: prefer(api.translations, web.translations),
+    genres: prefer(api.genres, web.genres),
+    countries: prefer(api.countries, web.countries),
+    keywords: prefer(api.keywords, web.keywords),
+    networks: prefer(api.networks, web.networks),
+    socialLinks: preferRecord(api.socialLinks, web.socialLinks),
+    facts: preferRecord(api.facts, web.facts),
+    schema: Object.keys(api.schema).length ? api.schema : web.schema,
+    images: {
+      logos: api.images.logos.length ? api.images.logos : web.images.logos,
+      posters: api.images.posters.length ? api.images.posters : web.images.posters,
+      backdrops: api.images.backdrops.length
+        ? api.images.backdrops : web.images.backdrops,
+    },
+    logo: api.logo || web.logo,
+    poster: api.poster || web.poster,
+    background: api.background || web.background,
+  };
 }
 
 export async function resolveTmdbSeasonMetadata({

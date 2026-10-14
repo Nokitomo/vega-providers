@@ -1,4 +1,5 @@
 import { ProviderContext } from "../../types";
+import { readTmdbApiKey, resolveApiArtwork } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
 import { parseTmdbDetailsPage } from "./details";
 import { fetchTmdbHtml, TMDB_BASE_URL } from "./http";
@@ -80,7 +81,7 @@ function pickFields(
   };
 }
 
-export async function resolveTmdbArtworkMetadata({
+async function resolveTmdbArtworkWeb({
   providerContext,
   id,
   type,
@@ -209,4 +210,32 @@ export async function resolveTmdbArtworkMetadata({
 
   runtimeCache.set(pendingKey, request);
   return request;
+}
+
+export async function resolveTmdbArtworkMetadata(args: {
+  providerContext: ProviderContext;
+  id: number;
+  type: TmdbMediaType;
+  fields?: TmdbArtworkField[];
+  imageSize?: TmdbImageSize;
+}): Promise<TmdbArtworkMetadata | null> {
+  const { providerContext, id, type } = args;
+  const fields = args.fields || ["logo", "poster", "background"];
+  const imageSize = args.imageSize || "original";
+  if (!Number.isFinite(id) || id <= 0 || fields.length === 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  if (!apiKey) return resolveTmdbArtworkWeb(args);
+  const api = await resolveApiArtwork({
+    providerContext, apiKey, id, type, fields, imageSize,
+  });
+  if (api && fields.every((field) => !!api[field])) return api;
+  const web = await resolveTmdbArtworkWeb(args);
+  if (!api) return web;
+  return {
+    ...web,
+    ...api,
+    logo: api.logo || web?.logo,
+    poster: api.poster || web?.poster,
+    background: api.background || web?.background,
+  };
 }

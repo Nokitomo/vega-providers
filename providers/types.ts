@@ -314,7 +314,7 @@ export interface TmdbTranslationMetadata {
 }
 
 export interface TmdbMediaMetadata {
-  source: "tmdb-web";
+  source: "tmdb-web" | "tmdb-api";
   id: number;
   type: "movie" | "tv";
   sourceUrl: string;

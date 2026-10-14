@@ -2,10 +2,11 @@
   {
     "display_name": "AnimeUnity",
     "value": "animeunity",
-    "version": "1.3.21",
+    "version": "1.3.22",
     "icon": "https://cdn.jsdelivr.net/gh/Nokitomo/vega-providers@main/assets/animeunity.png",
     "type": "italy",
-    "disabled": false
+    "disabled": false,
+    "hasSettings": true
   },
   {
     "display_name": "GuardaHD",
@@ -26,18 +27,20 @@
   {
     "display_name": "StreamingUnity",
     "value": "streamingunity",
-    "version": "1.0.21",
+    "version": "1.0.22",
     "icon": "https://cdn.jsdelivr.net/gh/Nokitomo/vega-providers@main/assets/streamingunity.png",
     "type": "italy",
-    "disabled": false
+    "disabled": false,
+    "hasSettings": true
   },
   {
     "display_name": "StreamCenter",
     "value": "streamcenter",
-    "version": "1.0.19",
+    "version": "1.0.20",
     "icon": "",
     "type": "italy",
-    "disabled": false
+    "disabled": false,
+    "hasSettings": true
   },
   {
     "display_name": "Torrentio",

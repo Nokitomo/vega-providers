@@ -1,4 +1,5 @@
 import { ProviderContext } from "../../types";
+import { readTmdbApiKey, resolveApiSeasonPoster } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
 import { parseTmdbDetailsPage } from "./details";
 import { fetchTmdbHtml, TMDB_BASE_URL } from "./http";
@@ -21,7 +22,7 @@ import { TmdbArtworkMetadata, TmdbImageSize } from "./types";
 const SEASON_ARTWORK_SOFT_TTL_MS = 24 * 60 * 60 * 1000;
 const CACHE_SCHEMA = "v1";
 
-export async function resolveTmdbSeasonPoster({
+async function resolveTmdbSeasonPosterWeb({
   providerContext,
   mediaId,
   seasonNumber,
@@ -129,4 +130,23 @@ export async function resolveTmdbSeasonPoster({
 
   runtimeCache.set(pendingKey, request);
   return request;
+}
+
+export async function resolveTmdbSeasonPoster(args: {
+  providerContext: ProviderContext;
+  mediaId: number;
+  seasonNumber: number;
+  imageSize?: TmdbImageSize;
+}): Promise<TmdbArtworkMetadata | null> {
+  const { providerContext, mediaId, seasonNumber } = args;
+  if (!Number.isFinite(mediaId) || mediaId <= 0 || seasonNumber < 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  if (!apiKey) return resolveTmdbSeasonPosterWeb(args);
+  const api = await resolveApiSeasonPoster({
+    providerContext, apiKey, mediaId, seasonNumber,
+    imageSize: args.imageSize || "original",
+  });
+  if (api?.poster) return api;
+  const web = await resolveTmdbSeasonPosterWeb(args);
+  return api ? { ...web, ...api, poster: api.poster || web?.poster } : web;
 }

@@ -19,7 +19,7 @@ export type TmdbImageSize = "original" | "w300" | "w780";
 export type TmdbArtworkMetadata = {
   id: number;
   type: TmdbMediaType;
-  source: "tmdb-web";
+  source: "tmdb-web" | "tmdb-api";
   sourceUrl: string;
   originalLanguage?: string;
   seasonNumber?: number;

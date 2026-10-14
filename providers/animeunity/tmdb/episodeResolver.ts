@@ -1,4 +1,5 @@
 import { ProviderContext } from "../../types";
+import { readTmdbApiKey, resolveApiEpisodeSeason } from "./api";
 import { parseTmdbDetailsPage } from "./details";
 import { fetchTmdbHtml, TMDB_BASE_URL } from "./http";
 import {
@@ -112,7 +113,7 @@ function hasLocalizedText(
   });
 }
 
-export async function resolveTmdbEpisodeSeasonMetadata({
+async function resolveTmdbEpisodeSeasonWeb({
   providerContext,
   mediaId,
   seasonNumber,
@@ -159,5 +160,50 @@ export async function resolveTmdbEpisodeSeasonMetadata({
     backgrounds: [],
     episodes,
     sourceUrl: `${TMDB_BASE_URL}/tv/${mediaId}/season/${seasonNumber}`,
+  };
+}
+
+export async function resolveTmdbEpisodeSeasonMetadata(args: {
+  providerContext: ProviderContext;
+  mediaId: number;
+  seasonNumber: number;
+  episodeNumbers?: number[];
+  sourceRevision?: string;
+}): Promise<TmdbSeasonMetadata | null> {
+  const { providerContext, mediaId, seasonNumber } = args;
+  if (!Number.isFinite(mediaId) || mediaId <= 0 || seasonNumber < 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  if (!apiKey) return resolveTmdbEpisodeSeasonWeb(args);
+  const api = await resolveApiEpisodeSeason({
+    providerContext, apiKey, mediaId, seasonNumber,
+    episodeNumbers: args.episodeNumbers,
+  });
+  const targets = args.episodeNumbers || [];
+  if (api?.episodes?.length && targets.every((number) => {
+    const episode = api.episodes?.find((item) => item.episodeNumber === number);
+    return !!episode?.title?.value && !!episode?.overview?.value &&
+      !!episode?.thumbnail;
+  })) return api;
+  const web = await resolveTmdbEpisodeSeasonWeb(args);
+  if (!api) return web;
+  if (!web) return api;
+  const byNumber = new Map((web.episodes || []).map((item) => [
+    item.episodeNumber, item,
+  ]));
+  for (const episode of api.episodes || []) {
+    const fallback = byNumber.get(episode.episodeNumber);
+    byNumber.set(episode.episodeNumber, fallback ? {
+      ...fallback, ...episode,
+      title: episode.title || fallback.title,
+      overview: episode.overview || fallback.overview,
+      thumbnail: episode.thumbnail || fallback.thumbnail,
+      stills: episode.stills.length ? episode.stills : fallback.stills,
+    } : episode);
+  }
+  return {
+    ...web, ...api,
+    episodes: Array.from(byNumber.values()).sort(
+      (left, right) => left.episodeNumber - right.episodeNumber
+    ),
   };
 }
