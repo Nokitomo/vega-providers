@@ -407,6 +407,49 @@ const createContext = (handler) => ({
     1,
   );
 
+  let fileEntry;
+  let persistentDownloads = 0;
+  const persistentFileCache = {
+    read: async (key) => {
+      assert.strictEqual(key, "anibridge-v3");
+      return fileEntry;
+    },
+    write: async (key, value) => {
+      assert.strictEqual(key, "anibridge-v3");
+      fileEntry = { value, updatedAt: Date.now() };
+    },
+  };
+  const persistentContext = () => ({
+    axios: {
+      get: async (url) => {
+        assert.strictEqual(url, ANIBRIDGE_MAPPINGS_URL);
+        persistentDownloads += 1;
+        return { data: fixture };
+      },
+    },
+    fileCache: persistentFileCache,
+  });
+  const mapMovie = (providerContext) =>
+    resolveAnimeMappings({
+      providerContext,
+      anilistId: 5,
+      isMovie: true,
+      includeLegacyImdb: false,
+    });
+  const firstContext = persistentContext();
+  await Promise.all([mapMovie(firstContext), mapMovie(firstContext)]);
+  assert.strictEqual(persistentDownloads, 1, "in-flight lookups must be shared");
+  const afterRestart = await mapMovie(persistentContext());
+  assert.strictEqual(afterRestart.ids.tmdbMovieIds[0], 11299);
+  assert.strictEqual(persistentDownloads, 1, "disk cache must survive a new context");
+
+  fileEntry = { value: "invalid json", updatedAt: Date.now() };
+  await mapMovie(persistentContext());
+  assert.strictEqual(persistentDownloads, 2, "corrupt cache must refetch");
+  fileEntry.updatedAt = Date.now() - 25 * 60 * 60 * 1000;
+  await mapMovie(persistentContext());
+  assert.strictEqual(persistentDownloads, 3, "expired cache must refetch");
+
   console.log("animeunity anibridge: OK");
 })().catch((error) => {
   console.error(error);

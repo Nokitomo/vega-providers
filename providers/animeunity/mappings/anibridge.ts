@@ -16,6 +16,7 @@ export const ANIBRIDGE_MAPPINGS_URL =
 
 const CACHE_KEY = "animeunity:anibridge-v3:index";
 const PENDING_KEY = "animeunity:anibridge-v3:pending";
+const FILE_CACHE_KEY = "anibridge-v3";
 const TIMEOUT_MS = 30000;
 const SUCCESS_TTL_MS = 24 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 30 * 60 * 1000;
@@ -114,12 +115,38 @@ export async function getAniBridgeIndex(
     | undefined;
   if (pending) return pending;
 
-  const request = providerContext.axios
-    .get(ANIBRIDGE_MAPPINGS_URL, {
-      timeout: TIMEOUT_MS,
-      headers: { Accept: "application/json" },
+  const request = Promise.resolve()
+    .then(async () => {
+      try {
+        const entry = await providerContext.fileCache?.read(FILE_CACHE_KEY);
+        if (entry && Date.now() - entry.updatedAt <= SUCCESS_TTL_MS) {
+          const stored = parseAniBridgePayload(entry.value, entry.updatedAt);
+          if (stored && stored.expiresAt > Date.now()) return stored;
+        }
+      } catch (_) {
+        // A missing or corrupt file must not prevent the normal network path.
+      }
+
+      const response = await providerContext.axios.get(ANIBRIDGE_MAPPINGS_URL, {
+        timeout: TIMEOUT_MS,
+        headers: { Accept: "application/json" },
+      });
+      const index = parseAniBridgePayload(response?.data);
+      if (index && providerContext.fileCache) {
+        try {
+          const raw =
+            typeof response.data === "string"
+              ? response.data
+              : JSON.stringify(response.data);
+          providerContext.fileCache.write(FILE_CACHE_KEY, raw).catch(() => {
+            // A failed background write must not delay artwork or metadata.
+          });
+        } catch (_) {
+          // Disk cache failure must not discard a valid downloaded index.
+        }
+      }
+      return index;
     })
-    .then((response) => parseAniBridgePayload(response?.data))
     .catch(() => null)
     .then((index) => {
       const cachedValue =
@@ -205,6 +232,40 @@ function mergeRecordTargets(targets: AniBridgeTarget[]): AniBridgeTarget[] {
   );
 }
 
+type ReverseMatch = { record: AniBridgeSourceRecord; target: AniBridgeTarget };
+type LookupIndex = {
+  direct: Map<string, AniBridgeSourceRecord[]>;
+  reverse: Map<string, ReverseMatch[]>;
+};
+
+const lookupIndexes = new WeakMap<AniBridgeIndex, LookupIndex>();
+
+function getLookupIndex(index: AniBridgeIndex): LookupIndex {
+  const cached = lookupIndexes.get(index);
+  if (cached) return cached;
+
+  const direct = new Map<string, AniBridgeSourceRecord[]>();
+  const reverse = new Map<string, ReverseMatch[]>();
+  index.records.forEach((record) => {
+    const source = parseAniBridgeDescriptor(record.sourceDescriptor);
+    if (source) {
+      const key = `${source.provider}:${source.id}`;
+      const matches = direct.get(key) || [];
+      matches.push(record);
+      direct.set(key, matches);
+    }
+    record.targets.forEach((target) => {
+      const key = `${target.provider}:${target.id}`;
+      const matches = reverse.get(key) || [];
+      matches.push({ record, target });
+      reverse.set(key, matches);
+    });
+  });
+  const built = { direct, reverse };
+  lookupIndexes.set(index, built);
+  return built;
+}
+
 function buildReverseRecordTargets(
   record: AniBridgeSourceRecord,
   queryTarget: AniBridgeTarget
@@ -239,6 +300,8 @@ export function findAniBridgeRecordsByDescriptors(
     .filter((descriptor): descriptor is AniBridgeDescriptor => !!descriptor);
   if (queries.length === 0) return [];
 
+  const lookup = getLookupIndex(index);
+
   const output = new Map<string, AniBridgeSourceRecord>();
   const addRecord = (sourceDescriptor: string, targets: AniBridgeTarget[]) => {
     if (targets.length === 0) return;
@@ -252,16 +315,16 @@ export function findAniBridgeRecordsByDescriptors(
   queries.forEach((query) => {
     const directTargets: AniBridgeTarget[] = [];
     const reverseTargets: AniBridgeTarget[] = [];
-    index.records.forEach((record) => {
+    const key = `${query.provider}:${query.id}`;
+    (lookup.direct.get(key) || []).forEach((record) => {
       const source = parseAniBridgeDescriptor(record.sourceDescriptor);
       if (source && descriptorMatchesQuery(source, query)) {
         directTargets.push(...record.targets);
       }
-
-      record.targets.forEach((target) => {
-        if (!descriptorMatchesQuery(target, query)) return;
-        reverseTargets.push(...buildReverseRecordTargets(record, target));
-      });
+    });
+    (lookup.reverse.get(key) || []).forEach(({ record, target }) => {
+      if (!descriptorMatchesQuery(target, query)) return;
+      reverseTargets.push(...buildReverseRecordTargets(record, target));
     });
     addRecord(query.raw, reverseTargets);
     addRecord(query.raw, directTargets);

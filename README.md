@@ -105,6 +105,14 @@ fallback verso gli altri servizi gia previsti dal provider. Senza chiave il
 percorso web resta invariato. Le credenziali non vanno incluse nei log o nei
 test fixture committati.
 
+L'indice pubblico AniBridge v3 di AnimeUnity e condiviso fra le ricerche
+tramite il contesto del provider. Nelle versioni dell'app che espongono
+`providerContext.fileCache`, viene salvato su file per 24 ore con la sola
+chiave `anibridge-v3`; il provider valida sempre lo schema prima di usarlo.
+Se la cache e assente, scaduta o non disponibile, il provider scarica e
+valida normalmente il dataset. Non salvare questo indice nel KV cifrato delle
+impostazioni: e un dataset pubblico e di grandi dimensioni.
+
 ```ts
 export const getSettingsSchema = async () => [
   {
