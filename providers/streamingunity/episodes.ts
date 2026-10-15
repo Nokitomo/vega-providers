@@ -1,4 +1,4 @@
-import { EpisodeLink, ProviderContext } from "../types";
+import { EpisodeInventory, EpisodeLink, ProviderContext } from "../types";
 import {
   DEFAULT_LOCALE,
   REQUEST_TIMEOUT,
@@ -111,6 +111,43 @@ const mapEpisodes = (
       } as EpisodeLink;
     })
     .filter((episode): episode is EpisodeLink => !!episode && !!episode.link);
+};
+
+/** The selected season only; uses metadata already present on the provider page. */
+export const getEpisodeInventory = async ({
+  url,
+  providerContext,
+}: {
+  url: string;
+  providerContext: ProviderContext;
+}): Promise<EpisodeInventory> => {
+  const baseUrl = await resolveBaseUrl(providerContext);
+  if (!baseUrl) throw new Error("StreamingUnity base URL unavailable");
+  const seasonUrl = resolveUrl(url, baseUrl);
+  if (!seasonUrl) throw new Error("Invalid StreamingUnity season URL");
+  const html = await fetchHtml(seasonUrl, providerContext);
+  const page = extractInertiaPage(html, providerContext.cheerio);
+  const title = page?.props?.title;
+  const titleId = String(title?.id || extractTitleId(seasonUrl) || "").trim();
+  const loadedSeason = page?.props?.loadedSeason;
+  if (!titleId || !Array.isArray(loadedSeason?.episodes)) {
+    throw new Error("Incomplete StreamingUnity season inventory");
+  }
+  const seasonNumber =
+    toSeasonNumber(loadedSeason?.number) ||
+    parseSeasonNumberFromUrl(seasonUrl);
+  const episodes = mapEpisodes(
+    loadedSeason.episodes,
+    titleId,
+    seasonNumber,
+    String(title?.imdb_id || "").trim(),
+    String(title?.tmdb_id || "").trim(),
+    resolveCdnUrl(page?.props, baseUrl)
+  );
+  if (episodes.length !== loadedSeason.episodes.length) {
+    throw new Error("StreamingUnity episode inventory lost identifiers");
+  }
+  return { episodes, complete: true };
 };
 
 const hasEpisodeText = (value?: string): boolean =>
@@ -266,9 +303,11 @@ const enrichEpisodesFromTvdb = async ({
 export const getEpisodes = async function ({
   url,
   providerContext,
+  knownEpisodes = [],
 }: {
   url: string;
   providerContext: ProviderContext;
+  knownEpisodes?: EpisodeLink[];
 }): Promise<EpisodeLink[]> {
   try {
     const baseUrl = await resolveBaseUrl(providerContext);
@@ -302,8 +341,10 @@ export const getEpisodes = async function ({
       String(title?.tmdb_id || "").trim(),
       cdnUrl
     );
+    const knownByLink = new Map(knownEpisodes.map((episode) => [episode.link, episode]));
+    const newEpisodes = mapped.filter((episode) => !knownByLink.has(episode.link));
     const tmdbEnriched = await enrichEpisodesFromTmdb({
-      episodes: mapped,
+      episodes: newEpisodes,
       tmdbId: String(title?.tmdb_id || "").trim(),
       seasonNumber,
       providerContext,
@@ -325,12 +366,27 @@ export const getEpisodes = async function ({
         })
       : undefined;
 
-    return enrichEpisodesFromTvdb({
+    const enrichedNew = await enrichEpisodesFromTvdb({
       episodes: tmdbEnriched,
       tvdbId: directTvdbId || resolvedExternalIds?.tvdbId,
       seasonNumber,
       providerContext,
       sourceRevision: String(episodes.length || ""),
+    });
+    const enrichedByLink = new Map(
+      enrichedNew.map((episode) => [episode.link, episode])
+    );
+    return mapped.map((episode) => {
+      const previous = knownByLink.get(episode.link);
+      return previous
+        ? {
+            ...episode,
+            ...previous,
+            link: episode.link,
+            episodeNumber: episode.episodeNumber,
+            seasonNumber: episode.seasonNumber,
+          }
+        : enrichedByLink.get(episode.link) || episode;
     });
   } catch (err) {
     console.error("streamingunity episodes error", err);

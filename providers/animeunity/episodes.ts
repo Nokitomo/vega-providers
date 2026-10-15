@@ -1,4 +1,4 @@
-import { EpisodeLink, ProviderContext } from "../types";
+import { EpisodeInventory, EpisodeLink, ProviderContext } from "../types";
 import { DEFAULT_HEADERS, DEFAULT_BASE_HOST, TIMEOUTS } from "./config";
 import {
   buildEpisodeFetchRanges,
@@ -35,12 +35,89 @@ function parseEpisodeNumber(value: string | undefined): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
-export const getEpisodes = async function ({
+/** A complete provider-only inventory; no TMDB, TVDB or AniZip requests. */
+export const getEpisodeInventory = async ({
   url,
   providerContext,
 }: {
   url: string;
   providerContext: ProviderContext;
+}): Promise<EpisodeInventory> => {
+  const request = parseEpisodeRangeRequest(url);
+  if (!request) {
+    throw new Error("Invalid AnimeUnity episode range");
+  }
+  const baseHost = normalizeBaseUrl(
+    (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST
+  );
+  const headers = { ...DEFAULT_HEADERS, Referer: `${baseHost}/` };
+  const infoResponse = await providerContext.axios.get(
+    `${baseHost}/info_api/${request.animeId}/`,
+    { headers, timeout: TIMEOUTS.LONG }
+  );
+  const totalCount = Number(infoResponse.data?.episodes_count);
+  if (!Number.isFinite(totalCount) || totalCount < 0) {
+    throw new Error("AnimeUnity episode count unavailable");
+  }
+  if (totalCount === 0) {
+    return { episodes: [], complete: true };
+  }
+
+  const episodes: EpisodeLink[] = [];
+  const seen = new Set<string>();
+  for (const { start, end } of buildEpisodeFetchRanges(request, totalCount)) {
+    const response = await providerContext.axios.get(
+      `${baseHost}/info_api/${request.animeId}/1?start_range=${start}&end_range=${end}`,
+      { headers, timeout: TIMEOUTS.LONG }
+    );
+    if (!Array.isArray(response.data?.episodes)) {
+      throw new Error("Incomplete AnimeUnity episode inventory");
+    }
+    for (const record of response.data.episodes) {
+      const link = String(record?.id || "").trim();
+      if (!link || seen.has(link)) continue;
+      seen.add(link);
+      const number = normalizeEpisodeNumber(record?.number);
+      const span = parseAnimeUnityEpisodeSpan(number);
+      const isRange = !!span && span.end > span.start;
+      episodes.push({
+        link,
+        title: number
+          ? isRange
+            ? `Episodes ${span.start}-${span.end}`
+            : `Episode ${number}`
+          : "Episode",
+        titleKey: number
+          ? isRange
+            ? "Episodes {{start}}-{{end}}"
+            : "Episode {{number}}"
+          : "Episode",
+        titleParams: number
+          ? isRange
+            ? { start: span.start, end: span.end }
+            : { number }
+          : undefined,
+        episodeNumber: parseEpisodeNumber(number),
+        sourceEpisodeNumber: parseEpisodeNumber(number),
+        sourceEpisodeEndNumber: isRange ? span.end : undefined,
+      });
+    }
+  }
+  episodes.sort(
+    (left, right) =>
+      (left.sourceEpisodeNumber || 0) - (right.sourceEpisodeNumber || 0)
+  );
+  return { episodes, complete: true };
+};
+
+export const getEpisodes = async function ({
+  url,
+  providerContext,
+  knownEpisodes = [],
+}: {
+  url: string;
+  providerContext: ProviderContext;
+  knownEpisodes?: EpisodeLink[];
 }): Promise<EpisodeLink[]> {
   try {
     const { axios } = providerContext;
@@ -209,11 +286,27 @@ export const getEpisodes = async function ({
       }
     }
 
+    const knownByLink = new Map(knownEpisodes.map((episode) => [episode.link, episode]));
+    const mergedEpisodes = episodes.map((episode) => {
+      const previous = knownByLink.get(episode.link);
+      return previous
+        ? {
+            ...episode,
+            ...previous,
+            link: episode.link,
+            episodeNumber: episode.episodeNumber,
+            sourceEpisodeNumber: episode.sourceEpisodeNumber,
+            sourceEpisodeEndNumber: episode.sourceEpisodeEndNumber,
+          }
+        : episode;
+    });
+
     const tmdbSeasonTargets = new Map<
       string,
       { mediaId: number; seasonNumber: number; episodeNumbers: Set<number> }
     >();
-    episodes.forEach((episode) => {
+    mergedEpisodes.forEach((episode) => {
+      if (knownByLink.has(episode.link)) return;
       episode.externalMappings?.forEach((mapping) => {
         if (
           mapping.provider !== "tmdb_show" ||
@@ -253,7 +346,10 @@ export const getEpisodes = async function ({
       })
     );
 
-    const tmdbResolved = episodes.map((episode) => {
+    const tmdbResolved = mergedEpisodes.map((episode) => {
+      if (knownByLink.has(episode.link)) {
+        return { episode, tmdbEpisode: undefined };
+      }
       const tmdbMapping = episode.externalMappings?.find(
         (mapping) =>
           mapping.provider === "tmdb_show" &&
@@ -288,11 +384,13 @@ export const getEpisodes = async function ({
 
     const missingIndexes = tmdbResolved
       .map(({ tmdbEpisode }, index) =>
-        !tmdbEpisode?.title?.value ||
-        !tmdbEpisode?.overview?.value ||
-        !tmdbEpisode?.thumbnail
-          ? index
-          : -1
+        knownByLink.has(mergedEpisodes[index].link)
+          ? -1
+          : !tmdbEpisode?.title?.value ||
+              !tmdbEpisode?.overview?.value ||
+              !tmdbEpisode?.thumbnail
+            ? index
+            : -1
       )
       .filter((index) => index >= 0);
     if (missingIndexes.length === 0) {

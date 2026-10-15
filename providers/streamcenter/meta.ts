@@ -1,6 +1,12 @@
-import { Info, ProviderContext } from "../types";
-import { getMeta as getAnimeMeta } from "../animeunity/meta";
-import { getMeta as getStreamingMeta } from "../streamingunity/meta";
+import { ContentInventory, Info, ProviderContext } from "../types";
+import {
+  getContentInventory as getAnimeContentInventory,
+  getMeta as getAnimeMeta,
+} from "../animeunity/meta";
+import {
+  getContentInventory as getStreamingContentInventory,
+  getMeta as getStreamingMeta,
+} from "../streamingunity/meta";
 import { wrapInfo } from "./content";
 import { resolveMetaRoute } from "./routing";
 
@@ -12,6 +18,22 @@ const emptyInfo = (): Info => ({
   type: "movie",
   linkList: [],
 });
+
+export const getContentInventory = ({
+  link,
+  providerContext,
+}: {
+  link: string;
+  providerContext: ProviderContext;
+}): Promise<ContentInventory> => {
+  const route = resolveMetaRoute(link);
+  if (!route?.data?.url) {
+    return Promise.reject(new Error("Invalid StreamCenter metadata route"));
+  }
+  return route.source === "animeunity"
+    ? getAnimeContentInventory({link: route.data.url, providerContext})
+    : getStreamingContentInventory({link: route.data.url, providerContext});
+};
 
 export const getMeta = function ({
   link,

@@ -136,6 +136,12 @@ The app can localize provider-provided labels when you include optional i18n fie
 
 ## AnimeUnity TMDB metadata
 
+### Inventari leggeri per il database incrementale di Vega
+
+AnimeUnity, StreamingUnity e StreamCenter espongono facoltativamente `getContentInventory({link, providerContext})` e `getEpisodeInventory({url, providerContext})`. Restituiscono solo stato, disponibilità, stagioni e identificatori degli episodi presenti sul provider, senza riavviare la ricerca TMDB/TVDB/AniZip per gli episodi già salvati. L'inventario episodi di StreamingUnity riguarda soltanto la stagione selezionata. `getEpisodes` accetta `knownEpisodes` opzionale e arricchisce i soli episodi nuovi. StreamCenter delega gli inventari al provider di origine e ricostruisce i propri percorsi di riproduzione; i vecchi chiamanti che non passano `knownEpisodes` mantengono il comportamento completo.
+
+Gli inventari incompleti generano un errore: l'app conserva i dati precedenti invece di interpretare una risposta parziale come rimozione di contenuti. Queste API opzionali non cambiano la gerarchia di artwork e metadati.
+
 AnimeUnity resolves AniBridge TMDB IDs through the reusable modules in
 `providers/animeunity/tmdb/`. The scraper uses public TMDB pages and does not
 embed an API token. TMDB artwork follows Italian, English, original language,

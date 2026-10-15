@@ -183,6 +183,19 @@ export interface EpisodeLink {
   link: string;
 }
 
+export interface EpisodeInventory {
+  episodes: EpisodeLink[];
+  complete: true;
+}
+
+export interface ContentInventory {
+  complete: true;
+  status?: string;
+  episodesCount?: number;
+  seasonsSignature?: string;
+  availabilityStatus?: "upcoming" | "available";
+}
+
 export interface ExternalIdMapping {
   provider:
     | "anidb"

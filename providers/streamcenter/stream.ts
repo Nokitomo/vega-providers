@@ -2,12 +2,22 @@ import { ProviderContext, Stream } from "../types";
 import { getStream as getAnimeStream } from "../animeunity/stream";
 import { getStream as getStreamingStream } from "../streamingunity/stream";
 import { deduplicateStreams } from "../streamDedup";
-import { AnimeFallbackPlayback, resolveAnimeFallbackStream } from "./animeFallback";
+import {
+  AnimeFallbackPlayback,
+  discoverAnimeFallbackEpisodes,
+  resolveAnimeFallbackStream,
+} from "./animeFallback";
 import { decodeRoute } from "./routing";
+import { normalizeEpisodeNumber } from "./animeFallback/utils";
 
 type StreamRouteData = {
   url: string;
   fallbacks?: AnimeFallbackPlayback[];
+  title?: string;
+  anilistId?: number;
+  malId?: number;
+  dubbed?: boolean;
+  episodeNumber?: number;
 };
 
 const collectStreams = (
@@ -45,28 +55,47 @@ export const getStream = function ({
     });
   }
 
-  const uniqueFallbacks = (route.data.fallbacks || []).filter(
-    (playback, index, values) =>
-      values.findIndex(
-        (candidate) =>
-          candidate.source === playback.source &&
-          candidate.label === playback.label &&
-          (candidate.source === "animeworld"
-            ? candidate.episodeToken ===
-              (playback.source === "animeworld" ? playback.episodeToken : "")
-            : candidate.watchUrl ===
-              (playback.source === "animesaturn" ? playback.watchUrl : ""))
-      ) === index
-  );
-  return collectStreams([
-    getAnimeStream({
-      link: route.data.url,
-      type,
-      signal,
-      providerContext,
-    }),
-    ...uniqueFallbacks.map((playback) =>
-      resolveAnimeFallbackStream(playback, providerContext, signal)
-    ),
-  ]).then(deduplicateStreams);
+  const fallbackPromise =
+    route.data.fallbacks || !route.data.title
+      ? Promise.resolve(route.data.fallbacks || [])
+      : discoverAnimeFallbackEpisodes(
+          {
+            title: route.data.title,
+            anilistId: route.data.anilistId,
+            malId: route.data.malId,
+            dubbed: route.data.dubbed,
+          },
+          providerContext
+        )
+          .then((byEpisode) =>
+            byEpisode.get(normalizeEpisodeNumber(route.data.episodeNumber) || "") || []
+          )
+          .catch(() => []);
+  const primaryStream = getAnimeStream({
+    link: route.data.url,
+    type,
+    signal,
+    providerContext,
+  }).catch(() => [] as Stream[]);
+  return fallbackPromise.then((fallbacks) => {
+    const uniqueFallbacks = fallbacks.filter(
+      (playback, index, values) =>
+        values.findIndex(
+          (candidate) =>
+            candidate.source === playback.source &&
+            candidate.label === playback.label &&
+            (candidate.source === "animeworld"
+              ? candidate.episodeToken ===
+                (playback.source === "animeworld" ? playback.episodeToken : "")
+              : candidate.watchUrl ===
+                (playback.source === "animesaturn" ? playback.watchUrl : ""))
+        ) === index
+    );
+    return collectStreams([
+      primaryStream,
+      ...uniqueFallbacks.map((playback) =>
+        resolveAnimeFallbackStream(playback, providerContext, signal)
+      ),
+    ]).then(deduplicateStreams);
+  });
 };

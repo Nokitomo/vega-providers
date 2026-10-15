@@ -28,6 +28,7 @@
     "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",
     "test:streamingunity:availability": "node tests/streamingunity-availability.js",
     "test:streamingunity:episodes": "node tests/streamingunity-episodes.js",
+    "test:metadata-inventory": "node tests/metadata-inventory.js",
     "test:streamingunity:meta": "node tests/streamingunity-meta-fallbacks.js",
     "test:streamcenter:routing": "node tests/streamcenter-routing.js",
     "test:streamcenter:vega:smoke": "node tests/streamcenter-vega-smoke.js",

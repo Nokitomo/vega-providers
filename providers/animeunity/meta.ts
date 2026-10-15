@@ -1,4 +1,4 @@
-import { Info, ProviderContext } from "../types";
+import { ContentInventory, Info, ProviderContext } from "../types";
 import {
   buildMetaFromInfo,
   extractAnimeId,
@@ -29,6 +29,37 @@ import { fetchAnimeUnityEpisodeRecords } from "./episodeRecords";
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
+
+/** Cheap status/count check that deliberately skips external metadata lookups. */
+export const getContentInventory = async ({
+  link,
+  providerContext,
+}: {
+  link: string;
+  providerContext: ProviderContext;
+}): Promise<ContentInventory> => {
+  const animeId = extractAnimeId(link);
+  if (!animeId) throw new Error("Invalid AnimeUnity anime id");
+  const baseHost = normalizeBaseUrl(
+    (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST
+  );
+  const response = await providerContext.axios.get(
+    `${baseHost}/info_api/${animeId}/`,
+    { headers: DEFAULT_HEADERS, timeout: TIMEOUTS.LONG }
+  );
+  const info = response.data;
+  const count = Number(info?.episodes_count);
+  if (!info || !Number.isFinite(count) || count < 0) {
+    throw new Error("Incomplete AnimeUnity content inventory");
+  }
+  const parsed = buildMetaFromInfo(info, baseHost, animeId);
+  return {
+    complete: true,
+    status: String(info.status || "").trim(),
+    episodesCount: count,
+    availabilityStatus: parsed.linkList[0]?.availabilityStatus,
+  };
+};
 
 function selectPrimaryTvdbTarget(
   mappingResolution: Awaited<ReturnType<typeof resolveAnimeMappings>>,

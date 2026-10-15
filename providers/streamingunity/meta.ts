@@ -1,4 +1,4 @@
-import { ArtworkCandidate, Info, Link, ProviderContext } from "../types";
+import { ArtworkCandidate, ContentInventory, Info, Link, ProviderContext } from "../types";
 import {
   DEFAULT_CDN_URL,
   DEFAULT_LOCALE,
@@ -751,6 +751,66 @@ const buildRelated = (
     .filter((item): item is RelatedItem => !!item && !!item.title && !!item.link);
 
   return related.length > 0 ? related : undefined;
+};
+
+/** One title-page request; no external artwork or episode enrichment. */
+export const getContentInventory = async ({
+  link,
+  providerContext,
+}: {
+  link: string;
+  providerContext: ProviderContext;
+}): Promise<ContentInventory> => {
+  const baseUrl = await resolveBaseUrl(providerContext);
+  const titleId = extractTitleId(link);
+  if (!baseUrl || !titleId) {
+    throw new Error("Invalid StreamingUnity title URL");
+  }
+  const url = buildLocaleUrl(
+    buildTitlePath(titleId, extractSlugFromLink(link)),
+    baseUrl
+  );
+  const html = await fetchHtml(url, providerContext);
+  const page = extractInertiaPage(html, providerContext.cheerio);
+  const title = page?.props?.title;
+  if (!title || String(title.id || "") !== titleId) {
+    throw new Error("Incomplete StreamingUnity content inventory");
+  }
+  const seasons = Array.isArray(title.seasons) ? title.seasons : [];
+  const seasonEntries = seasons
+    .map((season: any) => ({
+      number: Number(season?.number),
+      count: Number(season?.episodes_count),
+      date: String(season?.release_date_it || season?.release_date || ""),
+    }))
+    .filter((season: any) => Number.isFinite(season.number) && season.number > 0)
+    .sort((left: any, right: any) => left.number - right.number);
+  const releaseDate = title?.release_date_it || title?.release_date;
+  const movieAvailability = parseAvailabilityDate(releaseDate);
+  const movieUpcoming =
+    isEnabledFlag(title?.coming_soon) ||
+    hasStatusToken(title?.status, UPCOMING_STATUS_TOKENS) ||
+    (!hasStatusToken(title?.status, RELEASED_STATUS_TOKENS) &&
+      movieAvailability.hasDate &&
+      movieAvailability.isFuture);
+  const isSeries = String(title?.type || "").toLowerCase() === "tv";
+  return {
+    complete: true,
+    status: String(title?.status || "").trim(),
+    episodesCount: isSeries
+      ? seasonEntries.reduce(
+          (sum: number, season: any) =>
+            sum + (Number.isFinite(season.count) ? Math.max(0, season.count) : 0),
+          0
+        )
+      : undefined,
+    seasonsSignature: isSeries ? JSON.stringify(seasonEntries) : undefined,
+    availabilityStatus: isSeries
+      ? undefined
+      : movieUpcoming
+        ? "upcoming"
+        : "available",
+  };
 };
 
 export const getMeta = async function ({

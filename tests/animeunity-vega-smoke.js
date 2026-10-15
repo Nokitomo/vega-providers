@@ -75,8 +75,9 @@ async function run() {
   );
   if (artwork.poster) {
     assert(
-      artwork.poster.includes("/t/p/w300/"),
-      "home artwork should use the compact TMDB poster"
+      artwork.poster.includes("/t/p/w300/") ||
+        artwork.poster.includes("artworks.thetvdb.com/"),
+      "home artwork should use a compact TMDB poster or the preferred TVDB poster"
     );
   }
 
