@@ -1,6 +1,7 @@
 import { ContentInventory, Info, ProviderContext } from "../types";
 import {
   getContentInventory as getAnimeContentInventory,
+  getArtwork as getAnimeArtwork,
   getMeta as getAnimeMeta,
 } from "../animeunity/meta";
 import {
@@ -56,4 +57,28 @@ export const getMeta = function ({
           providerContext,
         });
   return infoPromise.then((info) => wrapInfo(info, route.source));
+};
+
+/** Lazy artwork recovery for StreamCenter's AnimeUnity routes. */
+export const getArtwork = ({
+  link,
+  fields,
+  failedUrls,
+  providerContext,
+}: {
+  link: string;
+  fields?: Array<"logo" | "poster" | "background">;
+  failedUrls?: string[];
+  providerContext: ProviderContext;
+}): Promise<{logo?: string; poster?: string; background?: string; resolved?: boolean}> => {
+  const route = resolveMetaRoute(link);
+  if (route?.source !== "animeunity" || !route.data?.url) {
+    return Promise.resolve({resolved: false});
+  }
+  return getAnimeArtwork({
+    link: route.data.url,
+    fields,
+    failedUrls,
+    providerContext,
+  });
 };

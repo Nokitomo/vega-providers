@@ -25,6 +25,7 @@ import { resolveTvdbArtworkMetadata } from "./tvdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
 import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
 import { fetchAnimeUnityEpisodeRecords } from "./episodeRecords";
+import { resolveAnimeLogoFallback } from "./logoFallback";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -478,12 +479,14 @@ export const getMeta = async function ({
 export const getArtwork = async function ({
   link,
   fields = ["poster"],
+  failedUrls = [],
   hints,
   imageSize = "original",
   providerContext,
 }: {
   link: string;
   fields?: Array<"logo" | "poster" | "background">;
+  failedUrls?: string[];
   hints?: { anilistId?: number; malId?: number; isMovie?: boolean };
   imageSize?: "original" | "w300" | "w780";
   providerContext: ProviderContext;
@@ -529,6 +532,18 @@ export const getArtwork = async function ({
         ? inferredIsMovie
         : mappingResolution.ids.tmdbShowIds.length === 0 &&
           mappingResolution.ids.tmdbMovieIds.length > 0;
+    if (fields.length === 1 && fields[0] === "logo" && failedUrls.length > 0) {
+      const logo = await resolveAnimeLogoFallback({
+        providerContext,
+        mappingResolution,
+        anilistId: hintedAnilistId || Number(info?.anilist_id) || undefined,
+        malId: hintedMalId || Number(info?.mal_id) || undefined,
+        isMovie,
+        tvdbTarget: selectPrimaryTvdbTarget(mappingResolution, isMovie),
+        failedUrls,
+      });
+      return { logo, resolved: true };
+    }
     const tmdb = await resolveAnimeTmdbMetadata({
       providerContext,
       mappingResolution,

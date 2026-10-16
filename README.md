@@ -53,7 +53,7 @@ are supported without relying on runtime `require()` in the app.
 
 - **Purpose:** Fetches metadata for a specific item (movie, show, etc.).
 - **Exports:**
-  - `getMeta({ link, providerContext })`: Returns an `Info` object with details like title, synopsis, image, etc.
+- `getMeta({ link, providerContext })`: Returns an `Info` object with details like title, synopsis, image, etc.
 
 ### 3. `posts.ts`
 
@@ -147,6 +147,8 @@ AnimeUnity resolves AniBridge TMDB IDs through the reusable modules in
 embed an API token. TMDB artwork follows Italian, English, original language,
 then TMDB's no-language (`xx`) assets. Inside the selected language the scraper
 preserves TMDB's gallery popularity order without re-ranking by resolution.
+Logos are the deliberate exception: Italian, English, then no-language; the
+original language is not queried for logos.
 
 The normal AnimeUnity flow only projects the TMDB fields consumed by Vega:
 title logo, poster, backdrop, and localized episode title, synopsis, and
@@ -167,8 +169,12 @@ remain available for episode relationships but cannot replace the movie or
 series identity used for metadata. When an exact TMDB target is absent, AniZip
 can still supply one for the requested AniList/MAL IDs.
 
-Artwork fallback requests are conditional. Logos use TMDB, Cinemeta, AniZip,
-then the provider. Backgrounds are composed with the app as provider, AniList
+Artwork fallback requests are conditional. Logos use TMDB, Cinemeta, TVDB,
+AniZip, then the provider. After an image-load failure, Vega may call
+`getArtwork({fields: ["logo"], failedUrls})`: AnimeUnity skips the failed URLs
+and resolves the next source only then, while StreamCenter forwards AnimeUnity
+routes to the same resolver. A missing or failed logo does not change the
+language priority or poster selection. Backgrounds are composed with the app as provider, AniList
 banner, TMDB, Cinemeta, AniZip Fanart, then AniZip Banner. External metadata
 uses persistent cache entries with bounded refresh windows, and AniZip episode
 data is refreshed early when the provider episode count changes.

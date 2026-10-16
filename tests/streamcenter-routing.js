@@ -30,7 +30,7 @@ const executeLikeVega = (name) => {
 const expectedExports = {
   catalog: ["catalog", "genres", "archiveFilters"],
   posts: ["getPosts", "getSearchPosts"],
-  meta: ["getMeta"],
+  meta: ["getMeta", "getArtwork"],
   episodes: ["getEpisodes"],
   stream: ["getStream"],
 };
