@@ -20,6 +20,12 @@ const normalizePositiveNumber = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
 };
 
+const normalizeSeasonNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : undefined;
+};
+
 export const buildStreamingUnityPlaybackLink = (
   baseLink: string,
   playback: Omit<StreamingUnityPlayback, "titleId">
@@ -35,9 +41,9 @@ export const buildStreamingUnityPlaybackLink = (
   if (imdbId) params.set("i", imdbId);
   if (tmdbId) params.set("t", tmdbId);
 
-  const seasonNumber = normalizePositiveNumber(playback.seasonNumber);
+  const seasonNumber = normalizeSeasonNumber(playback.seasonNumber);
   const episodeNumber = normalizePositiveNumber(playback.episodeNumber);
-  if (seasonNumber) params.set("s", String(seasonNumber));
+  if (seasonNumber != null) params.set("s", String(seasonNumber));
   if (episodeNumber) params.set("e", String(episodeNumber));
 
   return `${baseLink}::${episodeId}::${PLAYBACK_MARKER}${encodeURIComponent(
@@ -71,7 +77,7 @@ export const parseStreamingUnityPlaybackLink = (
     }
     output.imdbId = normalizeId(params.get("i")) || undefined;
     output.tmdbId = normalizeId(params.get("t")) || undefined;
-    output.seasonNumber = normalizePositiveNumber(params.get("s"));
+    output.seasonNumber = normalizeSeasonNumber(params.get("s"));
     output.episodeNumber = normalizePositiveNumber(params.get("e"));
   } catch (_) {
     return output;
@@ -89,9 +95,9 @@ export const buildStreamingUnityVixsrcUrl = (
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   if (playback.mediaType === "series" || playback.episodeId) {
-    const seasonNumber = normalizePositiveNumber(playback.seasonNumber);
+    const seasonNumber = normalizeSeasonNumber(playback.seasonNumber);
     const episodeNumber = normalizePositiveNumber(playback.episodeNumber);
-    if (!seasonNumber || !episodeNumber) return "";
+    if (seasonNumber == null || !episodeNumber) return "";
     return `${normalizedBaseUrl}/tv/${encodeURIComponent(
       externalId
     )}/${seasonNumber}/${episodeNumber}`;

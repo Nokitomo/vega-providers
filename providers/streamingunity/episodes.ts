@@ -32,8 +32,9 @@ const fetchHtml = async (
 };
 
 const toSeasonNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === "") return undefined;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return undefined;
   }
   return Math.floor(parsed);
@@ -134,7 +135,7 @@ export const getEpisodeInventory = async ({
     throw new Error("Incomplete StreamingUnity season inventory");
   }
   const seasonNumber =
-    toSeasonNumber(loadedSeason?.number) ||
+    toSeasonNumber(loadedSeason?.number) ??
     parseSeasonNumberFromUrl(seasonUrl);
   const episodes = mapEpisodes(
     loadedSeason.episodes,
@@ -327,7 +328,7 @@ export const getEpisodes = async function ({
 
     const loadedSeason = page?.props?.loadedSeason;
     const seasonNumber =
-      toSeasonNumber(loadedSeason?.number) ||
+      toSeasonNumber(loadedSeason?.number) ??
       parseSeasonNumberFromUrl(seasonUrl);
     const episodes = Array.isArray(loadedSeason?.episodes)
       ? loadedSeason.episodes

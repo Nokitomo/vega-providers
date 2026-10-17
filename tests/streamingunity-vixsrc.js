@@ -14,6 +14,8 @@ const VIXSRC_PAGE_URL = "https://vixsrc.to/movie/tt1234567";
 const VIXSRC_API_URL = "https://vixsrc.to/api/movie/tt1234567";
 const VIXSRC_EMBED_URL =
   "https://vixsrc.to/embed/99?token=embed-token&expires=456";
+const VIXSRC_SPECIAL_URL = "https://vixsrc.to/tv/289892/0/10";
+const VIXSRC_SPECIAL_API_URL = "https://vixsrc.to/api/tv/289892/0/10";
 
 const inertiaHtml = (props) =>
   `<div id="app" data-page="${JSON.stringify({ props }).replace(
@@ -30,7 +32,10 @@ const createContext = (vixCloudHtml, calls) => ({
           data: inertiaHtml({ embedUrl: `${BASE_URL}/it/iframe/42` }),
         };
       }
-      if (url === `${BASE_URL}/it/iframe/42`) {
+      if (
+        url === `${BASE_URL}/it/iframe/42` ||
+        url === `${BASE_URL}/it/iframe/42?episode_id=910&next_episode=1`
+      ) {
         return { data: `<iframe src="${VIXCLOUD_URL}"></iframe>` };
       }
       if (url === VIXCLOUD_URL) {
@@ -40,7 +45,13 @@ const createContext = (vixCloudHtml, calls) => ({
       if (url === VIXSRC_PAGE_URL) {
         return { data: "<html>VixSrc Next page</html>" };
       }
+      if (url === VIXSRC_SPECIAL_URL) {
+        return { data: "<html>VixSrc special page</html>" };
+      }
       if (url === VIXSRC_API_URL) {
+        return { data: { src: "/embed/99?token=embed-token&expires=456" } };
+      }
+      if (url === VIXSRC_SPECIAL_API_URL) {
         return { data: { src: "/embed/99?token=embed-token&expires=456" } };
       }
       if (url === VIXSRC_EMBED_URL) {
@@ -91,6 +102,21 @@ const testPlaybackCodec = () => {
   assert.strictEqual(
     buildStreamingUnityVixsrcUrl(parsedSeries),
     "https://vixsrc.to/tv/tt7654321/2/5"
+  );
+
+  const specialLink = buildStreamingUnityPlaybackLink("42", {
+    episodeId: "910",
+    mediaType: "series",
+    tmdbId: "289892",
+    seasonNumber: 0,
+    episodeNumber: 10,
+  });
+  const parsedSpecial = parseStreamingUnityPlaybackLink(specialLink);
+  assert.strictEqual(parsedSpecial.seasonNumber, 0);
+  assert.strictEqual(parsedSpecial.episodeNumber, 10);
+  assert.strictEqual(
+    buildStreamingUnityVixsrcUrl(parsedSpecial),
+    "https://vixsrc.to/tv/289892/0/10"
   );
 
   const movieLink = buildStreamingUnityPlaybackLink(
@@ -151,10 +177,47 @@ const testVixsrcFallback = async () => {
   assert(calls.includes(VIXSRC_EMBED_URL));
 };
 
+const testSpecialPlaybackPriorityAndFallback = async () => {
+  const link = buildStreamingUnityPlaybackLink("42", {
+    episodeId: "910",
+    mediaType: "series",
+    tmdbId: "289892",
+    seasonNumber: 0,
+    episodeNumber: 10,
+  });
+  const providerCalls = [];
+  const providerStreams = await getStream({
+    link,
+    type: "series",
+    signal: new AbortController().signal,
+    providerContext: createContext(
+      "window.masterPlaylist = {url: 'https://cdn.vixcloud.test/playlist/123'};",
+      providerCalls
+    ),
+  });
+  assert(providerStreams.length > 0);
+  assert(providerStreams.every(stream => stream.server.startsWith("StreamingUnity VixCloud")));
+  assert(providerCalls.includes(`${BASE_URL}/it/iframe/42?episode_id=910&next_episode=1`));
+  assert(!providerCalls.includes(VIXSRC_SPECIAL_URL));
+
+  const fallbackCalls = [];
+  const fallbackStreams = await getStream({
+    link,
+    type: "series",
+    signal: new AbortController().signal,
+    providerContext: createContext(new Error("VixCloud unavailable"), fallbackCalls),
+  });
+  assert.strictEqual(fallbackStreams.length, 1);
+  assert.strictEqual(fallbackStreams[0].server, "StreamingUnity VixSrc Server 1");
+  assert(fallbackCalls.includes(VIXSRC_SPECIAL_URL));
+  assert(fallbackCalls.includes(VIXSRC_SPECIAL_API_URL));
+};
+
 const run = async () => {
   testPlaybackCodec();
   await testVixCloudPriority();
   await testVixsrcFallback();
+  await testSpecialPlaybackPriorityAndFallback();
   console.log("streamingunity VixSrc: OK");
 };
 

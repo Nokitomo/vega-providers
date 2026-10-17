@@ -27,7 +27,7 @@
   {
     "display_name": "StreamingUnity",
     "value": "streamingunity",
-    "version": "1.0.25",
+    "version": "1.0.26",
     "icon": "https://cdn.jsdelivr.net/gh/Nokitomo/vega-providers@main/assets/streamingunity.png",
     "type": "italy",
     "disabled": false,
@@ -36,7 +36,7 @@
   {
     "display_name": "StreamCenter",
     "value": "streamcenter",
-    "version": "1.0.24",
+    "version": "1.0.25",
     "icon": "",
     "type": "italy",
     "disabled": false,

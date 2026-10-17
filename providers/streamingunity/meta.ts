@@ -575,10 +575,7 @@ const buildEpisodeLinks = (
         episodeNumber: Number.isFinite(parsedEpisodeNumber)
           ? parsedEpisodeNumber
           : undefined,
-        seasonNumber:
-          seasonNumber && Number.isFinite(seasonNumber)
-            ? seasonNumber
-            : undefined,
+        seasonNumber: Number.isFinite(seasonNumber) ? seasonNumber : undefined,
         link: `${titleId}::${episode?.id || ""}`,
         type: "series" as const,
       };
@@ -630,12 +627,14 @@ const buildSeriesLinks = async ({
     loadedSeason?.id != null
       ? seasonById.get(String(loadedSeason.id))
       : undefined;
-  const loadedSeasonNumber = Number(loadedSeasonInfo?.number);
+  const loadedSeasonNumber = loadedSeasonInfo?.number == null || loadedSeasonInfo.number === ""
+    ? NaN
+    : Number(loadedSeasonInfo.number);
   const loadedSeasonEpisodes = Array.isArray(loadedSeason?.episodes)
     ? loadedSeason.episodes
     : [];
   const loadedSeasonBuilt =
-    Number.isFinite(loadedSeasonNumber) && loadedSeasonNumber > 0
+    Number.isFinite(loadedSeasonNumber) && loadedSeasonNumber >= 0
       ? buildEpisodeLinks(loadedSeasonEpisodes, titleId, loadedSeasonNumber)
       : { links: [], count: 0 };
 
@@ -644,8 +643,9 @@ const buildSeriesLinks = async ({
   let hasEpisodesCount = false;
 
   for (const season of sortedSeasons) {
+    if (season?.number == null || season.number === "") continue;
     const seasonNumber = Number(season?.number);
-    if (!Number.isFinite(seasonNumber) || seasonNumber <= 0) {
+    if (!Number.isFinite(seasonNumber) || seasonNumber < 0) {
       continue;
     }
     const seasonUrl = buildSeasonUrl(baseUrl, titleId, slug, seasonNumber);
@@ -788,11 +788,11 @@ export const getContentInventory = async ({
   const seasons = Array.isArray(title.seasons) ? title.seasons : [];
   const seasonEntries = seasons
     .map((season: any) => ({
-      number: Number(season?.number),
+      number: season?.number == null || season.number === "" ? NaN : Number(season.number),
       count: Number(season?.episodes_count),
       date: String(season?.release_date_it || season?.release_date || ""),
     }))
-    .filter((season: any) => Number.isFinite(season.number) && season.number > 0)
+    .filter((season: any) => Number.isFinite(season.number) && season.number >= 0)
     .sort((left: any, right: any) => left.number - right.number);
   const releaseDate = title?.release_date_it || title?.release_date;
   const movieAvailability = parseAvailabilityDate(releaseDate);

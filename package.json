@@ -29,6 +29,7 @@
     "test:streamingunity:vixsrc": "node tests/streamingunity-vixsrc.js",
     "test:streamingunity:availability": "node tests/streamingunity-availability.js",
     "test:streamingunity:episodes": "node tests/streamingunity-episodes.js",
+    "test:streamingunity:season-zero": "node tests/streamingunity-season-zero.js",
     "test:metadata-inventory": "node tests/metadata-inventory.js",
     "test:meta:critical-path": "node tests/meta-critical-path.js",
     "test:streamingunity:meta": "node tests/streamingunity-meta-fallbacks.js",
