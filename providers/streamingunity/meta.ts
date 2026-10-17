@@ -142,6 +142,15 @@ const pickPresent = <T>(primary: T | undefined, fallback: T | undefined) =>
     ? primary
     : fallback;
 
+function captureAsync<T>(promise: Promise<T>): Promise<
+  { value: T; error?: never } | { value?: never; error: unknown }
+> {
+  return promise.then(
+    value => ({ value }),
+    error => ({ error }),
+  );
+}
+
 const resolveStreamingUnityTvdbId = (
   title: any,
   type: "movie" | "series",
@@ -889,20 +898,59 @@ export const getMeta = async function ({
     let tvdbId = providerExternalIds.tvdbId;
     let imdbId = providerExternalIds.imdbId || "";
     let resolvedExternalIds: StreamingUnityExternalIds | null = null;
+    let externalIdsPromise: Promise<StreamingUnityExternalIds> | null = null;
     const resolveMissingExternalIds = async (): Promise<StreamingUnityExternalIds> => {
-      if (!resolvedExternalIds) {
-        resolvedExternalIds = await resolveStreamingUnityExternalIds({
+      if (!externalIdsPromise) {
+        externalIdsPromise = resolveStreamingUnityExternalIds({
           providerContext,
           title,
           type,
           needTvdb: !tvdbId,
           needImdb: !imdbId,
+        }).then(ids => {
+          resolvedExternalIds = ids;
+          tvdbId = tvdbId || ids.tvdbId;
+          imdbId = imdbId || ids.imdbId || "";
+          return ids;
         });
-        tvdbId = tvdbId || resolvedExternalIds.tvdbId;
-        imdbId = imdbId || resolvedExternalIds.imdbId || "";
       }
-      return resolvedExternalIds;
+      return externalIdsPromise;
     };
+    const seriesLinksPromise = type === "series"
+      ? captureAsync(buildSeriesLinks({
+          title,
+          slug,
+          baseUrl,
+          loadedSeason: page?.props?.loadedSeason,
+          providerContext,
+          cheerio,
+        }))
+      : null;
+    const titleUrl = type === "movie"
+      ? buildTitleUrl(titleId, slug, baseUrl)
+      : "";
+    const movieAvailability = parseAvailabilityDate(releaseDate);
+    const movieStatus = title?.status;
+    const isExplicitlyComingSoon = isEnabledFlag(title?.coming_soon);
+    const isMovieUpcoming =
+      isExplicitlyComingSoon ||
+      hasStatusToken(movieStatus, UPCOMING_STATUS_TOKENS) ||
+      (!hasStatusToken(movieStatus, RELEASED_STATUS_TOKENS) &&
+        movieAvailability.hasDate &&
+        movieAvailability.isFuture);
+    const shouldProbeMovieAvailability =
+      type === "movie" &&
+      isMovieUpcoming &&
+      !isExplicitlyComingSoon &&
+      shouldProbeInconsistentUpcoming(movieAvailability);
+    const movieProbePromise = shouldProbeMovieAvailability
+      ? captureAsync(probeMovieAvailability({
+          baseUrl,
+          titleId,
+          providerContext,
+          cheerio,
+        }))
+      : null;
     const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
     const needsTmdbCore =
       !!tmdbId &&
@@ -976,39 +1024,14 @@ export const getMeta = async function ({
     let episodesCount: number | undefined = undefined;
 
     if (type === "series") {
-      const seriesLinks = await buildSeriesLinks({
-        title,
-        slug,
-        baseUrl,
-        loadedSeason: page?.props?.loadedSeason,
-        providerContext,
-        cheerio,
-      });
-      linkList = seriesLinks.linkList;
-      episodesCount = seriesLinks.episodesCount;
+      const seriesLinks = await seriesLinksPromise!;
+      if ("error" in seriesLinks) throw seriesLinks.error;
+      linkList = seriesLinks.value.linkList;
+      episodesCount = seriesLinks.value.episodesCount;
     } else {
-      const titleUrl = buildTitleUrl(titleId, slug, baseUrl);
-      const movieAvailability = parseAvailabilityDate(releaseDate);
-      const movieStatus = title?.status;
-      const isExplicitlyComingSoon = isEnabledFlag(title?.coming_soon);
-      const isMovieUpcoming =
-        isExplicitlyComingSoon ||
-        hasStatusToken(movieStatus, UPCOMING_STATUS_TOKENS) ||
-        (!hasStatusToken(movieStatus, RELEASED_STATUS_TOKENS) &&
-          movieAvailability.hasDate &&
-          movieAvailability.isFuture);
-      const shouldProbeMovieAvailability =
-        isMovieUpcoming &&
-        !isExplicitlyComingSoon &&
-        shouldProbeInconsistentUpcoming(movieAvailability);
-      const hasPlayableMovie = shouldProbeMovieAvailability
-        ? await probeMovieAvailability({
-            baseUrl,
-            titleId,
-            providerContext,
-            cheerio,
-          })
-        : false;
+      const movieProbe = movieProbePromise ? await movieProbePromise : null;
+      if (movieProbe && "error" in movieProbe) throw movieProbe.error;
+      const hasPlayableMovie = movieProbe?.value || false;
       const shouldKeepMovieUpcoming = isMovieUpcoming && !hasPlayableMovie;
 
       const movieLink: Link = {

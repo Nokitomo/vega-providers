@@ -229,7 +229,10 @@ export async function resolveTmdbArtworkMetadata(args: {
     providerContext, apiKey, id, type, fields, imageSize,
   });
   if (api && fields.every((field) => !!api[field])) return api;
-  const web = await resolveTmdbArtworkWeb(args);
+  const missingFields = api
+    ? fields.filter((field) => !api[field])
+    : fields;
+  const web = await resolveTmdbArtworkWeb({ ...args, fields: missingFields });
   if (!api) return web;
   return {
     ...web,

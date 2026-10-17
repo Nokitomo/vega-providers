@@ -379,6 +379,14 @@ This gives you flexibility to support both providers that need extra requests fo
 
 ## How to Test Your Provider
 
+AnimeUnity and StreamingUnity finish the same metadata lookups and fallbacks as
+before, but independent Info requests can now overlap: related titles/trailers,
+artwork, season layout and availability checks no longer have to wait for one
+another unnecessarily. A TMDB API key still falls back to web scraping for
+missing artwork fields only; it does not change the image or language priority.
+Run `npm run test:meta:critical-path` to check the overlap and the resulting
+Info data, alongside the provider-specific metadata tests.
+
 1. **Start the Dev Server**
 
    - Run the following command in your terminal:

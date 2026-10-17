@@ -71,6 +71,11 @@ const run = async () => {
   assert(partial.logo.endsWith("/api-logo.png"));
   assert(partial.poster.endsWith("/web-poster.jpg"));
   assert(partialContext.calls.some((call) => call.url.startsWith("https://www.themoviedb.org/")));
+  assert.strictEqual(
+    partialContext.calls.some((call) => call.url.includes("/images/logos")),
+    false,
+    "a logo returned by the API must not be scraped again",
+  );
 
   const episodeContext = makeContext("provider-two-key", (url, params) => {
     if (url.endsWith("/tv/123")) return { id: 123, original_language: "ja" };
