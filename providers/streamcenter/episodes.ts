@@ -9,16 +9,30 @@ import {
 } from "../streamingunity/episodes";
 import { EpisodesRouteData } from "./content";
 import { decodeRoute, encodeRoute } from "./routing";
-import {
-  AnimeFallbackPlayback,
-  discoverAnimeFallbackEpisodes,
-} from "./animeFallback";
-import { normalizeEpisodeNumber } from "./animeFallback/utils";
 
 type StreamRouteData = {
   url: string;
-  fallbacks?: AnimeFallbackPlayback[];
+  title?: string;
+  anilistId?: number;
+  malId?: number;
+  dubbed?: boolean;
+  episodeNumber?: number;
 };
+
+const wrapAnimeEpisode = (
+  episode: EpisodeLink,
+  identity: EpisodesRouteData
+): EpisodeLink => ({
+  ...episode,
+  link: encodeRoute<StreamRouteData>("stream", "animeunity", {
+    url: episode.link,
+    title: identity.title,
+    anilistId: identity.anilistId,
+    malId: identity.malId,
+    dubbed: identity.dubbed,
+    episodeNumber: episode.episodeNumber,
+  }),
+});
 
 export const getEpisodeInventory = ({
   url,
@@ -39,18 +53,15 @@ export const getEpisodeInventory = ({
     complete: true,
     episodes: inventory.episodes.map((episode) => ({
       ...episode,
-      link: encodeRoute<StreamRouteData>("stream", route.source, {
-        url: episode.link,
-      }),
+      link:
+        route.source === "animeunity"
+          ? wrapAnimeEpisode(episode, route.data).link
+          : encodeRoute<StreamRouteData>("stream", "streamingunity", {
+              url: episode.link,
+            }),
     })),
   }));
 };
-
-const episodeKey = (episode: EpisodeLink): string | null =>
-  normalizeEpisodeNumber(
-    episode.episodeNumber ??
-      String(episode.title || "").match(/(?:episode|episodio)\s+([0-9.]+)/i)?.[1]
-  );
 
 export const getEpisodes = function ({
   url,
@@ -86,31 +97,11 @@ export const getEpisodes = function ({
     );
   }
 
-  return Promise.all([
-    getAnimeEpisodes({
-      url: route.data.url,
-      providerContext,
-      knownEpisodes: sourceKnown,
-    }),
-    discoverAnimeFallbackEpisodes(
-      {
-        title: route.data.title,
-        anilistId: route.data.anilistId,
-        malId: route.data.malId,
-        dubbed: route.data.dubbed,
-      },
-      providerContext
-    ),
-  ]).then(([episodes, fallbackMap]) =>
-    episodes.map((episode) => {
-      const key = episodeKey(episode);
-      return {
-        ...episode,
-        link: encodeRoute<StreamRouteData>("stream", "animeunity", {
-          url: episode.link,
-          fallbacks: key ? fallbackMap.get(key) || [] : [],
-        }),
-      };
-    })
+  return getAnimeEpisodes({
+    url: route.data.url,
+    providerContext,
+    knownEpisodes: sourceKnown,
+  }).then((episodes) =>
+    episodes.map((episode) => wrapAnimeEpisode(episode, route.data))
   );
 };

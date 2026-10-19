@@ -9,10 +9,13 @@ const DISCOVERY_TIMEOUT_MS = 15_000;
 
 export const discoverAnimeFallbackEpisodes = async (
   identity: AnimeFallbackContext,
-  providerContext: ProviderContext
+  providerContext: ProviderContext,
+  signal?: AbortSignal
 ): Promise<AnimeFallbackEpisodeMap> => {
+  if (signal?.aborted) return new Map();
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let onAbort: (() => void) | undefined;
   const emptyPair: [
     Map<string, AnimeFallbackPlayback[]>,
     Map<string, AnimeFallbackPlayback[]>,
@@ -27,8 +30,22 @@ export const discoverAnimeFallbackEpisodes = async (
       resolve(emptyPair);
     }, DISCOVERY_TIMEOUT_MS);
   });
-  const [animeWorld, animeSaturn] = await Promise.race([discovery, timedOut]);
-  if (timeout) clearTimeout(timeout);
+  const aborted = new Promise<typeof emptyPair>((resolve) => {
+    onAbort = () => {
+      controller.abort();
+      resolve(emptyPair);
+    };
+    signal?.addEventListener("abort", onAbort, {once: true});
+    if (signal?.aborted) onAbort();
+  });
+  let pair: typeof emptyPair;
+  try {
+    pair = await Promise.race(signal ? [discovery, timedOut, aborted] : [discovery, timedOut]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
+  }
+  const [animeWorld, animeSaturn] = pair;
   const output: AnimeFallbackEpisodeMap = new Map();
   [animeWorld, animeSaturn].forEach((sourceMap) => {
     sourceMap.forEach((playbacks, number) => {

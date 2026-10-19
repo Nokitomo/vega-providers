@@ -17,7 +17,7 @@ type StreamRouteData = {
   anilistId?: number;
   malId?: number;
   dubbed?: boolean;
-  episodeNumber?: number;
+  episodeNumber?: number | string;
 };
 
 const collectStreams = (
@@ -55,8 +55,9 @@ export const getStream = function ({
     });
   }
 
+  const episodeNumber = normalizeEpisodeNumber(route.data.episodeNumber);
   const fallbackPromise =
-    route.data.fallbacks || !route.data.title
+    route.data.fallbacks || !route.data.title || !episodeNumber
       ? Promise.resolve(route.data.fallbacks || [])
       : discoverAnimeFallbackEpisodes(
           {
@@ -65,10 +66,11 @@ export const getStream = function ({
             malId: route.data.malId,
             dubbed: route.data.dubbed,
           },
-          providerContext
+          providerContext,
+          signal
         )
           .then((byEpisode) =>
-            byEpisode.get(normalizeEpisodeNumber(route.data.episodeNumber) || "") || []
+            byEpisode.get(episodeNumber || "") || []
           )
           .catch(() => []);
   const primaryStream = getAnimeStream({

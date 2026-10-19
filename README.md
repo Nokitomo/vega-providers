@@ -142,6 +142,8 @@ AnimeUnity, StreamingUnity e StreamCenter espongono facoltativamente `getContent
 
 Gli inventari incompleti generano un errore: l'app conserva i dati precedenti invece di interpretare una risposta parziale come rimozione di contenuti. Queste API opzionali non cambiano la gerarchia di artwork e metadati.
 
+Per gli anime StreamCenter restituisce gli episodi AnimeUnity senza attendere la ricerca dei server alternativi AnimeWorld/AnimeSaturn. La route di ogni episodio conserva titolo, ID e numero necessari per cercarli quando parte la riproduzione; il player attende la risposta dei server e puo quindi impiegare piu tempo ad aprirsi. I link precedenti che contengono gia i fallback restano validi. Una ricerca fallita non impedisce l'uso dello stream AnimeUnity, mentre l'annullamento della riproduzione interrompe la ricerca in corso. Verificare con `npm run test:streamcenter:lazy-fallback` e `npm run test:streamcenter:vega:smoke`.
+
 ### Link delle schede StreamCenter
 
 StreamCenter conserva gli URL delle schede AnimeUnity e StreamingUnity quando il
