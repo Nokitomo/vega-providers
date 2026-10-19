@@ -1,6 +1,7 @@
 import { Info, Post } from "../types";
 import {
   encodeRoute,
+  resolveMetaRoute,
   StreamCenterSource,
 } from "./routing";
 
@@ -22,7 +23,10 @@ const toWebMetaLink = (
   source: StreamCenterSource
 ): string => {
   const normalized = String(link || "").trim();
-  return /^https?:\/\//i.test(normalized)
+  // Preserve existing source URLs so saved history and list entries keep the
+  // same identity. Encode mirrors whose hostname cannot identify the source.
+  const legacySource = resolveMetaRoute(normalized)?.source;
+  return legacySource === source
     ? normalized
     : encodeRoute<MetaRouteData>("meta", source, { url: normalized });
 };

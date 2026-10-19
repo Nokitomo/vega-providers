@@ -97,6 +97,44 @@ assert.strictEqual(
   wrappedPost.variants[0].link,
   "https://www.animeunity.so/anime/43-example-ita",
 );
+const mirroredPost = contentModule.wrapPost(
+  {
+    title: "Mirror example",
+    link: "https://mirror.example/anime/42-example",
+    variants: [
+      {
+        title: "Mirror example (ITA)",
+        link: "https://mirror.example/anime/43-example-ita",
+      },
+    ],
+  },
+  "animeunity",
+);
+assert.deepStrictEqual(routing.resolveMetaRoute(mirroredPost.link), {
+  kind: "meta",
+  source: "animeunity",
+  data: { url: "https://mirror.example/anime/42-example" },
+});
+assert.deepStrictEqual(routing.resolveMetaRoute(mirroredPost.variants[0].link), {
+  kind: "meta",
+  source: "animeunity",
+  data: { url: "https://mirror.example/anime/43-example-ita" },
+});
+assert.strictEqual(
+  contentModule.wrapPost(mirroredPost, "animeunity").link,
+  mirroredPost.link,
+);
+const streamingMirror = contentModule.wrapPost(
+  {
+    title: "Streaming mirror",
+    link: "https://mirror.example/it/titles/42-example",
+  },
+  "streamingunity",
+);
+assert.strictEqual(
+  routing.resolveMetaRoute(streamingMirror.link)?.source,
+  "streamingunity",
+);
 const wrappedInfo = contentModule.wrapInfo(
   {
     title: "Example",
@@ -128,6 +166,23 @@ assert(
   routing.resolveMetaRoute(wrappedInfo.related[0].variants[0].link)?.data.url ===
     "124",
 );
+const mirroredInfo = contentModule.wrapInfo(
+  {
+    title: "Mirror example",
+    image: "",
+    synopsis: "",
+    imdbId: "",
+    type: "series",
+    related: [{ title: "Related mirror", link: "https://mirror.example/anime/44" }],
+    linkList: [],
+  },
+  "animeunity",
+);
+assert.deepStrictEqual(routing.resolveMetaRoute(mirroredInfo.related[0].link), {
+  kind: "meta",
+  source: "animeunity",
+  data: { url: "https://mirror.example/anime/44" },
+});
 const streamingUpcoming = streamingCatalogModule.catalog.find(
   (item) => item.filter === "browse/upcoming",
 );

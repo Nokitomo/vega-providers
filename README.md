@@ -142,6 +142,19 @@ AnimeUnity, StreamingUnity e StreamCenter espongono facoltativamente `getContent
 
 Gli inventari incompleti generano un errore: l'app conserva i dati precedenti invece di interpretare una risposta parziale come rimozione di contenuti. Queste API opzionali non cambiano la gerarchia di artwork e metadati.
 
+### Link delle schede StreamCenter
+
+StreamCenter conserva gli URL delle schede AnimeUnity e StreamingUnity quando il
+dominio identifica gia il provider di origine. In questo modo cronologia, liste
+e cache esistenti continuano a usare gli stessi link. Se una sorgente fornisce
+un URL su un dominio alternativo, StreamCenter lo incapsula in una route `meta`
+che contiene la sorgente e l'URL originale. La stessa regola vale per varianti
+e contenuti correlati; `resolveMetaRoute` continua a leggere i vecchi URL.
+Un vero cambio di dominio cambia comunque il link emesso: le versioni di Vega
+che supportano la riconciliazione StreamCenter riusano il link gia salvato
+quando coincidono sorgente e ID del contenuto. Le versioni precedenti possono
+mostrare una seconda voce in cronologia o nei preferiti dopo il cambio dominio.
+
 AnimeUnity resolves AniBridge TMDB IDs through the reusable modules in
 `providers/animeunity/tmdb/`. The scraper uses public TMDB pages and does not
 embed an API token. TMDB artwork follows Italian, English, original language,

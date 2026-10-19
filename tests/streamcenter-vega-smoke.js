@@ -7,6 +7,7 @@ const metaModule = require("../dist/streamcenter/meta.js");
 const episodesModule = require("../dist/streamcenter/episodes.js");
 const streamModule = require("../dist/streamcenter/stream.js");
 const routing = require("../dist/streamcenter/routing.js");
+const { wrapPost } = require("../dist/streamcenter/content.js");
 const { getBaseUrl } = require("../dist/getBaseUrl.js");
 
 const providerContext = {
@@ -40,6 +41,16 @@ const runPipeline = async (query, source, signal) => {
     providerContext,
   });
   assert(info.title, `${source} meta title must exist`);
+  const mirrorUrl = new URL(routing.resolveMetaRoute(post.link).data.url);
+  mirrorUrl.hostname = "provider-mirror.example";
+  const mirroredPost = wrapPost({ ...post, link: mirrorUrl.toString() }, source);
+  assert.strictEqual(routing.resolveMetaRoute(mirroredPost.link)?.source, source);
+  const mirroredInfo = await metaModule.getMeta({
+    link: mirroredPost.link,
+    provider: "streamcenter",
+    providerContext,
+  });
+  assert.strictEqual(mirroredInfo.title, info.title);
   const group = info.linkList.find(
     (item) => item.episodesLink || item.directLinks?.length,
   );
