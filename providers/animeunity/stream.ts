@@ -59,7 +59,7 @@ export const getStream = async function ({
     });
 
     const pageHtml = typeof pageRes.data === "string" ? pageRes.data : "";
-    if (embedUrl.includes("vixcloud.co")) {
+    if (/window\.(?:masterPlaylist|streams)\s*=/.test(pageHtml)) {
       const streams = extractVixCloudStreams(
         pageHtml,
         embedUrl,

@@ -11,6 +11,7 @@
     "test:single": "node test-providers.js",
     "test:provider": "node test-provider.js",
     "test:animeunity:vega:smoke": "node tests/animeunity-vega-smoke.js",
+    "test:animeunity:domain-and-stream": "node tests/animeunity-domain-and-stream.js",
     "test:animeunity:variants": "node tests/animeunity-variants.js",
     "test:animeunity:episode-ranges": "node tests/animeunity-episode-ranges.js",
     "test:animeunity:catalog-filters": "node tests/animeunity-catalog-filters.js",

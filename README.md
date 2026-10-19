@@ -209,7 +209,7 @@ requests share the provider runtime cache.
 
 - `axios`: For HTTP requests
 - `cheerio`: For HTML parsing
-- `getBaseUrl`: Helper to get the provider's base URL. For providers listed in `providers/baseUrlRegistry.ts` (es. animeunity), it uses Pastebin first and falls back to a hardcoded URL. Other providers still use modflix.json.
+- `getBaseUrl`: Helper to get the provider's base URL. For providers listed in `providers/baseUrlRegistry.ts` (e.g. AnimeUnity), it uses Pastebin first and falls back to a configured URL. For AnimeUnity it follows a redirect from the home page, validates the final HTTPS host, and caches that host for one hour so API paths do not redirect to the new site's home page. Other providers still use modflix.json. AnimeUnity stream extraction recognizes the VixCloud player format in the embed page without requiring a particular VixCloud domain suffix; StreamCenter shares this stream module.
 - `commonHeaders`: Standard HTTP headers
 - `extractors`: Shared extractor functions
 - `Aes`: (if needed) for encryption/decryption
