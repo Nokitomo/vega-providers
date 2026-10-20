@@ -39,10 +39,12 @@ export const getContentInventory = ({
 export const getMeta = function ({
   link,
   provider,
+  purpose = "full",
   providerContext,
 }: {
   link: string;
   provider: string;
+  purpose?: "full" | "hero";
   providerContext: ProviderContext;
 }): Promise<Info> {
   const route = resolveMetaRoute(link);
@@ -50,10 +52,11 @@ export const getMeta = function ({
 
   const infoPromise =
     route.source === "animeunity"
-      ? getAnimeMeta({ link: route.data.url, providerContext })
+      ? getAnimeMeta({ link: route.data.url, purpose, providerContext })
       : getStreamingMeta({
           link: route.data.url,
           provider,
+          purpose,
           providerContext,
         });
   return infoPromise.then((info) => wrapInfo(info, route.source));

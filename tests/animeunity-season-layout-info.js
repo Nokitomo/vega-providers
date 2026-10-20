@@ -82,4 +82,25 @@ async function run(module) {
     after.info.linkList.map((group) => ({ title: group.title, seasonNumber: group.seasonNumber })),
   );
   console.log("StreamCenter AnimeUnity delegation: OK");
+  const animeHeroContext = makeContext();
+  const centerHeroContext = makeContext();
+  const heroArgs = { link: "https://animeunity.test/anime/99-fixture", purpose: "hero" };
+  const animeHero = await getMeta({
+    ...heroArgs, providerContext: animeHeroContext.providerContext,
+  });
+  const centerHero = await getStreamCenterMeta({
+    ...heroArgs, provider: "streamcenter",
+    providerContext: centerHeroContext.providerContext,
+  });
+  assert.strictEqual(centerHero.title, animeHero.title);
+  assert.deepStrictEqual(centerHero.extra, animeHero.extra);
+  assert.deepStrictEqual(
+    centerHero.linkList.map((group) => ({ title: group.title, seasonNumber: group.seasonNumber })),
+    animeHero.linkList.map((group) => ({ title: group.title, seasonNumber: group.seasonNumber })),
+  );
+  assert.deepStrictEqual(centerHero.related, animeHero.related);
+  assert(!centerHeroContext.calls.some((url) => url.startsWith("https://animeunity.test/anime/")),
+    "StreamCenter did not forward hero purpose to AnimeUnity");
+  assert.strictEqual(centerHeroContext.calls.length, animeHeroContext.calls.length);
+  console.log("StreamCenter AnimeUnity hero delegation: OK");
 })().catch((error) => { console.error(error); process.exit(1); });

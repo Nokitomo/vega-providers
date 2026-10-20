@@ -824,10 +824,12 @@ export const getContentInventory = async ({
 
 export const getMeta = async function ({
   link,
+  purpose = "full",
   providerContext,
 }: {
   link: string;
   provider: string;
+  purpose?: "full" | "hero";
   providerContext: ProviderContext;
 }): Promise<Info> {
   try {
@@ -916,7 +918,7 @@ export const getMeta = async function ({
       }
       return externalIdsPromise;
     };
-    const seriesLinksPromise = type === "series"
+    const seriesLinksPromise = type === "series" && purpose === "full"
       ? captureAsync(buildSeriesLinks({
           title,
           slug,
@@ -943,7 +945,7 @@ export const getMeta = async function ({
       isMovieUpcoming &&
       !isExplicitlyComingSoon &&
       shouldProbeInconsistentUpcoming(movieAvailability);
-    const movieProbePromise = shouldProbeMovieAvailability
+    const movieProbePromise = purpose === "full" && shouldProbeMovieAvailability
       ? captureAsync(probeMovieAvailability({
           baseUrl,
           titleId,
@@ -1024,12 +1026,14 @@ export const getMeta = async function ({
     let linkList: Link[] = [];
     let episodesCount: number | undefined = undefined;
 
-    if (type === "series") {
+    // Home only displays artwork and summary fields. Opening the title
+    // requests full metadata and keeps the existing season/movie checks.
+    if (purpose === "full" && type === "series") {
       const seriesLinks = await seriesLinksPromise!;
       if ("error" in seriesLinks) throw seriesLinks.error;
       linkList = seriesLinks.value.linkList;
       episodesCount = seriesLinks.value.episodesCount;
-    } else {
+    } else if (purpose === "full") {
       const movieProbe = movieProbePromise ? await movieProbePromise : null;
       if (movieProbe && "error" in movieProbe) throw movieProbe.error;
       const hasPlayableMovie = movieProbe?.value || false;
