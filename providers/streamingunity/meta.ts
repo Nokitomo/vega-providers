@@ -22,7 +22,7 @@ import { extractVixCloudStreams } from "../animeunity/parsers/stream";
 import { buildStreamingUnityPlaybackLink } from "./playback";
 import {
   resolveTmdbArtworkMetadata,
-  resolveTmdbMediaMetadata,
+  resolveTmdbInfoFields,
 } from "../animeunity/tmdb";
 import {
   resolveTvdbArtworkMetadata,
@@ -952,20 +952,21 @@ export const getMeta = async function ({
         }))
       : null;
     const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
-    const needsTmdbCore =
-      !!tmdbId &&
-      (!hasText(titleName) ||
-        !hasText(plot) ||
-        !hasText(year) ||
-        !hasText(runtime) ||
-        !hasText(rating) ||
-        genres.length === 0 ||
-        cast.length === 0);
-    const tmdbCore = needsTmdbCore
-      ? await resolveTmdbMediaMetadata({
+    const missingTmdbFields = [
+      !hasText(titleName) && "title",
+      !hasText(plot) && "overview",
+      !hasText(year) && "year",
+      !hasText(runtime) && "runtime",
+      !hasText(rating) && "rating",
+      genres.length === 0 && "genres",
+      cast.length === 0 && "cast",
+    ].filter((field): field is "title" | "overview" | "year" | "runtime" | "rating" | "genres" | "cast" => !!field);
+    const tmdbCore = tmdbId && missingTmdbFields.length > 0
+      ? await resolveTmdbInfoFields({
           providerContext,
-          id: tmdbId!,
+          id: tmdbId,
           type: tmdbType,
+          fields: missingTmdbFields,
         })
       : null;
     titleName = pickPresent(titleName, tmdbCore?.title?.value) || "";

@@ -1,6 +1,7 @@
 export {
   resolveTmdbEpisodeExtendedMetadata,
   resolveTmdbMediaMetadata,
+  resolveTmdbInfoFields,
   resolveTmdbSeasonMetadata,
 } from "./client";
 export { resolveTmdbArtworkMetadata } from "./artworkResolver";

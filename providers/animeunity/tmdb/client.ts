@@ -313,16 +313,18 @@ async function resolveTmdbMediaWeb({
   id,
   type,
   includeExtended = false,
+  coreFieldsOnly = false,
 }: {
   providerContext: ProviderContext;
   id: number;
   type: TmdbMediaType;
   includeExtended?: boolean;
+  coreFieldsOnly?: boolean;
 }): Promise<TmdbMediaMetadata | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
   const cache = getProviderRuntimeCache(providerContext);
   const cacheKey = `animeunity:tmdb:media:${type}:${id}:${
-    includeExtended ? "extended" : "core"
+    includeExtended ? "extended" : coreFieldsOnly ? "core-fields" : "core"
   }`;
   const pendingKey = `${cacheKey}:pending`;
   const cached = cache.get(cacheKey) as
@@ -338,8 +340,10 @@ async function resolveTmdbMediaWeb({
     .then(async ({ pages, locales }) => {
       if (pages.length === 0) return null;
       const [images, seasonGroups, extended] = await Promise.all([
-        loadMediaImages(providerContext, type, id, locales),
-        type === "tv"
+        coreFieldsOnly
+          ? Promise.resolve({ logos: [], posters: [], backdrops: [] })
+          : loadMediaImages(providerContext, type, id, locales),
+        type === "tv" && !coreFieldsOnly
           ? Promise.all(
               locales.map(async (locale) => {
                 const html = await fetchTmdbHtml(
@@ -391,14 +395,65 @@ export async function resolveTmdbMediaMetadata(args: {
   const apiKey = await readTmdbApiKey(providerContext);
   if (!apiKey || includeExtended) return resolveTmdbMediaWeb(args);
   const api = await resolveApiMedia({ providerContext, apiKey, id, type });
-  if (
+  if (hasCompleteApiMetadata(api, type)) return api;
+  const web = await resolveTmdbMediaWeb(args);
+  return mergeApiAndWebMetadata(api, web);
+}
+
+type TmdbInfoField = "title" | "overview" | "year" | "runtime" | "rating" | "genres" | "cast";
+
+function hasCompleteApiMetadata(
+  api: TmdbMediaMetadata | null, type: TmdbMediaType
+): boolean {
+  return !!(
     api?.title?.value && api.overview?.value &&
     (type !== "tv" || api.seasons.length > 0) &&
     api.cast.length > 0 && api.genres.length > 0 &&
-    !!api.facts.Runtime && api.rating != null &&
-    !!(api.releaseDate || api.startDate)
-  ) return api;
-  const web = await resolveTmdbMediaWeb(args);
+    api.facts.Runtime && api.rating != null &&
+    (api.releaseDate || api.startDate)
+  );
+}
+
+/** Fetch only the TMDB fields used to fill gaps in StreamingUnity Info. */
+export async function resolveTmdbInfoFields({
+  providerContext, id, type, fields,
+}: {
+  providerContext: ProviderContext;
+  id: number;
+  type: TmdbMediaType;
+  fields: TmdbInfoField[];
+}): Promise<TmdbMediaMetadata | null> {
+  if (!Number.isFinite(id) || id <= 0 || fields.length === 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  const webArgs = { providerContext, id, type, coreFieldsOnly: true };
+  if (!apiKey) return resolveTmdbMediaWeb(webArgs);
+  const api = await resolveApiMedia({
+    providerContext, apiKey, id, type,
+    includeImages: false,
+    includeCredits: fields.includes("cast") || fields.includes("year"),
+  });
+  const hasRequestedFields = api && fields.every((field) => {
+    switch (field) {
+      case "title": return !!api.title?.value;
+      case "overview": return !!api.overview?.value;
+      // The old resolver skips web only when API metadata is complete. If it
+      // does merge web, releaseDate takes precedence over start/end dates.
+      case "year": return hasCompleteApiMetadata(api, type);
+      case "runtime": return !!api.facts.Runtime;
+      case "rating": return api.rating != null;
+      case "genres": return api.genres.length > 0;
+      case "cast": return api.cast.length > 0;
+    }
+  });
+  if (hasRequestedFields) return api;
+  const web = await resolveTmdbMediaWeb(webArgs);
+  return mergeApiAndWebMetadata(api, web);
+}
+
+function mergeApiAndWebMetadata(
+  api: TmdbMediaMetadata | null,
+  web: TmdbMediaMetadata | null
+): TmdbMediaMetadata | null {
   if (!api) return web;
   if (!web) return api;
   const prefer = <T>(primary: T[], fallback: T[]): T[] =>

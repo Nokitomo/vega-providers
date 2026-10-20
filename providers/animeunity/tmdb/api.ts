@@ -325,20 +325,26 @@ export async function resolveApiSeasonPoster({
 }
 
 export async function resolveApiMedia({
-  providerContext, apiKey, id, type,
+  providerContext, apiKey, id, type, includeImages = true, includeCredits = true,
 }: {
   providerContext: ProviderContext;
   apiKey: string;
   id: number;
   type: TmdbMediaType;
+  includeImages?: boolean;
+  includeCredits?: boolean;
 }): Promise<TmdbMediaMetadata | null> {
   const path = `/${type}/${id}`;
   const { pages } = await loadDetails(providerContext, apiKey, path);
   if (!pages.length) return null;
   const primary = pages[0].data;
   const [images, credits, translationResponse] = await Promise.all([
-    loadImages(providerContext, apiKey, path, primary.original_language),
-    request(providerContext, apiKey, `${path}/credits`),
+    includeImages
+      ? loadImages(providerContext, apiKey, path, primary.original_language)
+      : Promise.resolve({ logos: [], posters: [], backdrops: [] }),
+    includeCredits
+      ? request(providerContext, apiKey, `${path}/credits`)
+      : Promise.resolve(null),
     request(providerContext, apiKey, `${path}/translations`),
   ]);
   // A localized details response can silently contain an original-language
