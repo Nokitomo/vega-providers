@@ -314,17 +314,19 @@ async function resolveTmdbMediaWeb({
   type,
   includeExtended = false,
   coreFieldsOnly = false,
+  seasonLayoutOnly = false,
 }: {
   providerContext: ProviderContext;
   id: number;
   type: TmdbMediaType;
   includeExtended?: boolean;
   coreFieldsOnly?: boolean;
+  seasonLayoutOnly?: boolean;
 }): Promise<TmdbMediaMetadata | null> {
   if (!Number.isFinite(id) || id <= 0) return null;
   const cache = getProviderRuntimeCache(providerContext);
   const cacheKey = `animeunity:tmdb:media:${type}:${id}:${
-    includeExtended ? "extended" : coreFieldsOnly ? "core-fields" : "core"
+    includeExtended ? "extended" : coreFieldsOnly ? "core-fields" : seasonLayoutOnly ? "season-layout" : "core"
   }`;
   const pendingKey = `${cacheKey}:pending`;
   const cached = cache.get(cacheKey) as
@@ -340,7 +342,7 @@ async function resolveTmdbMediaWeb({
     .then(async ({ pages, locales }) => {
       if (pages.length === 0) return null;
       const [images, seasonGroups, extended] = await Promise.all([
-        coreFieldsOnly
+        coreFieldsOnly || seasonLayoutOnly
           ? Promise.resolve({ logos: [], posters: [], backdrops: [] })
           : loadMediaImages(providerContext, type, id, locales),
         type === "tv" && !coreFieldsOnly
@@ -398,6 +400,31 @@ export async function resolveTmdbMediaMetadata(args: {
   if (hasCompleteApiMetadata(api, type)) return api;
   const web = await resolveTmdbMediaWeb(args);
   return mergeApiAndWebMetadata(api, web);
+}
+
+/** Preserve the general resolver's season selection without loading unused artwork. */
+export async function resolveTmdbSeasonLayout({
+  providerContext, id,
+}: {
+  providerContext: ProviderContext;
+  id: number;
+}): Promise<TmdbSeasonMetadata[] | null> {
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const apiKey = await readTmdbApiKey(providerContext);
+  const api = apiKey
+    ? await resolveApiMedia({
+        providerContext, apiKey, id, type: "tv",
+        includeImages: false,
+        includeCredits: false,
+      })
+    : null;
+  // The general resolver always prefers nonempty API seasons, even when it
+  // fetches web metadata to fill other, unrelated fields.
+  if (api?.seasons.length) return api.seasons;
+  const web = await resolveTmdbMediaWeb({
+    providerContext, id, type: "tv", seasonLayoutOnly: true,
+  });
+  return web?.seasons || api?.seasons || null;
 }
 
 type TmdbInfoField = "title" | "overview" | "year" | "runtime" | "rating" | "genres" | "cast";

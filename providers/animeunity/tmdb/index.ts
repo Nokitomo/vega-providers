@@ -1,6 +1,7 @@
 export {
   resolveTmdbEpisodeExtendedMetadata,
   resolveTmdbMediaMetadata,
+  resolveTmdbSeasonLayout,
   resolveTmdbInfoFields,
   resolveTmdbSeasonMetadata,
 } from "./client";

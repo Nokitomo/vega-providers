@@ -18,7 +18,7 @@ import {
 } from "./mappings";
 import {
   resolveAnimeTmdbMetadata,
-  resolveTmdbMediaMetadata,
+  resolveTmdbSeasonLayout,
   selectPrimaryTmdbId,
   selectTmdbPreferredArtwork,
 } from "./tmdb";
@@ -129,15 +129,14 @@ async function resolveSeasonMappedLinks({
     seasonMappedLinkList.length > 0;
   if (needsTmdbSeasonLayout) {
     const tmdbTarget = selectPrimaryTmdbId(mappingResolution, false);
-    const tmdbMedia =
+    const tmdbSeasons =
       tmdbTarget?.type === "tv"
-        ? await resolveTmdbMediaMetadata({
+        ? await resolveTmdbSeasonLayout({
             providerContext,
             id: tmdbTarget.id,
-            type: "tv",
           })
         : null;
-    if (tmdbMedia?.seasons?.length) {
+    if (tmdbSeasons?.length) {
       const mappedSeasonNumbers = new Set(
         mappingResolution.targets
           .filter(
@@ -149,7 +148,7 @@ async function resolveSeasonMappedLinks({
           .map(target => parseSeasonScope(target.scope))
           .filter((season): season is number => season != null && season > 0),
       );
-      const mappedTmdbSeasons = tmdbMedia.seasons.filter(season =>
+      const mappedTmdbSeasons = tmdbSeasons.filter(season =>
         mappedSeasonNumbers.has(season.seasonNumber),
       );
       const tmdbEpisodeCount = mappedTmdbSeasons
@@ -173,7 +172,7 @@ async function resolveSeasonMappedLinks({
         animeId,
         totalCount: metaPayload.episodesCount,
         mappingResolution,
-        tmdbSeasons: tmdbMedia.seasons,
+        tmdbSeasons,
         sourceRecords,
       });
     }
