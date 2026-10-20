@@ -94,12 +94,12 @@ are supported without relying on runtime `require()` in the app.
 - Supported fields are `text`, `toggle`, `select`, `multiselect`, and `number`.
 - Mark secret text fields such as personal API tokens with `secure: true`.
 - Read and write values through `providerContext.kvStore`; do not embed credentials in provider code.
-- The app scopes and encrypts stored values per provider source and provider. Uninstalling or resetting a provider clears its values.
+- The app scopes and encrypts provider-specific values per source and provider. Uninstalling or resetting a provider clears those values.
 
-AnimeUnity, StreamingUnity e StreamCenter offrono una chiave API TMDB v3 opzionale
-nelle rispettive impostazioni. La chiave e salvata dall'app nello storage locale
-cifrato del singolo provider, non nel manifest o nei bundle. Se presente, i
-resolver TMDB interrogano prima l'API mantenendo la priorita linguistica e delle
+AnimeUnity, StreamingUnity e StreamCenter leggono la stessa chiave API TMDB v3
+facoltativa dalle Preferenze dell'app tramite `providerContext.kvStore`. La
+chiave e salvata nello storage locale cifrato dell'app, non nel manifest o nei
+bundle. Se presente, i resolver TMDB interrogano prima l'API mantenendo la priorita linguistica e delle
 immagini esistente; per dati mancanti o errori usano le pagine TMDB e poi i
 fallback verso gli altri servizi gia previsti dal provider. Senza chiave il
 percorso web resta invariato. Le credenziali non vanno incluse nei log o nei

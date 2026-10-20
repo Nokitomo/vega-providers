@@ -27,8 +27,7 @@ const run = async () => {
   for (const provider of ["animeunity", "streamingunity", "streamcenter"]) {
     const schema = await require(`../dist/${provider}/settings.js`)
       .getSettingsSchema({ providerContext: {} });
-    assert.strictEqual(schema[0].key, "tmdbApiKey");
-    assert.strictEqual(schema[0].secure, true);
+    assert.deepStrictEqual(schema, []);
   }
 
   const artworkContext = makeContext("provider-one-key", (url) => {
