@@ -1,4 +1,4 @@
-import { ContentInventory, Info, ProviderContext } from "../types";
+import { ContentInventory, Info, Post, ProviderContext } from "../types";
 import {
   getContentInventory as getAnimeContentInventory,
   getArtwork as getAnimeArtwork,
@@ -64,11 +64,15 @@ export const getArtwork = ({
   link,
   fields,
   failedUrls,
+  hints,
+  imageSize,
   providerContext,
 }: {
   link: string;
   fields?: Array<"logo" | "poster" | "background">;
   failedUrls?: string[];
+  hints?: Post["artworkHints"];
+  imageSize?: "original" | "w300" | "w780";
   providerContext: ProviderContext;
 }): Promise<{logo?: string; poster?: string; background?: string; resolved?: boolean}> => {
   const route = resolveMetaRoute(link);
@@ -79,6 +83,8 @@ export const getArtwork = ({
     link: route.data.url,
     fields,
     failedUrls,
+    hints,
+    imageSize,
     providerContext,
   });
 };

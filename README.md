@@ -144,6 +144,8 @@ Gli inventari incompleti generano un errore: l'app conserva i dati precedenti in
 
 Per gli anime StreamCenter restituisce gli episodi AnimeUnity senza attendere la ricerca dei server alternativi AnimeWorld/AnimeSaturn. La route di ogni episodio conserva titolo, ID e numero necessari per cercarli quando parte la riproduzione; il player attende la risposta dei server e puo quindi impiegare piu tempo ad aprirsi. I link precedenti che contengono gia i fallback restano validi. Una ricerca fallita non impedisce l'uso dello stream AnimeUnity, mentre l'annullamento della riproduzione interrompe la ricerca in corso. Verificare con `npm run test:streamcenter:lazy-fallback` e `npm run test:streamcenter:vega:smoke`.
 
+Per le card anime StreamCenter inoltra `artworkHints` e `imageSize` alla ricerca poster di AnimeUnity usando il proprio contesto e le proprie impostazioni. La ricerca non richiede che il provider AnimeUnity sia installato nell'app. Verificare l'inoltro con `npm run test:streamcenter:artwork`.
+
 ### Link delle schede StreamCenter
 
 StreamCenter conserva gli URL delle schede AnimeUnity e StreamingUnity quando il

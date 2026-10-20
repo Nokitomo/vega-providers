@@ -35,6 +35,7 @@
     "test:meta:critical-path": "node tests/meta-critical-path.js",
     "test:streamingunity:meta": "node tests/streamingunity-meta-fallbacks.js",
     "test:streamcenter:routing": "node tests/streamcenter-routing.js",
+    "test:streamcenter:artwork": "node tests/streamcenter-artwork-forwarding.js",
     "test:streamcenter:lazy-fallback": "node tests/streamcenter-lazy-fallback.js",
     "test:streamcenter:vega:smoke": "node tests/streamcenter-vega-smoke.js",
     "test:stream:dedup": "node tests/stream-dedup.js",
