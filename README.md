@@ -109,6 +109,9 @@ L'indice pubblico AniBridge v3 di AnimeUnity e condiviso fra le ricerche
 tramite il contesto del provider. Nelle versioni dell'app che espongono
 `providerContext.fileCache`, viene salvato su file per 24 ore con la sola
 chiave `anibridge-v3`; il provider valida sempre lo schema prima di usarlo.
+L'app offre lo stesso file sia ad AnimeUnity sia al ramo anime di StreamCenter
+per la stessa sorgente: uno dei due puo riusare l'indice scaricato dall'altro,
+senza richiedere che entrambi i provider siano installati.
 Se la cache e assente, scaduta o non disponibile, il provider scarica e
 valida normalmente il dataset. Non salvare questo indice nel KV cifrato delle
 impostazioni: e un dataset pubblico e di grandi dimensioni.
