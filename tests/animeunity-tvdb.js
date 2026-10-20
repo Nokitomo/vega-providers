@@ -101,8 +101,14 @@ assert.strictEqual(
 );
 
 const requestedUrls = [];
+let htmlParses = 0;
 const providerContext = {
-  cheerio,
+  cheerio: {
+    load: (...args) => {
+      htmlParses += 1;
+      return cheerio.load(...args);
+    },
+  },
   cache: emptyCache(),
   axios: {
     get: async (url) => {
@@ -254,6 +260,11 @@ const providerContext = {
   assert.strictEqual(
     movieMetadata.background,
     "https://artworks.thetvdb.com/banners/v4/movie/3000/backgrounds/en.jpg",
+  );
+  assert.strictEqual(
+    htmlParses,
+    11,
+    "each TVDB entry and season page should be parsed once; artwork detail pages remain independent",
   );
 
   const textMetadata = await resolveTvdbMediaTextMetadata({

@@ -104,20 +104,15 @@ async function resolveArtworkDetails({
 
 async function resolveField({
   providerContext,
-  pageHtml,
+  candidates,
   field,
   originalLanguage,
 }: {
   providerContext: ProviderContext;
-  pageHtml: string;
+  candidates: TvdbArtwork[];
   field: TvdbArtworkField;
   originalLanguage?: string;
 }): Promise<string | undefined> {
-  const candidates = parseTvdbArtworkGrid(
-    pageHtml,
-    providerContext.cheerio,
-    field,
-  );
   if (candidates.length === 0) return undefined;
   const detailed = await resolveArtworkDetails({ providerContext, candidates });
   return pickByLanguage(detailed, field, originalLanguage)?.url;
@@ -188,8 +183,9 @@ export async function resolveTvdbArtworkMetadata({
       return cached ? pickFields(cached.value.metadata, requestedFields) : null;
     }
 
+    const entryRoot = providerContext.cheerio.load(entryResponse.html);
     const originalLanguage =
-      parseTvdbOriginalLanguage(entryResponse.html, providerContext.cheerio) ||
+      parseTvdbOriginalLanguage(entryResponse.html, providerContext.cheerio, entryRoot) ||
       cached?.value.metadata.originalLanguage;
     const metadata: TvdbArtworkMetadata = {
       source: "tvdb-web",
@@ -199,7 +195,7 @@ export async function resolveTvdbArtworkMetadata({
       tvdbShowId: mediaType === "series" ? id : undefined,
       tvdbMovieId: mediaType === "movie" ? id : undefined,
       seasonNumber: mediaType === "series" ? seasonNumber : undefined,
-      title: parseTvdbTitle(entryResponse.html, providerContext.cheerio),
+      title: parseTvdbTitle(entryResponse.html, providerContext.cheerio, entryRoot),
       originalLanguage,
       ...cached?.value.metadata,
     };
@@ -215,9 +211,15 @@ export async function resolveTvdbArtworkMetadata({
         : null;
 
     if (seasonResponse && unresolved.has("poster")) {
+      const seasonRoot = providerContext.cheerio.load(seasonResponse.html);
       const poster = await resolveField({
         providerContext,
-        pageHtml: seasonResponse.html,
+        candidates: parseTvdbArtworkGrid(
+          seasonResponse.html,
+          providerContext.cheerio,
+          "poster",
+          seasonRoot,
+        ),
         field: "poster",
         originalLanguage,
       });
@@ -232,7 +234,12 @@ export async function resolveTvdbArtworkMetadata({
       Array.from(unresolved).map(async (field) => {
         const value = await resolveField({
           providerContext,
-          pageHtml: entryResponse.html,
+          candidates: parseTvdbArtworkGrid(
+            entryResponse.html,
+            providerContext.cheerio,
+            field,
+            entryRoot,
+          ),
           field,
           originalLanguage,
         });

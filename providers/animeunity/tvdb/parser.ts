@@ -65,16 +65,18 @@ export function extractTvdbEntityPath(
     : extractSeriesPathFromTvdbPage(html, url);
 }
 
-export function parseTvdbTitle(html: string, cheerio: any): string | undefined {
-  const text = cheerio.load(html)("h1").first().text().trim();
+export function parseTvdbTitle(html: string, cheerio: any, root?: any): string | undefined {
+  const $ = root || cheerio.load(html);
+  const text = $("h1").first().text().trim();
   return text || undefined;
 }
 
 export function parseTvdbOriginalLanguage(
   html: string,
   cheerio: any,
+  root?: any,
 ): string | undefined {
-  const $ = cheerio.load(html);
+  const $ = root || cheerio.load(html);
   let language: string | undefined;
   $("li, .list-group-item").each((_: number, element: any) => {
     if (language) return;
@@ -90,8 +92,9 @@ export function parseTvdbArtworkGrid(
   html: string,
   cheerio: any,
   field: TvdbArtworkField,
+  root?: any,
 ): TvdbArtwork[] {
-  const $ = cheerio.load(html);
+  const $ = root || cheerio.load(html);
   const rels = ARTWORK_RELS_BY_FIELD[field];
   const seen = new Set<string>();
   const items: TvdbArtwork[] = [];

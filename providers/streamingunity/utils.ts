@@ -102,6 +102,35 @@ export const extractInertiaPage = (
   cheerio: ProviderContext["cheerio"]
 ): { props?: any } | null => {
   if (!html) return null;
+  // Inertia places the payload on the app root. Read that one opening tag
+  // without constructing a DOM for the entire response; unusual markup still
+  // follows the original Cheerio path below.
+  const appTags = html.match(/<[a-z][a-z\d:-]*\b(?:"[^"]*"|'[^']*'|[^'">])*>/gi);
+  if (appTags) {
+    for (const tag of appTags) {
+      const id = tag.match(/(?:^|\s)id\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      if ((id?.[1] ?? id?.[2]) !== "app") continue;
+      const attribute = tag.match(/(?:^|\s)data-page\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      const value = attribute?.[1] ?? attribute?.[2];
+      if (!value) continue;
+      if (!/^<div\b/i.test(tag)) break;
+      const entities = value.match(/&(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);/gi) || [];
+      if (entities.every((entity) => /^(?:&quot;|&#39;|&amp;|&lt;|&gt;)$/i.test(entity))) {
+        // Cheerio decodes entities once before the existing decoder runs.
+        const decoded = decodeHtmlEntities(decodeHtmlEntities(value));
+        try {
+          return JSON.parse(decoded);
+        } catch (_) {
+          try {
+            return JSON.parse(decodeHtmlEntities(decoded));
+          } catch (_) {
+            // Keep the established parser and error behavior for malformed data.
+          }
+        }
+      }
+      break;
+    }
+  }
   const $ = cheerio.load(html);
   const raw =
     $("#app[data-page]").first().attr("data-page") ||
