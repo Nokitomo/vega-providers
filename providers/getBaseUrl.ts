@@ -21,6 +21,9 @@ async function resolveAnimeUnityBaseUrl(value: string): Promise<string> {
   try {
     // Probe the root: redirects from info_api and embed-url lose their paths.
     const response = await fetch(`${candidate.origin}/`);
+    if (!response.ok) {
+      return "";
+    }
     const finalUrl = new URL(response.url || candidate.origin);
     if (finalUrl.protocol !== "https:" || !ANIMEUNITY_HOST.test(finalUrl.hostname)) {
       return "";

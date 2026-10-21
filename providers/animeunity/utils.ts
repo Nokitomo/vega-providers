@@ -12,10 +12,14 @@ export function normalizeImageUrl(url?: string): string {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
+    if (host === "img.animeunity.so") {
+      parsed.hostname = "img.animeunity.co";
+      return parsed.toString();
+    }
     if (host.includes("animeworld.so") || host.includes("forbiddenlol.cloud")) {
       const filename = parsed.pathname.split("/").pop() || "";
       if (filename) {
-        return `https://img.animeunity.so/anime/${filename}`;
+        return `https://img.animeunity.co/anime/${filename}`;
       }
     }
   } catch (_) {
