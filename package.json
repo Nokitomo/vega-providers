@@ -15,6 +15,7 @@
     "test:animeunity:variants": "node tests/animeunity-variants.js",
     "test:animeunity:episode-ranges": "node tests/animeunity-episode-ranges.js",
     "test:animeunity:catalog-filters": "node tests/animeunity-catalog-filters.js",
+    "test:home:errors": "node tests/provider-home-errors.js",
     "test:animeunity:artwork-trailers": "node tests/animeunity-artwork-trailers.js",
     "test:animeunity:logo-fallback": "node tests/animeunity-logo-fallback.js",
     "test:animeunity:anibridge": "node tests/animeunity-anibridge.js",

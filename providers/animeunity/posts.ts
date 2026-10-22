@@ -495,10 +495,9 @@ async function fetchTop({
     }
   }
 
-  if (page === 1 && lastError) {
-    console.log("[animeunity][top] exhausted candidates");
+  if (lastError) {
+    throw lastError;
   }
-
   return [];
 }
 
@@ -618,7 +617,7 @@ async function fetchArchive({
   }
 
   if (!response) {
-    return [];
+    throw new Error("AnimeUnity archive unavailable");
   }
 
   if (!random) {
@@ -699,7 +698,7 @@ export const getPosts = async function ({
     }
   } catch (err) {
     console.error("animeunity posts error", err);
-    return [];
+    throw err;
   }
 };
 

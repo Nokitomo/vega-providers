@@ -77,12 +77,22 @@ const getUnifiedArchive = (args: PostsArgs): Promise<Post[]> => {
       })
     );
   }
-  return settledPosts(tasks).then(([anime = [], streaming = []]) =>
-    mergePosts([
+  return Promise.allSettled(tasks).then((results) => {
+    const [animeResult, streamingResult] = results;
+    const anime = animeResult.status === "fulfilled" ? animeResult.value : [];
+    const streaming = streamingResult?.status === "fulfilled" ? streamingResult.value : [];
+    const posts = mergePosts([
       anime.map((post) => wrapPost(post, "animeunity")),
       streaming.map((post) => wrapPost(post, "streamingunity")),
-    ])
-  );
+    ]);
+    if (posts.length === 0) {
+      const failure = results.find(result => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    }
+    return posts;
+  });
 };
 
 export const getPosts = function (args: PostsArgs): Promise<Post[]> {

@@ -292,6 +292,7 @@ const fetchHomePosts = async ({
   page: number;
 }): Promise<Post[]> => {
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
+  let lastError: unknown = null;
 
   try {
     const params = new URLSearchParams();
@@ -316,6 +317,7 @@ const fetchHomePosts = async ({
     );
     if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
+    lastError = err;
     console.error("streamingunity browse route error", err);
   }
 
@@ -334,10 +336,12 @@ const fetchHomePosts = async ({
       const titles = slider?.titles || [];
       return mapTitlesToPosts(titles, baseUrl, cdnUrl, type);
     } catch (err) {
+      lastError = err;
       console.error("streamingunity browse html fallback error", err);
     }
   }
 
+  if (lastError) throw lastError;
   return [];
 };
 
@@ -355,6 +359,7 @@ const fetchArchivePosts = async ({
   page: number;
 }): Promise<Post[]> => {
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
+  let lastError: unknown = null;
   const archiveFilters = filters || {};
 
   const buildArchiveParams = (): URLSearchParams => {
@@ -402,6 +407,7 @@ const fetchArchivePosts = async ({
     );
     if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
+    lastError = err;
     console.error("streamingunity archive route error", err);
   }
 
@@ -423,10 +429,12 @@ const fetchArchivePosts = async ({
       const titles = extractTitlesFromPayload(pageData);
       return mapTitlesToPosts(titles, baseUrl, cdnUrl, archiveFilters.type);
     } catch (err) {
+      lastError = err;
       console.error("streamingunity archive html fallback error", err);
     }
   }
 
+  if (lastError) throw lastError;
   return [];
 };
 
@@ -447,6 +455,7 @@ const fetchBrowseGenrePosts = async ({
   if (!normalizedGenre) return [];
 
   let cdnUrl = resolveCdnUrl(null, baseUrl, DEFAULT_CDN_URL);
+  let lastError: unknown = null;
 
   try {
     const params = new URLSearchParams();
@@ -471,6 +480,7 @@ const fetchBrowseGenrePosts = async ({
     );
     if (posts.length > 0 || page > 1) return posts;
   } catch (err) {
+    lastError = err;
     console.error("streamingunity browse genre route error", err);
   }
 
@@ -492,10 +502,12 @@ const fetchBrowseGenrePosts = async ({
       const titles = extractTitlesFromPayload(pageData);
       return mapTitlesToPosts(titles, baseUrl, cdnUrl);
     } catch (err) {
+      lastError = err;
       console.error("streamingunity browse genre html fallback error", err);
     }
   }
 
+  if (lastError) throw lastError;
   return [];
 };
 
@@ -516,8 +528,7 @@ export const getPosts = async function ({
 
     const baseUrl = await resolveBaseUrl(providerContext);
     if (!baseUrl) {
-      console.error("streamingunity posts error: missing base url");
-      return [];
+      throw new Error("StreamingUnity base URL unavailable");
     }
     const parsed = parseFilter(filter);
     const archiveFilters = normalizeArchiveFilters(parsed.params);
@@ -564,7 +575,7 @@ export const getPosts = async function ({
     });
   } catch (err) {
     console.error("streamingunity posts error", err);
-    return [];
+    throw err;
   }
 };
 

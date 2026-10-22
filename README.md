@@ -149,6 +149,9 @@ Per gli anime StreamCenter restituisce gli episodi AnimeUnity senza attendere la
 
 Per le card anime StreamCenter inoltra `artworkHints` e `imageSize` alla ricerca poster di AnimeUnity usando il proprio contesto e le proprie impostazioni. La ricerca non richiede che il provider AnimeUnity sia installato nell'app. Verificare l'inoltro con `npm run test:streamcenter:artwork`.
 
+Le categorie Home di AnimeUnity e StreamingUnity distinguono una risposta vuota valida da una richiesta fallita: dopo aver esaurito i tentativi, l'errore viene propagato all'app, cosi una sezione gia popolata non viene sostituita da un risultato vuoto dovuto alla rete. StreamCenter conserva i risultati parziali quando almeno una sorgente restituisce card; se il catalogo finale e vuoto e una sorgente ha fallito, propaga l'errore. Ricerca e metadati non cambiano.
+Verificare i casi di errore, risposta vuota valida e risultato parziale con `npm run test:home:errors` dopo la build.
+
 ### Link delle schede StreamCenter
 
 StreamCenter conserva gli URL delle schede AnimeUnity e StreamingUnity quando il
