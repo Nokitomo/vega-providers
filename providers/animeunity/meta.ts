@@ -27,6 +27,7 @@ import { deduplicateAnimeVariantPosts } from "./variants";
 import { buildTmdbSeasonEpisodeLinks } from "./seasonLinks";
 import { fetchAnimeUnityEpisodeRecords } from "./episodeRecords";
 import { resolveAnimeLogoFallback } from "./logoFallback";
+import { hasConflictingArtworkTargets, verifyArtworkTargets } from "./artworkTargetValidation";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -80,8 +81,8 @@ function selectPrimaryTvdbTarget(
   const targets = metadataTargets.filter(
     (target) => target.provider === "tvdb_show",
   );
-  const selectedId =
-    targets[0]?.id || String(mappingResolution.ids.tvdbShowIds[0] || "");
+  const selectedId = targets[0]?.id ||
+    (mappingResolution.metadataTargets ? "" : String(mappingResolution.ids.tvdbShowIds[0] || ""));
   const id = Number.parseInt(selectedId, 10);
   if (!Number.isFinite(id) || id <= 0) return null;
 
@@ -345,6 +346,13 @@ export const getMeta = async function ({
       providerContext,
       purpose,
     }));
+    const artworkMapping = await verifyArtworkTargets({
+      providerContext,
+      mappingResolution,
+      isMovie: metaPayload.isMovie,
+      titles: [info?.title_eng, info?.title, info?.title_it,
+        animeFromHtml?.title_eng, animeFromHtml?.title, metaPayload.title],
+    });
     const providerArtwork = {
       poster: metaPayload.poster,
       background: metaPayload.background,
@@ -356,7 +364,7 @@ export const getMeta = async function ({
     ];
     const tmdbMetadata = await resolveAnimeTmdbMetadata({
       providerContext,
-      mappingResolution,
+      mappingResolution: artworkMapping,
       isMovie: metaPayload.isMovie,
       fields: tmdbFields,
     });
@@ -384,7 +392,7 @@ export const getMeta = async function ({
         })
       : {};
     const tvdbTarget = selectPrimaryTvdbTarget(
-      mappingResolution,
+      artworkMapping,
       metaPayload.isMovie,
     );
     const tvdbFields: Array<"logo" | "poster" | "background"> = [];
@@ -574,27 +582,47 @@ export const getArtwork = async function ({
         ? inferredIsMovie
         : mappingResolution.ids.tmdbShowIds.length === 0 &&
           mappingResolution.ids.tmdbMovieIds.length > 0;
+    if (!info && hasConflictingArtworkTargets(mappingResolution, isMovie)) {
+      try {
+        const baseHost = normalizeBaseUrl(
+          (await providerContext.getBaseUrl("animeunity")) || DEFAULT_BASE_HOST,
+        );
+        const infoRes = await axios.get(`${baseHost}/info_api/${animeId}/`, {
+          headers: DEFAULT_HEADERS,
+          timeout: TIMEOUTS.LONG,
+        });
+        info = infoRes.data || {};
+      } catch (_) {
+        // Without a title the conflicting IDs will be excluded below.
+      }
+    }
+    const artworkMapping = await verifyArtworkTargets({
+      providerContext,
+      mappingResolution,
+      isMovie,
+      titles: [info?.title_eng, info?.title, info?.title_it],
+    });
     if (fields.length === 1 && fields[0] === "logo" && failedUrls.length > 0) {
       const logo = await resolveAnimeLogoFallback({
         providerContext,
-        mappingResolution,
+        mappingResolution: artworkMapping,
         anilistId: hintedAnilistId || Number(info?.anilist_id) || undefined,
         malId: hintedMalId || Number(info?.mal_id) || undefined,
         isMovie,
-        tvdbTarget: selectPrimaryTvdbTarget(mappingResolution, isMovie),
+        tvdbTarget: selectPrimaryTvdbTarget(artworkMapping, isMovie),
         failedUrls,
       });
       return { logo, resolved: true };
     }
     const tmdb = await resolveAnimeTmdbMetadata({
       providerContext,
-      mappingResolution,
+      mappingResolution: artworkMapping,
       isMovie,
       fields,
       imageSize,
     });
     const missingFields = fields.filter((field) => !tmdb?.[field]);
-    const tvdbTarget = selectPrimaryTvdbTarget(mappingResolution, isMovie);
+    const tvdbTarget = selectPrimaryTvdbTarget(artworkMapping, isMovie);
     const tvdb =
       tvdbTarget && missingFields.length > 0
         ? await resolveTvdbArtworkMetadata({
