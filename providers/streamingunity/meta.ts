@@ -954,6 +954,18 @@ export const getMeta = async function ({
         }))
       : null;
     const tmdbType: TmdbMediaType = type === "series" ? "tv" : "movie";
+    // Artwork does not depend on text enrichment. Keep the exact source/locale
+    // selection, but overlap its requests with missing text/credits resolution.
+    const artworkPromise = captureAsync(resolveExternalFallbackArtwork({
+      providerContext,
+      title,
+      type,
+      tvdbId,
+      resolveMissingExternalIds,
+      poster,
+      logo,
+      background,
+    }));
     const missingTmdbFields = [
       !hasText(titleName) && "title",
       !hasText(plot) && "overview",
@@ -1007,16 +1019,9 @@ export const getMeta = async function ({
     titleName = pickPresent(titleName, tvdbText?.title) || "";
     plot = pickPresent(plot, tvdbText?.synopsis) || "";
 
-    const fallbackArtwork = await resolveExternalFallbackArtwork({
-      providerContext,
-      title,
-      type,
-      tvdbId,
-      resolveMissingExternalIds,
-      poster,
-      logo,
-      background,
-    });
+    const artworkResult = await artworkPromise;
+    if ("error" in artworkResult) throw artworkResult.error;
+    const fallbackArtwork = artworkResult.value;
     poster = fallbackArtwork.poster || "";
     logo = fallbackArtwork.logo || "";
     background = fallbackArtwork.background || "";

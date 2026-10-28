@@ -205,33 +205,28 @@ export async function resolveTvdbArtworkMetadata({
       mediaType === "series" && seasonNumber != null
         ? `${entityPath}/seasons/official/${encodeURIComponent(String(seasonNumber))}`
         : undefined;
-    const seasonResponse =
-      seasonPath && unresolved.has("poster")
-        ? await fetchTvdbHtml(providerContext, seasonPath)
-        : null;
-
-    if (seasonResponse && unresolved.has("poster")) {
-      const seasonRoot = providerContext.cheerio.load(seasonResponse.html);
-      const poster = await resolveField({
-        providerContext,
-        candidates: parseTvdbArtworkGrid(
-          seasonResponse.html,
-          providerContext.cheerio,
-          "poster",
-          seasonRoot,
-        ),
-        field: "poster",
-        originalLanguage,
-      });
-      if (poster) {
-        metadata.poster = poster;
-        metadata.sourceUrl = `${TVDB_BASE_URL}${seasonPath}`;
-        unresolved.delete("poster");
-      }
-    }
-
     await Promise.all(
       Array.from(unresolved).map(async (field) => {
+        // A season poster keeps precedence over the series poster, but must
+        // not delay independent logo/background lookups.
+        if (field === "poster" && seasonPath) {
+          const seasonResponse = await fetchTvdbHtml(providerContext, seasonPath);
+          if (seasonResponse) {
+            const seasonRoot = providerContext.cheerio.load(seasonResponse.html);
+            const poster = await resolveField({
+              providerContext,
+              candidates: parseTvdbArtworkGrid(seasonResponse.html, providerContext.cheerio, "poster", seasonRoot),
+              field: "poster",
+              originalLanguage,
+            });
+            if (poster) {
+              metadata.poster = poster;
+              metadata.sourceUrl = `${TVDB_BASE_URL}${seasonPath}`;
+              unresolved.delete("poster");
+              return;
+            }
+          }
+        }
         const value = await resolveField({
           providerContext,
           candidates: parseTvdbArtworkGrid(

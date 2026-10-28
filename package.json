@@ -33,6 +33,7 @@
     "test:streamingunity:episodes": "node tests/streamingunity-episodes.js",
     "test:streamingunity:season-zero": "node tests/streamingunity-season-zero.js",
     "test:metadata-inventory": "node tests/metadata-inventory.js",
+    "test:hero:preparation": "node tests/hero-preparation.js",
     "test:meta:critical-path": "node tests/meta-critical-path.js",
     "test:streamingunity:meta": "node tests/streamingunity-meta-fallbacks.js",
     "test:streamingunity:inertia": "node tests/streamingunity-inertia-parser.js",

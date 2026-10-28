@@ -441,3 +441,50 @@ Info data, alongside the provider-specific metadata tests.
 This workflow allows you to quickly test and debug new providers before deploying them.
 
 Follow this structure and naming convention to ensure your provider integrates smoothly with the project.
+
+
+## Hero metadata preparation (AnimeUnity 1.3.38, StreamingUnity 1.0.33, StreamCenter 1.0.40)
+
+- StreamingUnity starts artwork resolution before awaiting missing text/credits.
+  Both branches still finish before metadata is returned. No services, fields,
+  locale priorities, candidate order or fallback rules are removed.
+- TVDB resolves the season poster concurrently with independent logo/background
+  fields. The season poster still wins over the series poster, and language
+  priorities remain unchanged regardless of response order.
+- AniBridge reuses descriptor parsing within a single payload. Returned targets
+  and range maps remain independent, with the same record and lookup ordering.
+  The temporary parse cache is released after parsing; persistent cache policies
+  are unchanged. StreamCenter inherits the source-provider optimizations.
+
+Validation: `npm run build`, `npx tsc --noEmit`, and all 33 test programs excluding
+live/smoke scripts passed. `npm run test:hero:preparation` checks overlapping
+requests and proves that a slower Italian logo and a season poster retain their
+priority. Optional `HERO_BASELINE_DIR` points to local pre-change bundles for a
+full returned-object equivalence comparison. The complete real AniBridge dataset
+(78,762 records) produced identical serialized records before and after.
+
+A local comparison replayed recorded responses for one real catalog item per
+provider, with empty provider contexts and a fixed 30 ms latency per request:
+
+| Provider | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| StreamingUnity | 736 ms | 634 ms | 14% |
+| AnimeUnity | 10,617 ms | 7,146 ms | 33% |
+| StreamCenter (anime source) | 9,293 ms | 7,541 ms | 19% |
+
+Every returned metadata field matched in these samples. These are controlled
+replay timings on Windows, not network latency promises or Android frame times.
+The streaming fixture with two independent 80 ms requests measured 209 -> 125 ms.
+Real gains vary with mappings, cache, upstream availability and device load.
+
+Android QA uses Medium_Phone_API_35 and the newly built local modules before
+publication. Metadata SQLite, MMKV cache, provider-file and image/HTTP caches are
+cleared with the process stopped; installed providers/settings are retained.
+Evidence remains in the app repository's ignored `.codex/screenshots/cruncy-ui/`.
+All three providers displayed complete hero cards in cold-cache Android checks.
+Observed first presentation (including catalog work) was about 21.7 s for
+StreamingUnity, 43.1 s for AnimeUnity and 43.5 s for StreamCenter. These single
+live runs are not a controlled before/after comparison: upstream requests and
+emulator load still dominate cold startup. A prepared AnimeUnity transition
+took 254 ms; subsequent cards can still require waiting when not prepared.
+iOS and end-to-end video playback are outside this hero-focused validation.

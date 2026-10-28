@@ -64,10 +64,19 @@ export function parseAniBridgePayload(
       ? generatedOnValue.trim()
       : undefined;
   const records = new Map<string, AniBridgeSourceRecord>();
+  // Descriptors recur across many records. Reuse parsing only within this
+  // payload; targets still receive independent objects and range maps.
+  const descriptors = new Map<string, AniBridgeDescriptor | null>();
+  const parseDescriptor = (value: string): AniBridgeDescriptor | null => {
+    if (descriptors.has(value)) return descriptors.get(value)!;
+    const parsed = parseAniBridgeDescriptor(value);
+    descriptors.set(value, parsed);
+    return parsed;
+  };
 
   Object.entries(root).forEach(([sourceValue, rawTargets]) => {
     if (sourceValue.startsWith("$")) return;
-    const source = parseAniBridgeDescriptor(sourceValue);
+    const source = parseDescriptor(sourceValue);
     if (!source) {
       return;
     }
@@ -82,7 +91,7 @@ export function parseAniBridgePayload(
     const targets: AniBridgeTarget[] = [];
     Object.entries(rawTargets as Record<string, unknown>).forEach(
       ([targetValue, rawRanges]) => {
-        const descriptor = parseAniBridgeDescriptor(targetValue);
+        const descriptor = parseDescriptor(targetValue);
         if (!descriptor) return;
         targets.push({
           ...descriptor,
