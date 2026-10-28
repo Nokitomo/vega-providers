@@ -477,14 +477,14 @@ replay timings on Windows, not network latency promises or Android frame times.
 The streaming fixture with two independent 80 ms requests measured 209 -> 125 ms.
 Real gains vary with mappings, cache, upstream availability and device load.
 
-Android QA uses Medium_Phone_API_35 and the newly built local modules before
-publication. Metadata SQLite, MMKV cache, provider-file and image/HTTP caches are
+Android QA uses Medium_Phone_API_35. Local-module checks were followed by
+installation from the published commit URL because a cached manifest could
+restore older provider versions. Metadata SQLite, MMKV cache, provider-file and image/HTTP caches are
 cleared with the process stopped; installed providers/settings are retained.
 Evidence remains in the app repository's ignored `.codex/screenshots/cruncy-ui/`.
 All three providers displayed complete hero cards in cold-cache Android checks.
-Observed first presentation (including catalog work) was about 21.7 s for
-StreamingUnity, 43.1 s for AnimeUnity and 43.5 s for StreamCenter. These single
-live runs are not a controlled before/after comparison: upstream requests and
-emulator load still dominate cold startup. A prepared AnimeUnity transition
-took 254 ms; subsequent cards can still require waiting when not prepared.
+Cold first presentation can still take tens of seconds, including catalog work.
+Live runs are not a controlled before/after comparison: upstream requests and
+emulator load still dominate cold startup. Prepared transitions are faster;
+subsequent cards can still require waiting when not prepared.
 iOS and end-to-end video playback are outside this hero-focused validation.
