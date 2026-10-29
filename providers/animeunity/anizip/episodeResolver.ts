@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { resolveAniZipMetadata } from "./client";
 import {
@@ -60,7 +61,7 @@ function findMappedEpisode(
   );
 }
 
-export async function resolveAniZipEpisodeFallbacks({
+async function resolveAniZipEpisodeFallbacksUncached({
   providerContext,
   anilistId,
   malId,
@@ -90,4 +91,9 @@ export async function resolveAniZipEpisodeFallbacks({
       thumbnail: episode.image,
     };
   });
+}
+
+export function resolveAniZipEpisodeFallbacks(args: Parameters<typeof resolveAniZipEpisodeFallbacksUncached>[0]): ReturnType<typeof resolveAniZipEpisodeFallbacksUncached> {
+  return runMetadataTask(args, "anizip", "episodes", episodeNumbers =>
+    resolveAniZipEpisodeFallbacksUncached(args));
 }

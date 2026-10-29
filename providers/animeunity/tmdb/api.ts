@@ -140,6 +140,25 @@ async function loadImages(
   };
 }
 
+/** Complete image response for database inventory; no first-image short circuit. */
+export async function resolveApiImageInventory({providerContext, apiKey, id, type, seasonNumber}: {
+  providerContext: ProviderContext; apiKey: string; id: number; type: TmdbMediaType; seasonNumber?: number;
+}) {
+  const basePath = `/${type}/${id}`;
+  const details = await request(providerContext, apiKey, basePath, {language: TMDB_PRIMARY_LOCALE});
+  if (!details) return null;
+  const locale = originalLocale(details.original_language);
+  const languages = Array.from(new Set([...buildLocalePriority(locale)
+    .map(languageCodeFromLocale).filter(code => code !== 'xx'), 'null'])).join(',');
+  const path = seasonNumber == null ? basePath : `${basePath}/season/${seasonNumber}`;
+  const data = await request(providerContext, apiKey, `${path}/images`, {include_image_language: languages});
+  if (!data) return null;
+  return {originalLanguage: locale, images: {
+    posters: mapImages(data.posters, 'poster'), backdrops: mapImages(data.backdrops, 'backdrop'),
+    logos: mapImages(data.logos, 'logo'),
+  }};
+}
+
 async function loadDetails(
   providerContext: ProviderContext,
   apiKey: string,

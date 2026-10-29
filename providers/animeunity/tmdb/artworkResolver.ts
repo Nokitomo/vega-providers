@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { readTmdbApiKey, resolveApiArtwork } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
@@ -212,7 +213,7 @@ async function resolveTmdbArtworkWeb({
   return request;
 }
 
-export async function resolveTmdbArtworkMetadata(args: {
+async function resolveTmdbArtworkMetadataUncached(args: {
   providerContext: ProviderContext;
   id: number;
   type: TmdbMediaType;
@@ -241,4 +242,9 @@ export async function resolveTmdbArtworkMetadata(args: {
     poster: api.poster || web?.poster,
     background: api.background || web?.background,
   };
+}
+
+export function resolveTmdbArtworkMetadata(args: Parameters<typeof resolveTmdbArtworkMetadataUncached>[0]): ReturnType<typeof resolveTmdbArtworkMetadataUncached> {
+  return runMetadataTask(args, "tmdb", "artwork", episodeNumbers =>
+    resolveTmdbArtworkMetadataUncached(args));
 }

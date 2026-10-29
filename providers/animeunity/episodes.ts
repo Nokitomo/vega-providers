@@ -392,6 +392,19 @@ export const getEpisodes = async function ({
       };
     });
 
+    if (providerContext.metadataTasks) {
+      for (const row of tmdbResolved) {
+        if (knownByLink.has(row.episode.link)) continue;
+        (row.episode as EpisodeLink).metadataSources = {tmdb: {
+          title: row.tmdbEpisode?.title?.value,
+          synopsis: row.tmdbEpisode?.overview?.value,
+          thumbnail: row.tmdbEpisode?.thumbnail,
+          titleLanguage: row.tmdbEpisode?.title?.language,
+          synopsisLanguage: row.tmdbEpisode?.overview?.language,
+        }};
+      }
+    }
+
     const missingIndexes = tmdbResolved
       .map(({ tmdbEpisode }, index) =>
         knownByLink.has(mergedEpisodes[index].link)

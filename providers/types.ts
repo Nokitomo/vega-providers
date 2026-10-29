@@ -170,6 +170,8 @@ export interface Info {
 }
 // getEpisodeLinks
 export interface EpisodeLink {
+  metadataSources?: Record<string, {title?: string; synopsis?: string; thumbnail?: string;
+    titleLanguage?: string; synopsisLanguage?: string}>;
   title: string;
   titleKey?: string;
   titleParams?: I18nParams;
@@ -531,6 +533,11 @@ export interface ProviderKvStore {
 }
 
 export type ProviderContext = {
+  /** Optional durable, dependency-aware metadata storage supplied by database builders. */
+  metadataTasks?: {
+    run: <T>(task: {source: string; kind: string; input: Record<string, unknown>;
+      episodeNumbers?: number[]; fields?: string[]}, load: (episodeNumbers?: number[]) => Promise<T>) => Promise<T>;
+  };
   axios: AxiosStatic;
   Aes: any; // AES encryption utility, if used
   getBaseUrl: (providerValue: string) => Promise<string>;

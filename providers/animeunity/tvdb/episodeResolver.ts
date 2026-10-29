@@ -1,10 +1,11 @@
+import { runMetadataTask } from "../metadataTasks";
 import { EpisodeLink, ProviderContext } from "../../types";
 import { readExternalCache, writeExternalCache } from "../externalCache";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
 import { fetchTvdbHtml, TVDB_BASE_URL } from "./http";
 import { extractTvdbEntityPath } from "./parser";
 
-const CACHE_SCHEMA = "v1";
+const CACHE_SCHEMA = "v2";
 const SOFT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TEXT_LANGUAGE_PRIORITY = ["ita", "eng"];
 
@@ -13,6 +14,8 @@ type TvdbEpisodeFallback = {
   title?: string;
   synopsis?: string;
   thumbnail?: string;
+  titleLanguage?: string;
+  synopsisLanguage?: string;
 };
 
 type TvdbEpisodeCacheValue = {
@@ -66,10 +69,8 @@ function parseEpisodePage(
     });
   });
 
-  const text =
-    TEXT_LANGUAGE_PRIORITY.map((language) => translations.get(language)).find(
-      (value) => value?.title || value?.synopsis
-    ) || {};
+  const titleLanguage = TEXT_LANGUAGE_PRIORITY.find(language => translations.get(language)?.title);
+  const synopsisLanguage = TEXT_LANGUAGE_PRIORITY.find(language => translations.get(language)?.synopsis);
   const thumbnail = normalizeImageUrl(
     [
       ...html.matchAll(
@@ -80,13 +81,15 @@ function parseEpisodePage(
 
   return {
     episodeNumber,
-    title: text.title,
-    synopsis: text.synopsis,
+    title: titleLanguage ? translations.get(titleLanguage)?.title : undefined,
+    synopsis: synopsisLanguage ? translations.get(synopsisLanguage)?.synopsis : undefined,
+    titleLanguage,
+    synopsisLanguage,
     thumbnail,
   };
 }
 
-export async function resolveTvdbEpisodeFallbacks({
+async function resolveTvdbEpisodeFallbacksUncached({
   providerContext,
   tvdbShowId,
   seasonNumber,
@@ -203,3 +206,8 @@ export async function resolveTvdbEpisodeFallbacks({
   return request;
 }
 
+
+export function resolveTvdbEpisodeFallbacks(args: Parameters<typeof resolveTvdbEpisodeFallbacksUncached>[0]): ReturnType<typeof resolveTvdbEpisodeFallbacksUncached> {
+  return runMetadataTask(args, "tvdb", "episodes", episodeNumbers =>
+    resolveTvdbEpisodeFallbacksUncached({...args, episodeNumbers: episodeNumbers ?? args.episodeNumbers}));
+}

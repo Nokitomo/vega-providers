@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { readTmdbApiKey, resolveApiMedia } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
@@ -403,7 +404,7 @@ export async function resolveTmdbMediaMetadata(args: {
 }
 
 /** Preserve the general resolver's season selection without loading unused artwork. */
-export async function resolveTmdbSeasonLayout({
+async function resolveTmdbSeasonLayoutUncached({
   providerContext, id,
 }: {
   providerContext: ProviderContext;
@@ -691,4 +692,9 @@ export async function resolveTmdbEpisodeExtendedMetadata({
     value: result,
   } as CacheEntry<TmdbEpisodeMetadata | null>);
   return result;
+}
+
+export function resolveTmdbSeasonLayout(args: Parameters<typeof resolveTmdbSeasonLayoutUncached>[0]): ReturnType<typeof resolveTmdbSeasonLayoutUncached> {
+  return runMetadataTask(args, "tmdb", "season-layout", episodeNumbers =>
+    resolveTmdbSeasonLayoutUncached(args));
 }

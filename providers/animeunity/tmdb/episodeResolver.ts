@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { readTmdbApiKey, resolveApiEpisodeSeason } from "./api";
 import { parseTmdbDetailsPage } from "./details";
@@ -163,7 +164,7 @@ async function resolveTmdbEpisodeSeasonWeb({
   };
 }
 
-export async function resolveTmdbEpisodeSeasonMetadata(args: {
+async function resolveTmdbEpisodeSeasonMetadataUncached(args: {
   providerContext: ProviderContext;
   mediaId: number;
   seasonNumber: number;
@@ -206,4 +207,9 @@ export async function resolveTmdbEpisodeSeasonMetadata(args: {
       (left, right) => left.episodeNumber - right.episodeNumber
     ),
   };
+}
+
+export function resolveTmdbEpisodeSeasonMetadata(args: Parameters<typeof resolveTmdbEpisodeSeasonMetadataUncached>[0]): ReturnType<typeof resolveTmdbEpisodeSeasonMetadataUncached> {
+  return runMetadataTask(args, "tmdb", "episodes", episodeNumbers =>
+    resolveTmdbEpisodeSeasonMetadataUncached({...args, episodeNumbers: episodeNumbers ?? args.episodeNumbers}));
 }

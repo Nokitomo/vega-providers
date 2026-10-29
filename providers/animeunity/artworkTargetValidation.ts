@@ -4,6 +4,7 @@ import { fetchTmdbHtml } from "./tmdb/http";
 import { parseTmdbDetailsPage } from "./tmdb/details";
 import { fetchTvdbHtml } from "./tvdb/http";
 import { parseTvdbTitle } from "./tvdb/parser";
+import { runMetadataTask } from "./metadataTasks";
 
 type ArtworkProvider = "tmdb_movie" | "tmdb_show" | "tvdb_movie" | "tvdb_show";
 
@@ -33,7 +34,7 @@ export function hasConflictingArtworkTargets(
   return artworkProviders(isMovie).some(provider => candidateIds(targets, provider).length > 1);
 }
 
-async function candidateTitles(
+async function candidateTitlesUncached(
   providerContext: ProviderContext,
   provider: ArtworkProvider,
   id: string,
@@ -91,7 +92,9 @@ export async function verifyArtworkTargets({
     const matches = expected.size > 0
       ? await Promise.all(ids.map(async id => {
           try {
-            const names = await candidateTitles(providerContext, provider, id);
+            const names = await runMetadataTask({providerContext, provider, id},
+              provider.startsWith("tmdb") ? "tmdb" : "tvdb", "candidate-titles",
+              () => candidateTitlesUncached(providerContext, provider, id));
             return names.some(name => expected.has(normalizeTitle(name))) ? id : null;
           } catch (_) {
             return null;

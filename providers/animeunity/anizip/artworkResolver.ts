@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { resolveAniZipMetadata } from "./client";
 
@@ -10,7 +11,7 @@ export type AnimeUnityArtwork = {
   background?: string;
 };
 
-export async function resolveAniZipArtwork({
+async function resolveAniZipArtworkUncached({
   providerContext,
   anilistId,
   malId,
@@ -32,4 +33,9 @@ export async function resolveAniZipArtwork({
     banner: metadata.artwork.banner,
     background: metadata.artwork.fanart || metadata.artwork.banner,
   };
+}
+
+export function resolveAniZipArtwork(args: Parameters<typeof resolveAniZipArtworkUncached>[0]): ReturnType<typeof resolveAniZipArtworkUncached> {
+  return runMetadataTask(args, "anizip", "artwork", episodeNumbers =>
+    resolveAniZipArtworkUncached(args));
 }

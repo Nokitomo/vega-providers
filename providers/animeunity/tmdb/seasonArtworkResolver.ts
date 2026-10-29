@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { readTmdbApiKey, resolveApiSeasonPoster } from "./api";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
@@ -132,7 +133,7 @@ async function resolveTmdbSeasonPosterWeb({
   return request;
 }
 
-export async function resolveTmdbSeasonPoster(args: {
+async function resolveTmdbSeasonPosterUncached(args: {
   providerContext: ProviderContext;
   mediaId: number;
   seasonNumber: number;
@@ -149,4 +150,9 @@ export async function resolveTmdbSeasonPoster(args: {
   if (api?.poster) return api;
   const web = await resolveTmdbSeasonPosterWeb(args);
   return api ? { ...web, ...api, poster: api.poster || web?.poster } : web;
+}
+
+export function resolveTmdbSeasonPoster(args: Parameters<typeof resolveTmdbSeasonPosterUncached>[0]): ReturnType<typeof resolveTmdbSeasonPosterUncached> {
+  return runMetadataTask(args, "tmdb", "season-poster", episodeNumbers =>
+    resolveTmdbSeasonPosterUncached(args));
 }

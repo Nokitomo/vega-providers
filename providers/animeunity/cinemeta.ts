@@ -1,3 +1,4 @@
+import { runMetadataTask } from "./metadataTasks";
 import { ProviderContext } from "../types";
 import { readExternalCache, writeExternalCache } from "./externalCache";
 import { getProviderRuntimeCache } from "./mappings/runtimeCache";
@@ -39,7 +40,7 @@ export const parseCinemetaMetadata = (payload: any): CinemetaMetadata => {
   };
 };
 
-export async function resolveAnimeUnityCinemetaMetadata({
+async function resolveAnimeUnityCinemetaMetadataUncached({
   providerContext,
   imdbId,
   isMovie,
@@ -104,4 +105,9 @@ export async function resolveAnimeUnityCinemetaMetadata({
     poster: metadata.poster,
     background: metadata.background,
   };
+}
+
+export function resolveAnimeUnityCinemetaMetadata(args: Parameters<typeof resolveAnimeUnityCinemetaMetadataUncached>[0]): ReturnType<typeof resolveAnimeUnityCinemetaMetadataUncached> {
+  return runMetadataTask(args, "cinemeta", "artwork", episodeNumbers =>
+    resolveAnimeUnityCinemetaMetadataUncached(args));
 }

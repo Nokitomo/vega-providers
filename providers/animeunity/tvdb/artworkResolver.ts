@@ -1,3 +1,4 @@
+import { runMetadataTask } from "../metadataTasks";
 import { ProviderContext } from "../../types";
 import { readExternalCache, writeExternalCache } from "../externalCache";
 import { getProviderRuntimeCache } from "../mappings/runtimeCache";
@@ -102,7 +103,7 @@ async function resolveArtworkDetails({
   return details;
 }
 
-async function resolveField({
+export async function resolveField({
   providerContext,
   candidates,
   field,
@@ -124,7 +125,7 @@ function entryPath(mediaType: TvdbMediaType, id: number): string {
     : `/?id=${encodeURIComponent(String(id))}&tab=series`;
 }
 
-export async function resolveTvdbArtworkMetadata({
+async function resolveTvdbArtworkMetadataUncached({
   providerContext,
   tvdbId,
   tvdbShowId,
@@ -260,4 +261,9 @@ export async function resolveTvdbArtworkMetadata({
 
   runtimeCache.set(pendingKey, request);
   return request;
+}
+
+export function resolveTvdbArtworkMetadata(args: Parameters<typeof resolveTvdbArtworkMetadataUncached>[0]): ReturnType<typeof resolveTvdbArtworkMetadataUncached> {
+  return runMetadataTask(args, "tvdb", "artwork", episodeNumbers =>
+    resolveTvdbArtworkMetadataUncached(args));
 }
