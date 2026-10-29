@@ -14,6 +14,16 @@ import { resolveTmdbEpisodeSeasonMetadata } from "./tmdb";
 import { resolveAniZipEpisodeFallbacks } from "./anizip";
 import { parseAnimeUnityEpisodeSpan } from "./episodeRecords";
 
+export function selectUnambiguousMappedEpisode<T extends { episodeNumber: number }>(
+  episodes: T[],
+  episodeNumbers: number[]
+): T | undefined {
+  const matches = episodes.filter((episode) =>
+    episodeNumbers.includes(episode.episodeNumber)
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -362,8 +372,8 @@ export const getEpisodes = async function ({
       const season = tmdbSeasons.get(
         `${tmdbMapping.id}:${tmdbMapping.seasonNumber}`
       );
-      const tmdbEpisode = season?.episodes?.find((candidate) =>
-        tmdbMapping.episodeNumbers.includes(candidate.episodeNumber)
+      const tmdbEpisode = selectUnambiguousMappedEpisode(
+        season?.episodes || [], tmdbMapping.episodeNumbers
       );
       if (!tmdbEpisode) return { episode, tmdbEpisode: undefined };
 

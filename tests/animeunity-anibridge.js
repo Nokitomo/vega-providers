@@ -12,8 +12,13 @@ const {
   resolveAnimeMappings,
   resolveExternalAnimeMappings,
 } = require("../dist/animeunity/mappings/index.js");
-const { getEpisodes } = require("../dist/animeunity/episodes.js");
+const { getEpisodes, selectUnambiguousMappedEpisode } = require("../dist/animeunity/episodes.js");
 const { selectPrimaryTmdbId } = require("../dist/animeunity/tmdb/index.js");
+
+const seasonEpisodes = [{episodeNumber: 79, title: "Correct"}, {episodeNumber: 500, title: "Conflicting"}];
+assert.strictEqual(selectUnambiguousMappedEpisode(seasonEpisodes, [79]).title, "Correct");
+assert.strictEqual(selectUnambiguousMappedEpisode(seasonEpisodes, [79, 500]), undefined);
+assert.strictEqual(selectUnambiguousMappedEpisode(seasonEpisodes, [900]), undefined);
 
 const executeVegaBundle = (fileName) => {
   const moduleCode = fs.readFileSync(
