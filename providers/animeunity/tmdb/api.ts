@@ -73,6 +73,7 @@ async function request(
   path: string,
   params: Record<string, string> = {}
 ): Promise<ApiRecord | null> {
+  const bearerToken = /^(?:Bearer\s+)?(eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/i.exec(apiKey)?.[1];
   const cache = getProviderRuntimeCache(providerContext);
   const cacheKey = `animeunity:tmdb:api:${JSON.stringify([path, params, apiKey])}`;
   const cached = cache.get(cacheKey) as
@@ -83,9 +84,9 @@ async function request(
   const pending = cache.get(pendingKey) as Promise<ApiRecord | null> | undefined;
   if (pending) return pending;
   const promise = providerContext.axios.get(`${API_BASE_URL}${path}`, {
-    params: { ...params, api_key: apiKey },
+    params: bearerToken ? params : { ...params, api_key: apiKey },
     timeout: REQUEST_TIMEOUT_MS,
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}) },
   }).then((response) => {
     const data = record(response?.data);
     if (data) cache.set(cacheKey, {

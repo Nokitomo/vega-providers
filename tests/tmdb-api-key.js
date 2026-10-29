@@ -14,7 +14,7 @@ const makeContext = (key, respond) => {
     kvStore: { get: async (name) => name === "tmdbApiKey" ? key : undefined },
     axios: {
       get: async (url, options = {}) => {
-        calls.push({ url, params: options.params });
+        calls.push({ url, params: options.params, headers: options.headers });
         const data = await respond(url, options.params || {});
         if (data === undefined) throw new Error("Not found");
         return { data };
@@ -50,6 +50,24 @@ const run = async () => {
   assert(artwork.background.endsWith("/backdrop.jpg"));
   assert(artworkContext.calls.every((call) => call.url.startsWith("https://api.themoviedb.org/3/")));
   assert(artworkContext.calls.every((call) => call.params.api_key === "provider-one-key"));
+
+  const bearerToken = `eyJ${"a".repeat(12)}.${"b".repeat(12)}.${"c".repeat(12)}`;
+  for (const credential of [bearerToken, `Bearer ${bearerToken}`]) {
+    const bearerContext = makeContext(credential, (url) => {
+      if (url.endsWith("/tv/123")) return { id: 123, original_language: "ja" };
+      if (url.endsWith("/tv/123/images")) return {
+        logos: [{ file_path: "/bearer-logo.png", iso_639_1: "it" }],
+        posters: [], backdrops: [],
+      };
+    });
+    const bearerArtwork = await resolveTmdbArtworkMetadata({
+      providerContext: bearerContext, id: 123, type: "tv", fields: ["logo"],
+    });
+    assert.strictEqual(bearerArtwork.source, "tmdb-api");
+    assert(bearerArtwork.logo.endsWith("/bearer-logo.png"));
+    assert(bearerContext.calls.every((call) => call.headers.Authorization === `Bearer ${bearerToken}`));
+    assert(bearerContext.calls.every((call) => !Object.hasOwn(call.params, "api_key")));
+  }
 
   const partialContext = makeContext("partial-key", (url) => {
     if (url.endsWith("/movie/56")) return { id: 56, original_language: "en" };
