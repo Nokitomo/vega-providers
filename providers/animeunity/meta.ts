@@ -21,6 +21,7 @@ import {
   resolveTmdbSeasonLayout,
   selectPrimaryTmdbId,
   selectTmdbPreferredArtwork,
+  selectTmdbPreferredArtworkSources,
 } from "./tmdb";
 import { resolveTvdbArtworkMetadata } from "./tvdb";
 import { deduplicateAnimeVariantPosts } from "./variants";
@@ -452,37 +453,14 @@ export const getMeta = async function ({
     const title = metaPayload.title;
     const titleKey = metaPayload.titleKey;
 
-    const artworkSources: NonNullable<Info["extra"]>["artworkSources"] = {
-      logo: tmdbMetadata?.logo
-        ? ("tmdb" as const)
-        : cinemetaMetadata.logo
-          ? ("cinemeta" as const)
-          : tvdbMetadata?.logo
-            ? ("tvdb" as const)
-            : aniZipArtwork.logo
-              ? ("anizip" as const)
-              : ("provider" as const),
-      poster: tmdbMetadata?.poster
-        ? ("tmdb" as const)
-        : tvdbMetadata?.poster
-          ? ("tvdb" as const)
-          : providerArtwork.poster
-            ? ("provider" as const)
-            : cinemetaMetadata.poster
-              ? ("cinemeta" as const)
-              : ("anizip" as const),
-      background: tmdbMetadata?.background
-        ? ("tmdb" as const)
-        : cinemetaMetadata.background
-          ? ("cinemeta" as const)
-          : tvdbMetadata?.background
-            ? ("tvdb" as const)
-            : aniZipArtwork.background
-              ? ("anizip" as const)
-              : providerArtwork.background
-                ? ("provider" as const)
-                : undefined,
-    };
+    const artworkSources: NonNullable<Info["extra"]>["artworkSources"] =
+      selectTmdbPreferredArtworkSources({
+        tmdb: tmdbMetadata,
+        tvdb: tvdbMetadata,
+        provider: providerArtwork,
+        cinemeta: cinemetaMetadata,
+        aniZip: aniZipArtwork,
+      });
 
     return {
       titleKey,

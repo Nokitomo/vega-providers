@@ -19,6 +19,7 @@ const {
   pickLocalizedText,
   resolveOriginalLocale,
   selectTmdbPreferredArtwork,
+  selectTmdbPreferredArtworkSources,
   resolveTmdbEpisodeExtendedMetadata,
   resolveTmdbEpisodeSeasonMetadata,
   resolveTmdbArtworkMetadata,
@@ -193,6 +194,11 @@ assert.deepStrictEqual(
     poster: "https://tmdb.test/poster.jpg",
     background: "https://tmdb.test/background.jpg",
   },
+);
+assert.deepStrictEqual(
+  selectTmdbPreferredArtworkSources({provider: {poster: "https://provider.test/poster.jpg"}}),
+  {logo: undefined, poster: "provider", background: "provider"},
+  "missing logos must not claim a provider source and poster fallback must retain provenance",
 );
 assert.deepStrictEqual(
   selectTmdbPreferredArtwork({

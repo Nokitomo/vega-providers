@@ -29,7 +29,7 @@ export {
   pickLocalizedText,
   resolveOriginalLocale,
 } from "./locales";
-export { selectTmdbPreferredArtwork } from "./presentation";
+export { selectTmdbPreferredArtwork, selectTmdbPreferredArtworkSources } from "./presentation";
 export {
   mergeTmdbEpisodes,
   mergeTmdbSeasons,
